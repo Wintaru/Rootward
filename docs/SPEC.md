@@ -27,7 +27,8 @@ Two primary screens:
 
 | Concern | Choice | Decision |
 | --- | --- | --- |
-| Frontend framework | Next.js (App Router) + TypeScript + Tailwind | **assumed — confirm (§11)**; React was in the original notes, Next.js is the natural Vercel pairing, but no numbered decision picks it |
+| Frontend framework | Next.js (App Router) + TypeScript | 34 |
+| UI / styling | Tailwind CSS + shadcn/ui (Radix primitives copied into `apps/web/components/ui`) | 34 |
 | Hosting (frontend) | Vercel free tier | 32 |
 | Backend | Supabase — Postgres, Auth, Storage, Realtime, Edge Functions | 8 |
 | Server compute | Supabase Edge Functions (Deno) | 8 |
@@ -63,6 +64,7 @@ Two primary screens:
 │   └── web/                    # Next.js app (the only frontend)
 │       ├── app/                # App Router routes
 │       ├── components/
+│       │   └── ui/             # shadcn/ui components (owned, not a dependency)
 │       ├── lib/
 │       │   ├── db/             # generated Supabase types + typed queries
 │       │   └── supabase/       # client/server Supabase helpers
@@ -325,7 +327,6 @@ Republican are stored raw with `date_phrase` set, no conversion.
 | `id` | smallint PK | `1` | Singleton guard. |
 | `tree_name` | text | | |
 | `tree_description` | text | | |
-| `public_visibility` | boolean | `false` | Toggle exists (decision 20); its exposed-content semantics are an open question (§11). Default off. |
 | `allow_self_signup` | boolean | `true` | Decision 12. |
 | `living_threshold_years` | smallint | `100` | Decision 6. |
 | `default_root_person_id` | uuid → person | | Start person (decision 21). |
@@ -489,11 +490,9 @@ A person row is visible when the caller `is_approved()` **and** one of:
   `close_family_of` that person (post-MVP), or
 - viewer's linked person **is** that person.
 
-Public (unauthenticated) visitors: `tree_settings.public_visibility` defaults
-`false` — nothing is visible without an approved account. What the toggle exposes
-when `true` is an **open question** (§11) — WAYFINDER decision 6 is
-approved-members-only and decision 20 lists the toggle with no semantics. Assume
-`false` / no public access for the MVP build unless that question is resolved.
+Unauthenticated visitors: **no access to anything but `/login`** (decision 35).
+There is no public tree in the MVP. A public read-only view is a possible
+post-MVP feature.
 
 ### Dependent tables
 
@@ -640,7 +639,7 @@ media folder / zip, or media is added later).
 
 | Route | Purpose | Access |
 | --- | --- | --- |
-| `/` | Landing; redirect to `/tree/<root>` when approved, or to `/login` | public |
+| `/` | Redirect: `/tree/<root>` when approved, `/onboarding` when authed-not-approved, else `/login` | — |
 | `/login` | Magic link + Google | public |
 | `/onboarding` | Claim flow (name/birth → challenge) or request access | authed, not yet approved |
 | `/tree/[personId]` | `family-chart` hourglass view | approved |
@@ -743,8 +742,8 @@ Each item is one issue. Milestones = phases. Labels: `phase:N`, `area:db|gedcom|
 frontend|auth|edge|infra`, `mvp`, `post-mvp`, `blocked`, `ready`.
 
 ### Phase 0 — Foundation
-1. Scaffold pnpm monorepo: `apps/web` (Next.js + TS + Tailwind + ESLint +
-   Prettier), `packages/gedcom`, `packages/shared`, root scripts
+1. Scaffold pnpm monorepo: `apps/web` (Next.js + TS + Tailwind + shadcn/ui init +
+   ESLint + Prettier), `packages/gedcom`, `packages/shared`, root scripts
    (`typecheck/lint/format/build/test`).
 2. `supabase init`, `config.toml`, Docker Compose local dev, `pnpm dev` +
    `pnpm dev:status`, `.env.example`.
@@ -826,16 +825,8 @@ frontend|auth|edge|infra`, `mvp`, `post-mvp`, `blocked`, `ready`.
 
 ## 11. Open questions
 
-### Needs Josh (blocks the issue that hits it, not the whole build)
-
-- **Frontend framework.** Next.js + TypeScript + Tailwind is assumed. Alternatives:
-  React + Vite (lighter, no server framework), Remix, TanStack Start. Blocks
-  issue 1. If Next.js is confirmed, add a WAYFINDER decision so the spec stops
-  lying about decision 32.
-- **`public_visibility` semantics.** Decision 20 gives a settings toggle;
-  decision 6 is approved-members-only. Decide what `true` exposes (nothing / a
-  deceased-only public tree / names-only) or confirm the toggle is deferred.
-  Blocks the public-visitor branch of the §5 RLS work (issue 9).
+Resolved 2026-08-30: frontend framework → decision 34 (Next.js + TS + Tailwind +
+shadcn/ui); public visibility → decision 35 (nothing public but `/login`).
 
 ### Decide in-issue (not blocking)
 

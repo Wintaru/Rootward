@@ -58,6 +58,8 @@ Settled 2026-08-30 in one grilling session (all seven seed questions, walked in 
    security, not frontend code. "Living" is computed: no death event and born
    within ~100 years, or an explicit `is_living` override (threshold is a
    setting).
+   **Clarified 2026-08-30 by decision 35** — nothing is public. An unauthenticated
+   visitor sees only the login page. No deceased-only public tier in the MVP.
    Rejected: distance-scoped visibility (recursive graph cost on the hot path);
    per-person privacy controls (v2). Schema is ready for per-person control — a
    `visibility` column on `person` and on `fact`, defaulting to the rule above.
@@ -150,9 +152,9 @@ Settled 2026-08-30 in one grilling session (all seven seed questions, walked in 
     First-sign-in-wins was considered and rejected as less safe for a public
     host.
 
-20. **Settings page (MVP scope).** Tree name and description, public-visibility
-    toggle, self-sign-up on / off, living-person year threshold, role management.
-    Everything else added as those features land.
+20. **Settings page (MVP scope).** Tree name and description, ~~public-visibility
+    toggle~~ (removed by decision 35), self-sign-up on / off, living-person year
+    threshold, role management. Everything else added as those features land.
 
 ## Decisions so far — frontier items resolved
 
@@ -380,9 +382,29 @@ are locked so the schema and architecture can accommodate them now.
         account-to-person links or media attachments — matched records keep them.
     - The diff-preview screen is the real post-MVP build. Replace-all is trivial.
 
+## Decisions so far — spec-authoring follow-ups
+
+Settled 2026-08-30 10:07 while writing `docs/SPEC.md`. Surfaced by a spec review
+that found no numbered decision covered them.
+
+34. **Frontend stack — Next.js (App Router) + TypeScript + Tailwind CSS +
+    shadcn/ui.** React was in the original notes; Next.js is the natural Vercel
+    pairing (decision 32). shadcn/ui is not a dependency — its CLI copies
+    component source (Radix UI primitives styled with Tailwind) into the repo, so
+    the project owns and edits them, with no runtime library or version lock.
+    Chosen over plain Tailwind for the accessible primitives the dense edit view
+    and the dialogs (`ConflictDialog`, media viewer) need. Rejected: React + Vite
+    (loses Next.js routing / server components / Vercel integration); Tailwind
+    alone (hand-building accessible dialogs, comboboxes, and menus).
+
+35. **Nothing is public except the login page.** An unauthenticated visitor sees
+    only `/login`. No deceased-only public tree in the MVP. The
+    `public_visibility` setting from decision 20 is removed. A public read-only
+    view stays a possible post-MVP feature. Amends decisions 6 and 20.
+
 ## Status
 
-All frontier items are resolved (2026-08-30). Decisions 1–33 are the full plan.
+All frontier items are resolved (2026-08-30). Decisions 1–35 are the full plan.
 
 Next step per the wayfinder pattern: turn this map into a spec, then break the
 spec into GitHub issues on `Wintaru/Rootward`, then build. Decisions 1–28 cover

@@ -34,7 +34,7 @@ the issues and fix `PROGRESS.md`.
 
 | File | Role | Who edits it |
 | --- | --- | --- |
-| `docs/WAYFINDER.md` | The decision map. 33 settled decisions, numbered. | Only via the `wayfinder` skill, and only when a decision genuinely changes. Mark superseded entries in place, never delete. |
+| `docs/WAYFINDER.md` | The decision map. 35 settled decisions, numbered. | Only via the `wayfinder` skill, and only when a decision genuinely changes. Mark superseded entries in place, never delete. |
 | `docs/SPEC.md` | The build contract derived from WAYFINDER. | Update when an issue reveals the spec was wrong or thin. Keep it in step with WAYFINDER — WAYFINDER wins on conflict. |
 | `PROGRESS.md` | Where the build is right now. | Every session, at the end. |
 | `DECISIONS.md` | Build-time decision log (gitignored). | As consequential forks happen. |
