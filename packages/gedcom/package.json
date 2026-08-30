@@ -15,9 +15,12 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "lint": "eslint ."
+  },
+  "dependencies": {
+    "@rootward/shared": "workspace:*"
   },
   "devDependencies": {
     "typescript": "5.9.3"

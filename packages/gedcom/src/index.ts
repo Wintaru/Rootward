@@ -6,4 +6,42 @@
  * C#/iDesign service later (WAYFINDER decision 8).
  */
 
-export {};
+export { readGedcom } from "./reader";
+
+export {
+  buildForest,
+  child,
+  childPointer,
+  childValue,
+  children,
+  nodeToRaw,
+  rawChildrenOnly,
+  tokenizeGedcom,
+  unhandledChildren,
+} from "./nodes";
+export type { GedcomLine, GedcomNode, RawGedcomNode } from "./nodes";
+
+export type {
+  ChildRelation,
+  EventType,
+  FactType,
+  GedcomReadResult,
+  GedcomVersion,
+  NameType,
+  ParsedCitation,
+  ParsedEvent,
+  ParsedFact,
+  ParsedFamily,
+  ParsedFamilyChild,
+  ParsedMedia,
+  ParsedMediaLink,
+  ParsedNote,
+  ParsedPerson,
+  ParsedPersonName,
+  ParsedPlace,
+  ParsedRepository,
+  ParsedSource,
+  PartnerRole,
+  Sex,
+  UnionType,
+} from "./types";

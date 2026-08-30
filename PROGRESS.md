@@ -6,7 +6,7 @@ the relevant `docs/SPEC.md` section.
 ## Current state
 
 **Phase:** 2 — GEDCOM (in progress). Phase 0 complete (#1–#3), Phase 1 complete
-(#4–#10 merged). #11 done, PR open.
+(#4–#10 merged). #11 merged and closed. #12 done, PR open.
 **Planning:** complete. 35 decisions in `docs/WAYFINDER.md`, full build spec in
 `docs/SPEC.md`. No open questions that block starting.
 **Issues:** created. 46 GitHub issues on `Wintaru/Rootward` — items 1–40 from
@@ -159,7 +159,7 @@ applied (`up = 0` no longer orphans siblings) + four should-fixes — see
 `DECISIONS.md`.
 
 **Issue #11 — `packages/shared`: `parseGenealogyDate` / `formatGenealogyDate`:
-done, PR open on `feat/genealogy-date-module`.** The portable genealogy-date
+done, merged to `main` (bc21c85), issue closed.** The portable genealogy-date
 module (`packages/shared/src/genealogy-date.ts`, SPEC §4.1 / §8.3, WAYFINDER
 decision 22). `parseGenealogyDate(raw)` → the flat `date_*` field set (no
 `date_sort_key` — generated in Postgres); never throws, unrecognised input →
@@ -181,12 +181,43 @@ checks; a cross-package sync test waits for the edit view (#25). New
 format + round-trip per kind). Verify gate green. Code review: one scope fix
 (7.0 keyword calendars) + three advisories applied — see `DECISIONS.md`.
 
+**Issue #12 — `packages/gedcom`: reader (5.5.1 + 7.0): done, PR open on
+`feat/gedcom-reader`.** The portable GEDCOM reader (`docs/SPEC.md` §6, §10 item
+12). Three layers: `nodes.ts` (line grammar — `tokenizeGedcom` +
+`buildForest`, `CONC`/`CONT` merged, malformed lines warn not throw), `mapping.ts`
+(GEDCOM-tag → Postgres-enum tables per §6), `reader.ts`
+(`readGedcom(text): GedcomReadResult` — never throws). Maps `INDI`→person (+
+additional names, events, facts, notes, citations, media links), `FAM`→family (+
+`family_child`, family events), typed `BIRT/DEAT/MARR/...`→`event`,
+`DSCR/OCCU/RELI/...`→`fact`, `SOUR`/`REPO`→source/repository, `OBJE`→media,
+shared `NOTE`→note, `PLAC`→deduped places. Cross-record links stay as GEDCOM
+xref strings (`@I1@`) — the `gedcom-import` edge function (#14) resolves them to
+UUIDs. Every unmapped sub-tag is kept verbatim on the parent's `raw_gedcom`
+(`RawGedcomNode[]`, decision 4), including repeated occurrences of a mapped tag
+and the children of a mapped tag; the `HEAD` block and `SUBM`/`SUBN` records
+land on `result.header` / `result.submitters`. Dates parse through
+`parseGenealogyDate` from
+`@rootward/shared` — `packages/gedcom` now depends on it (`workspace:*`); the
+cross-package import resolves from source for typecheck (`tsconfig.json` `paths`)
+and vitest (root `vitest.config.ts` alias), and from `dist/` for `pnpm build`
+(`tsconfig.build.json`, topological order). Fixtures are TS string constants in
+`src/fixtures.ts` (the lint bans Node built-ins, so tests cannot read `.ged`
+files). 29 vitest tests (`nodes.test.ts` 9, `reader.test.ts` 20); verify gate
+green. Code review: one class of silent data loss fixed (repeated / child
+sub-tags were dropped; `HEAD` / `SUBM` were discarded) — see `DECISIONS.md`,
+which also records the deferred enum-parity guard and the resolution-seam and
+cross-package-config calls.
+
 ## Next action
 
-Phase 2, issue **#12 — `packages/gedcom`: reader (5.5.1 + 7.0)** (`docs/SPEC.md`
-§6, §10 item 12). Depends on #11. Merge `feat/genealogy-date-module` first, then
-label #12 `ready` and take it. Pure TS, no Deno/Node built-ins (decision 8);
-dates parse via `parseGenealogyDate` from `@rootward/shared`.
+Phase 2, issue **#13 — `packages/gedcom`: writer (5.5.1) + round-trip tests**
+(`docs/SPEC.md` §6, §10 item 13). Depends on #12. Merge `feat/gedcom-reader`
+first, then label #13 `ready` and take it. Pure TS, no Deno/Node built-ins
+(decision 8). The writer emits GEDCOM 5.5.1 from the Rootward shape and must
+re-emit each record's stored `raw_gedcom`; round-trip tests read a fixture,
+write it, and read it back for an equal result. `readGedcom` and the low-level
+`nodes.ts` helpers (`buildForest`, `nodeToRaw`, `child`, …) are exported from
+the package root for the round-trip check.
 
 `gh issue list --label ready` is the queue. Take the lowest-numbered `ready`
 issue unless this file says otherwise. When an issue merges, label the issues it
@@ -194,24 +225,25 @@ unblocks `ready`.
 
 ## Log
 
-| Date       | Session did                                                                                                                             | Result                                  |
-| ---------- | --------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
-| 2026-08-30 | Wayfinder planning — all decisions settled                                                                                              | `docs/WAYFINDER.md` (1–33)              |
-| 2026-08-30 | Wrote the build spec                                                                                                                    | `docs/SPEC.md`                          |
-| 2026-08-30 | Repo init, MIT license, project meta, resume protocol                                                                                   | `chore/scaffold`                        |
-| 2026-08-30 | Spec review + fixes; settled frontend stack and public-access questions                                                                 | `docs/WAYFINDER.md` (34–35)             |
-| 2026-08-30 | Created the 46-issue set from `docs/SPEC.md` §10 — milestones, labels, dependencies                                                     | GitHub issues #1–#46                    |
-| 2026-08-30 | Issue #1 — scaffolded the pnpm monorepo; verify gate green                                                                              | `chore/scaffold-monorepo`               |
-| 2026-08-30 | Issue #2 — local Supabase dev stack, `pnpm dev` / `dev:status`, `.env.example`                                                          | `chore/local-supabase-dev-stack`        |
-| 2026-08-30 | Issue #3 — GitHub Actions CI (`verify` + `migrations` jobs); build kept out of CI                                                       | `chore/ci-pipeline`                     |
-| 2026-08-30 | Issue #4 — first migration: 6 enums + `person`/`person_name`/`family`/`family_child`                                                    | `feat/migration-core-genealogy`         |
-| 2026-08-30 | Issue #5 — migration: `event`/`fact`/`place` + flat `date_*` set + sort-key trigger                                                     | `feat/migration-events-facts-places`    |
-| 2026-08-30 | Issue #6 — migration: `source`/`repository`/`citation`/`media`/`media_link`/`note`                                                      | `feat/migration-sources-media-notes`    |
-| 2026-08-30 | Issue #7 — migration: `account`/`tree_settings`/`audit_log` + `updated_at` + audit triggers                                             | `feat/migration-account-settings-audit` |
-| 2026-08-30 | Issue #8 — migration: `invitation`/`access_request`/`claim_attempt`/`notification`/`notification_read`/`import_job`/`export_job`        | `feat/migration-onboarding-jobs`        |
-| 2026-08-30 | Issue #9 — RLS: 12 `security definer` helpers, policies on all 23 tables, pgTAP allow/deny harness, `supabase test db` in CI            | `feat/rls-policies`                     |
-| 2026-08-30 | Issue #10 — `get_neighborhood` SQL function + `pnpm gen:types` + `lib/db` typed layer + `lib/supabase` clients + pgTAP + CI drift check | `feat/db-typed-query-layer`             |
-| 2026-08-30 | Issue #11 — `packages/shared` genealogy-date parser + formatter (5.5.1 + 7.0 calendars, dual dating, phrase fallback), 79 vitest tests  | `feat/genealogy-date-module`            |
+| Date       | Session did                                                                                                                                                     | Result                                  |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| 2026-08-30 | Wayfinder planning — all decisions settled                                                                                                                      | `docs/WAYFINDER.md` (1–33)              |
+| 2026-08-30 | Wrote the build spec                                                                                                                                            | `docs/SPEC.md`                          |
+| 2026-08-30 | Repo init, MIT license, project meta, resume protocol                                                                                                           | `chore/scaffold`                        |
+| 2026-08-30 | Spec review + fixes; settled frontend stack and public-access questions                                                                                         | `docs/WAYFINDER.md` (34–35)             |
+| 2026-08-30 | Created the 46-issue set from `docs/SPEC.md` §10 — milestones, labels, dependencies                                                                             | GitHub issues #1–#46                    |
+| 2026-08-30 | Issue #1 — scaffolded the pnpm monorepo; verify gate green                                                                                                      | `chore/scaffold-monorepo`               |
+| 2026-08-30 | Issue #2 — local Supabase dev stack, `pnpm dev` / `dev:status`, `.env.example`                                                                                  | `chore/local-supabase-dev-stack`        |
+| 2026-08-30 | Issue #3 — GitHub Actions CI (`verify` + `migrations` jobs); build kept out of CI                                                                               | `chore/ci-pipeline`                     |
+| 2026-08-30 | Issue #4 — first migration: 6 enums + `person`/`person_name`/`family`/`family_child`                                                                            | `feat/migration-core-genealogy`         |
+| 2026-08-30 | Issue #5 — migration: `event`/`fact`/`place` + flat `date_*` set + sort-key trigger                                                                             | `feat/migration-events-facts-places`    |
+| 2026-08-30 | Issue #6 — migration: `source`/`repository`/`citation`/`media`/`media_link`/`note`                                                                              | `feat/migration-sources-media-notes`    |
+| 2026-08-30 | Issue #7 — migration: `account`/`tree_settings`/`audit_log` + `updated_at` + audit triggers                                                                     | `feat/migration-account-settings-audit` |
+| 2026-08-30 | Issue #8 — migration: `invitation`/`access_request`/`claim_attempt`/`notification`/`notification_read`/`import_job`/`export_job`                                | `feat/migration-onboarding-jobs`        |
+| 2026-08-30 | Issue #9 — RLS: 12 `security definer` helpers, policies on all 23 tables, pgTAP allow/deny harness, `supabase test db` in CI                                    | `feat/rls-policies`                     |
+| 2026-08-30 | Issue #10 — `get_neighborhood` SQL function + `pnpm gen:types` + `lib/db` typed layer + `lib/supabase` clients + pgTAP + CI drift check                         | `feat/db-typed-query-layer`             |
+| 2026-08-30 | Issue #11 — `packages/shared` genealogy-date parser + formatter (5.5.1 + 7.0 calendars, dual dating, phrase fallback), 79 vitest tests                          | `feat/genealogy-date-module`            |
+| 2026-08-30 | Issue #12 — `packages/gedcom` reader: `nodes.ts` line grammar + `mapping.ts` tag tables + `readGedcom` (5.5.1 + 7.0, xref links, `raw_gedcom`), 29 vitest tests | `feat/gedcom-reader`                    |
 
 ## Notes for the next session
 
@@ -220,17 +252,42 @@ unblocks `ready`.
   `Depends on:` issue numbers and a `### Done when` checklist.
 - Issue numbers match `docs/SPEC.md` §10 item numbers for 1–40. Issues 41–46 are
   the Post-MVP bullets.
-- #1–#10 are closed and merged to `main`; #11's PR is on
-  `feat/genealogy-date-module`. Later issues get `ready` as their dependencies
-  close — do this when you finish an issue.
-- Phase 1 is complete (#4–#10 merged). Phase 2 (GEDCOM) is in progress: #11 done,
-  then #12 (reader) → #13 (writer) → #14/#15 (edge functions) → #16 (import UI).
+- #1–#11 are closed and merged to `main`; #12's PR is on `feat/gedcom-reader`.
+  Later issues get `ready` as their dependencies close — do this when you finish
+  an issue.
+- Phase 1 is complete (#4–#10 merged). Phase 2 (GEDCOM) is in progress: #11 and
+  #12 done, then #13 (writer) → #14/#15 (edge functions) → #16 (import UI).
 - The genealogy-date module (#11) lives in `packages/shared`
   (`parseGenealogyDate` / `formatGenealogyDate`, exported from the package root).
-  `packages/gedcom` (#12+) parses every `DATE` through it — do not re-implement
-  date parsing. `packages/shared/tsconfig.build.json` is the build config that
-  excludes `*.test.ts` from `dist/`; `pnpm typecheck` still checks tests via the
-  base `tsconfig.json`.
+  `packages/gedcom` parses every `DATE` through it — do not re-implement date
+  parsing. `packages/shared/tsconfig.build.json` excludes `*.test.ts` from
+  `dist/`; `pnpm typecheck` still checks tests via the base `tsconfig.json`.
+- The GEDCOM reader (#12) is `packages/gedcom`: `readGedcom(text)` →
+  `GedcomReadResult`. Layers: `nodes.ts` (line grammar), `mapping.ts` (tag →
+  enum tables, SPEC §6), `reader.ts` (the walk). Cross-record links are GEDCOM
+  xref strings, not UUIDs — #14 resolves them. Unmapped sub-tags land in each
+  record's `raw_gedcom` (`RawGedcomNode[]`); the writer (#13) must re-emit them.
+  `packages/gedcom` now depends on `@rootward/shared` (`workspace:*`). That
+  cross-package import needs three resolution paths kept in step: `paths` in
+  `packages/gedcom/tsconfig.json` (typecheck, from source), a `resolve.alias` in
+  the root `vitest.config.ts` (tests, from source), and `pnpm -r`'s topological
+  order + `tsconfig.build.json` `paths: {}` (build, from `shared/dist`). Add a
+  new cross-package dep → update all three.
+- Fixtures for the GEDCOM tests are TS string constants in
+  `packages/gedcom/src/fixtures.ts` (the package lint bans Node built-ins, so a
+  test cannot read a `.ged` file from disk). `fixtures.ts` is excluded from
+  `dist/`. No real MacFamilyTree export exists in `docs/reference` yet — drop one
+  in and add a fixture when one is available.
+- **Deferred from #12's review — enum-parity guard.**
+  `packages/gedcom/src/types.ts` hand-copies the seven Postgres enums
+  (`event_type`, `fact_type`, `sex`, `name_type`, `partner_role`, `union_type`,
+  `child_relation`). They match the migrations today. Add a guard test that
+  parses `supabase/migrations/*.sql` for each `create type … as enum (...)` and
+  asserts the union covers it — but the package lint bans Node built-ins, so
+  either add an eslint carve-out for `**/*.test.ts` in
+  `eslint.config.base.mjs` first, or put the guard in `apps/web` (which already
+  imports the generated DB types) when the edit view (#25) lands. Same class as
+  #11's deferred cross-package sync test.
 - Migrations live in `supabase/migrations/`. `supabase db reset` replays them
   from an empty database; never hand-edit a merged migration, add a new one.
   Filename timestamps must be UTC (`date -u +%Y%m%d%H%M%S`) or a new migration

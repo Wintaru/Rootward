@@ -101,6 +101,10 @@ importers:
         version: 5.9.3
 
   packages/gedcom:
+    dependencies:
+      '@rootward/shared':
+        specifier: workspace:*
+        version: link:../shared
     devDependencies:
       typescript:
         specifier: 5.9.3
