@@ -145,3 +145,25 @@ export const GEDCOM_EMPTY = `0 HEAD
 2 VERS 5.5.1
 0 TRLR
 `;
+
+/**
+ * A primary `NAME` carrying sub-tags the model does not represent — a name-level
+ * citation, a name-level note, a custom tag. These belong on
+ * `person.primary_name_raw_gedcom`, not on `person.citations` / `person.notes` /
+ * `person.raw_gedcom`, and the writer must re-emit them under `NAME`.
+ */
+export const GEDCOM_NAME_SUBTAGS = `0 HEAD
+1 GEDC
+2 VERS 5.5.1
+0 @I1@ INDI
+1 NAME Ada /Lovelace/
+2 SOUR @S1@
+3 PAGE birth register
+2 NOTE Name recorded as "Augusta Ada Byron" at birth.
+2 _NAMESRC parish
+1 SEX F
+1 _CUSTOM person-level tag
+0 @S1@ SOUR
+1 TITL Parish Registers
+0 TRLR
+`;

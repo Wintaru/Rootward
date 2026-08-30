@@ -7,6 +7,8 @@
  */
 
 export { readGedcom } from "./reader";
+export { writeGedcom } from "./writer";
+export type { GedcomWriteOptions } from "./writer";
 
 export {
   buildForest,

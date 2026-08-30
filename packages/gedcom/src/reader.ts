@@ -509,6 +509,7 @@ function readIndi(node: GedcomNode, places: PlaceCollector): ParsedPerson {
     name_prefix: primary.prefix,
     name_suffix: primary.suffix,
     nickname: primary.nickname,
+    primary_name_raw_gedcom: primary.raw_gedcom,
     sex: mapSex(childValue(node, "SEX")),
     familysearch_id: childValue(node, "_FSFTID"),
     ancestral_file_number: childValue(node, "AFN"),
@@ -519,10 +520,7 @@ function readIndi(node: GedcomNode, places: PlaceCollector): ParsedPerson {
     notes,
     citations,
     media_links: mediaLinks,
-    raw_gedcom: [
-      ...primary.raw_gedcom,
-      ...unhandledChildren(node, INDI_HANDLED_ONCE, INDI_HANDLED_MANY),
-    ],
+    raw_gedcom: unhandledChildren(node, INDI_HANDLED_ONCE, INDI_HANDLED_MANY),
   };
 }
 

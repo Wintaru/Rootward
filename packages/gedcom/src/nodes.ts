@@ -38,6 +38,9 @@ export interface GedcomNode {
 /** An unmapped sub-tree, kept verbatim for `raw_gedcom` and re-export. */
 export interface RawGedcomNode {
   readonly tag: string;
+  /** Record id when the node is a level-0 record (`@U1@`), else absent. Kept so
+   * the writer can re-emit `0 @U1@ SUBM` rather than a dangling `0 SUBM`. */
+  readonly xref?: string;
   readonly value?: string;
   readonly pointer?: string;
   readonly children?: readonly RawGedcomNode[];
@@ -201,6 +204,7 @@ export function childPointer(node: GedcomNode, tag: string): string | null {
 export function nodeToRaw(node: GedcomNode): RawGedcomNode {
   return {
     tag: node.tag,
+    ...(node.xref !== null ? { xref: node.xref } : {}),
     ...(node.value !== null ? { value: node.value } : {}),
     ...(node.pointer !== null ? { pointer: node.pointer } : {}),
     ...(node.children.length > 0

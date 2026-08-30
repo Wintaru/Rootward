@@ -169,6 +169,10 @@ export interface ParsedPerson {
   readonly name_prefix: string | null;
   readonly name_suffix: string | null;
   readonly nickname: string | null;
+  /** Sub-tags of the primary `NAME` node the model does not represent (a
+   * name-level `SOUR` / `NOTE`, a custom tag). Kept apart from the person-level
+   * `raw_gedcom` so the writer re-emits them under `NAME`, not under `INDI`. */
+  readonly primary_name_raw_gedcom: readonly RawGedcomNode[];
   readonly sex: Sex;
   readonly familysearch_id: string | null;
   readonly ancestral_file_number: string | null;
@@ -241,10 +245,12 @@ export interface ParsedPlace {
 
 export interface GedcomReadResult {
   readonly version: GedcomVersion;
-  /** The `HEAD` block's sub-tags, verbatim — the writer (#13) regenerates its
-   * own `HEAD` but may carry `COPR` / `LANG` / `NOTE` forward. */
+  /** The `HEAD` block's sub-tags, verbatim. `writeGedcom` re-emits them under a
+   * fresh `0 HEAD`, overriding only `GEDC.VERS` when its `version` option is
+   * set, so the declared version round-trips. */
   readonly header: readonly RawGedcomNode[];
-  /** `SUBM` / `SUBN` records, verbatim. Rootward has no submitter table. */
+  /** `SUBM` / `SUBN` records, verbatim (`nodeToRaw`, so the record `xref` is
+   * kept). Rootward has no submitter table. */
   readonly submitters: readonly RawGedcomNode[];
   readonly persons: readonly ParsedPerson[];
   readonly families: readonly ParsedFamily[];

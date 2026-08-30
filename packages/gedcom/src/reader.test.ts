@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { GEDCOM_551, GEDCOM_70, GEDCOM_EMPTY } from "./fixtures";
+import {
+  GEDCOM_551,
+  GEDCOM_70,
+  GEDCOM_EMPTY,
+  GEDCOM_NAME_SUBTAGS,
+} from "./fixtures";
 import { readGedcom } from "./reader";
 import type { GedcomReadResult, ParsedFamily, ParsedPerson } from "./types";
 
@@ -44,7 +49,11 @@ describe("readGedcom — GEDCOM 5.5.1 fixture", () => {
       value: "(c) 2024 Smith Family",
     });
     expect(result.submitters).toEqual([
-      { tag: "SUBM", children: [{ tag: "NAME", value: "Josh D" }] },
+      {
+        tag: "SUBM",
+        xref: "@U1@",
+        children: [{ tag: "NAME", value: "Josh D" }],
+      },
     ]);
   });
 
@@ -260,6 +269,33 @@ describe("readGedcom — GEDCOM 7.0 fixture", () => {
       tag: "_NEW",
       value: "custom seven-oh tag",
     });
+  });
+});
+
+describe("readGedcom — primary NAME sub-tags", () => {
+  const result = readGedcom(GEDCOM_NAME_SUBTAGS);
+  const ada = person(result, "@I1@");
+
+  it("keeps name-level sub-tags on primary_name_raw_gedcom, not on the person", () => {
+    expect(ada.citations).toEqual([]);
+    expect(ada.notes).toEqual([]);
+    expect(ada.primary_name_raw_gedcom).toContainEqual({
+      tag: "SOUR",
+      pointer: "@S1@",
+      children: [{ tag: "PAGE", value: "birth register" }],
+    });
+    expect(ada.primary_name_raw_gedcom).toContainEqual({
+      tag: "_NAMESRC",
+      value: "parish",
+    });
+  });
+
+  it("keeps person-level sub-tags on the person's own raw_gedcom", () => {
+    expect(ada.raw_gedcom).toContainEqual({
+      tag: "_CUSTOM",
+      value: "person-level tag",
+    });
+    expect(ada.raw_gedcom).not.toContainEqual({ tag: "SOUR", pointer: "@S1@" });
   });
 });
 
