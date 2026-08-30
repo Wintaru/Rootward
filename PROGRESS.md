@@ -97,8 +97,8 @@ enforcement, null-actor path) + verify gate + `supabase db lint` green — see
 `DECISIONS.md`.
 
 **Issue #8 — Migration: `invitation`, `access_request`, `claim_attempt`,
-`notification`, `notification_read`, `import_job`, `export_job`: done, PR open on
-`feat/migration-onboarding-jobs`.** Fifth schema migration
+`notification`, `notification_read`, `import_job`, `export_job`: done, merged to
+`main` (e3034c4), issue closed.** Fifth schema migration
 (`supabase/migrations/20260830172736_onboarding_and_jobs.sql`): 7 enums
 (`invitation_status`, `request_status`, `notification_type`, `import_mode`,
 `import_status`, `export_type`, and `export_status` — added because none of the
@@ -113,12 +113,33 @@ Moderation-queue + rolling-24h-claim-count + unresolved-notification indexes.
 Behavioural checks (every FK rule, composite-PK reject, enum validation, column
 defaults) + verify gate + `supabase db lint` green.
 
+**Issue #9 — RLS: helper functions + per-table policies + allow/deny tests:
+done, PR open on `feat/rls-policies`.** Sixth migration
+(`supabase/migrations/20260830174012_rls_policies.sql`): 12 helper functions
+(`auth_account`, `is_approved`, `is_moderator`, `is_admin`, `person_is_living`,
+`person_is_visible`, `family_is_visible`, `event_is_visible`, `fact_is_visible`,
+`citation_is_visible`, `media_link_is_visible`, `note_is_visible` — all
+`stable security definer set search_path = ''` so a policy can call them without
+recursing into its own table), RLS enabled on all 23 tables, and the full §5
+policy set. Genealogy writes are `is_moderator()` (`for all`); `person` DELETE /
+`tree_settings` UPDATE / `account` UPDATE / non-`initial` `import_job` DELETE are
+`is_admin()`; `access_request` INSERT is own-account-only; `notification` /
+`claim_attempt` take no client INSERT. pgTAP harness added:
+`supabase/tests/rls_test.sql` (117 allow/deny assertions) and
+`supabase/tests/schema_guards_test.sql` (RLS-on-every-table, `set_updated_at` /
+`write_audit_log` trigger-set `set_eq` guards, polymorphic-`owner_type`
+exhaustiveness guards); `supabase test db` wired into the CI `migrations` job.
+Three SPEC §5 deviations, all grounded in WAYFINDER decision 6 and applied to
+SPEC in the same PR — see `DECISIONS.md`: `is_moderator`/`is_admin` also require
+`status = 'active'`; `is_sensitive` facts hide only while the subject is living;
+`media` SELECT = any approved member. Verify gate, `supabase db lint`, and
+`supabase test db` (124 tests) green on a clean `supabase db reset`.
+
 ## Next action
 
-Phase 1, issue **#9 — RLS: helper functions + policies for every table +
-allow/deny tests in CI** (`docs/SPEC.md` §5, §10 item 9). Depends on #7 (merged)
-and #8. Merge #8's PR (`feat/migration-onboarding-jobs`) first, then label #9
-`ready` and take it. #9 also owns the pgTAP/SQL test harness that #4–#8 deferred.
+Phase 1, issue **#10 — Generated Supabase types + `lib/db` typed query layer +
+`getNeighborhood`** (`docs/SPEC.md` §8.4, §10 item 10). Depends on #9 — merge
+`feat/rls-policies` first, then label #10 `ready` and take it.
 
 `gh issue list --label ready` is the queue. Take the lowest-numbered `ready`
 issue unless this file says otherwise. When an issue merges, label the issues it
@@ -141,6 +162,7 @@ unblocks `ready`.
 | 2026-08-30 | Issue #6 — migration: `source`/`repository`/`citation`/`media`/`media_link`/`note`                                               | `feat/migration-sources-media-notes`    |
 | 2026-08-30 | Issue #7 — migration: `account`/`tree_settings`/`audit_log` + `updated_at` + audit triggers                                      | `feat/migration-account-settings-audit` |
 | 2026-08-30 | Issue #8 — migration: `invitation`/`access_request`/`claim_attempt`/`notification`/`notification_read`/`import_job`/`export_job` | `feat/migration-onboarding-jobs`        |
+| 2026-08-30 | Issue #9 — RLS: 12 `security definer` helpers, policies on all 23 tables, pgTAP allow/deny harness, `supabase test db` in CI     | `feat/rls-policies`                     |
 
 ## Notes for the next session
 
@@ -149,9 +171,9 @@ unblocks `ready`.
   `Depends on:` issue numbers and a `### Done when` checklist.
 - Issue numbers match `docs/SPEC.md` §10 item numbers for 1–40. Issues 41–46 are
   the Post-MVP bullets.
-- #1–#7 are closed and merged to `main`. #8's PR is on
-  `feat/migration-onboarding-jobs`. Later issues get `ready` as their
-  dependencies close — do this when you finish an issue.
+- #1–#8 are closed and merged to `main`; #9's PR is on `feat/rls-policies`.
+  Later issues get `ready` as their dependencies close — do this when you finish
+  an issue.
 - Migrations live in `supabase/migrations/`. `supabase db reset` replays them
   from an empty database; never hand-edit a merged migration, add a new one.
   Filename timestamps must be UTC (`date -u +%Y%m%d%H%M%S`) or a new migration
@@ -167,10 +189,20 @@ unblocks `ready`.
   tables + `account`. #8's onboarding/job tables are deliberately not audited
   (high-churn operational rows; `status` / `resolved_by` / `accepted_by` already
   record state changes) — see `DECISIONS.md`.
+- RLS (#9): every table has RLS on and at least one policy. The access boundary
+  is the 12 `security definer` helper functions in
+  `20260830174012_rls_policies.sql` (`search_path = ''`, so they bypass RLS on
+  the tables they read and a policy on `person` can call `person_is_visible`
+  without recursing). Add a policy AND an allow/deny pgTAP test for every new
+  table in the same PR (`CLAUDE.md`). `person_is_living` is used by exactly one
+  MVP policy — the `fact` sensitive-hiding rule. `supabase test db` runs the
+  `supabase/tests/` pgTAP suite; `schema_guards_test.sql` will fail CI if a new
+  genealogy table skips `set_updated_at` / `write_audit_log` / RLS.
 - CI (`.github/workflows/ci.yml`): `verify` job = install + typecheck + lint +
-  format:check + test; `migrations` job = `supabase start` + `supabase db lint`.
-  No `build` step — SPEC §10 item 3 and WAYFINDER 32 list it out; add it later if
-  wanted. Runs on PRs to `main` and pushes to `main`.
+  format:check + test; `migrations` job = `supabase start`, `supabase db lint`,
+  `supabase test db` (pgTAP). No `build` step — SPEC §10 item 3 and WAYFINDER 32
+  list it out; add it later if wanted. Runs on PRs to `main` and pushes to
+  `main`.
 - `.trillian-repo.json` (gitignored) carries verify commands and conventions.
   The scripts it names now exist (issue #1): `pnpm typecheck / lint / format /
 format:check / build / test` all run from the repo root.

@@ -74,6 +74,7 @@ Two primary screens:
 │   └── shared/                 # shared types + genealogy-date parse/format
 ├── supabase/
 │   ├── migrations/             # SQL migrations (the schema source of truth)
+│   ├── tests/                  # pgTAP tests (RLS allow/deny, schema guards)
 │   ├── functions/
 │   │   ├── gedcom-import/
 │   │   ├── gedcom-export/
@@ -469,8 +470,9 @@ RLS enabled on **every** table. Helper functions (all `stable`,
 
 - `auth_account()` → the caller's `account` row (or null).
 - `is_approved()` → account exists and `status = 'active'`.
-- `is_moderator()` → role in (`moderator`, `admin`).
-- `is_admin()` → role = `admin`.
+- `is_moderator()` → `status = 'active'` **and** role in (`moderator`, `admin`).
+  The active check is deliberate: a suspended moderator keeps no privileges.
+- `is_admin()` → `status = 'active'` and role = `admin`.
 - `person_is_living(person_id)` → boolean. No death event AND (no birth year OR
   birth year within `tree_settings.living_threshold_years`), unless
   `person.is_living` is set explicitly. Load-bearing — the whole access model and
@@ -505,40 +507,62 @@ post-MVP feature.
 - `citation`, `note`, `media_link` — polymorphic `owner_type`. Visible when the
   target is visible, chained through `owner_type`: a `person` target uses
   `person_is_visible`, a `family` target uses `family_is_visible`, an
-  `event` / `fact` target inherits that row's own visibility, a `source` /
-  `place` target is visible to any approved member.
+  `event` / `fact` target inherits that row's own visibility (helper functions
+  `event_is_visible` / `fact_is_visible`); a `note` on a `citation` uses
+  `citation_is_visible`; a `note` on a `family_child` uses `person_is_visible` of
+  the child; a `source` / `place` / `media` target is visible to any approved
+  member.
 - `family` — `family_is_visible(family_id)`.
 - `source`, `repository`, `place` — visible to any approved member (they carry no
   personal data on their own).
+- `media` — visible to any approved member. The image bytes are served through
+  short-lived signed storage URLs (decision 25), so the metadata row itself needs
+  no per-person gate.
 
 ### Field/row hiding for living people
 
 - Living-person **basics** (name, sex, relationships, life events) stay visible
   to approved members — no masking (decision 6).
-- **Sensitive facts** (`fact.is_sensitive` or `fact.visibility <>
-  'everyone_approved'`) are hidden from non-moderators via the `fact` SELECT
-  policy.
+- A `fact` with `visibility <> 'everyone_approved'` is hidden from non-moderators
+  — always, living or deceased.
+- A `fact.is_sensitive` fact (`type in ('ssn','national_id','medical')`) is hidden
+  from non-moderators **only while the subject is living**
+  (`person_is_living(person_id)`). Decision 6: "Deceased people: fully visible."
+  This is the load-bearing use of `person_is_living` — a family-owned sensitive
+  fact (no `person_id`) stays hidden from non-moderators.
 
 ### Writes
 
-- INSERT / UPDATE / DELETE on all genealogy tables: `is_moderator()`.
+- INSERT / UPDATE / DELETE on all genealogy tables: `is_moderator()`
+  (`for all` policy). `citation` / `note` / `media_link` are genealogy tables
+  here.
 - DELETE on `person`, and `import_job` with `mode <> 'initial'`, and
   `tree_settings` UPDATE: `is_admin()` (decision 18).
-- `access_request` and `notification` rows of type `hide_request` /
-  `access_requested` originate from a non-moderator viewer. They are written
-  through a `SECURITY DEFINER` RPC (like `onboarding-match`), not a direct
-  client INSERT, so the moderator-only write policy stays intact.
-- `account`: caller reads own row; `is_moderator()` reads all; only `is_admin()`
-  updates `role`; nobody updates `id`.
-- `notification`: `is_moderator()` reads and resolves. `notification_read`:
-  caller's own rows only.
-- `access_request`: caller inserts/reads own; `is_moderator()` reads/updates all.
+- `notification`: no client INSERT. The `access_requested` / `hide_request` rows
+  are raised by a `SECURITY DEFINER` path (a trigger on `access_request`, or the
+  `onboarding-match` RPC), so the moderator-only surface stays intact.
+  `is_moderator()` reads and resolves (UPDATE).
+- `access_request`: the caller INSERTs a `pending` row for their **own**
+  `account_id` and reads their own; `is_moderator()` reads and resolves all.
+- `account`: caller reads own row; `is_moderator()` reads all; `is_admin()` is the
+  only writer (UPDATE). No client INSERT (the row is created by the post-sign-in
+  trigger, #17) and no client DELETE (it goes away with its `auth.users` row).
+  The `id` / `role` columns are further guarded in the invite and
+  role-management flows, not by a column policy.
+- `invitation`: `is_moderator()` manages; the WITH CHECK also requires
+  `is_admin()` to grant a `role` other than `viewer`.
+- `notification_read`: the caller's own rows only (all commands).
+- `claim_attempt`: no client write — the `onboarding-match` edge function writes
+  it under the service role.
 - `audit_log`: `is_admin()` reads. No client writes (trigger only).
 
 ### Tests
 
-Every policy has a pgTAP or SQL test asserting both the allow and the deny path,
-run in CI. This is the guard that stops a policy regression from shipping.
+`supabase/tests/rls_test.sql` (pgTAP) asserts both the allow and the deny path
+for every helper and every policy; `supabase/tests/schema_guards_test.sql` checks
+that RLS is on for every table and that the `set_updated_at` / `write_audit_log`
+trigger sets have not drifted. `supabase test db` runs both in the CI
+`migrations` job. This is the guard that stops a policy regression from shipping.
 
 ---
 
