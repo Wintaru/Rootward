@@ -6,8 +6,9 @@ the relevant `docs/SPEC.md` section.
 ## Current state
 
 **Phase:** 2 — GEDCOM (in progress). Phase 0 complete (#1–#3), Phase 1 complete
-(#4–#10 merged). #11, #12 and #13 merged and closed. #14 done, staged on
-`feat/gedcom-import`.
+(#4–#10 merged). #11–#14 merged to `main` (#12/#13/#14 landed as commits
+`6a1104f` / `d9fb862` / `a5d6459` — PROGRESS was stale, said "staged"). #15 done,
+staged on `feat/gedcom-export`.
 **Planning:** complete. 35 decisions in `docs/WAYFINDER.md`, full build spec in
 `docs/SPEC.md`. No open questions that block starting.
 **Issues:** created. 46 GitHub issues on `Wintaru/Rootward` — items 1–40 from
@@ -261,22 +262,48 @@ longer fail the whole import (drop the ref or synthesise a stub + warn), shared
 `schema_parity.test.ts` enum-drift guard. 11 Deno tests. See `DECISIONS.md`.
 One-time for Josh: `brew install deno`.
 
+**Issue #15 — `gedcom-export` edge function: done, staged on
+`feat/gedcom-export`.** The `manual_gedcom` exporter (`docs/SPEC.md` §7, §10 item
+15). New migration `20260830231234_exports_bucket.sql` creates the private
+`exports` storage bucket + an `is_moderator()`-only `storage.objects` policy;
+pgTAP `supabase/tests/exports_bucket_test.sql` (6 allow/deny assertions, wired
+into `supabase test db`). The function mirrors the #14 engine/shell split:
+`exporter.ts` (portable engine, injected `ExportGateway`), `gateway.ts`
+(service-role supabase-js, every table read paged past the PostgREST 1000-row
+cap), `index.ts` (`Deno.serve` shell — moderator-or-service-role auth). One pass,
+no cursor — `export_status` is `pending → running → completed/failed`.
+`buildResult` rebuilds a `GedcomReadResult` from the row set: a row keeps its
+imported `gedcom_xref`, an app-created row gets a synthesised `@I1@` / `@F1@` /
+`@S1@` / `@R1@` / `@O1@` (past every xref already claimed); the synthetic
+top-level `NAME` node the importer stashes in `person.raw_gedcom` is pulled back
+under the primary `NAME` line; the `HEAD` block is synthesised (5.5.1, `CHAR
+UTF-8`); all notes inline (the importer stores none as shared). `writeGedcom`
+serialises it. The file lands at `exports/<jobId>.ged`; the caller gets a 1-hour
+signed URL and `export_job` records `storage_path` / `size_bytes` /
+`completed_at`. 6 Deno tests (`exporter.test.ts`) drive the **real** #14 import
+engine: import a fixture → adapt rows → export → re-import, asserting a valid
+5.5.1 file with no warnings and unchanged record counts, plus determinism,
+synthesised-xref, empty-tree, and wrong-type-fails. Also verified end to end
+against the live local stack (real gateway + storage upload + signed URL +
+`export_job` ladder) — see `DECISIONS.md`. Full pnpm + Deno gates green;
+`supabase db lint` + `supabase test db` (148) green.
+
 ## Next action
 
-Phase 2, issue **#15 — `gedcom-export` edge function** (`docs/SPEC.md` §7, §10
-item 15), `manual_gedcom` only. After `feat/gedcom-import` merges: close #14.
-#15 is already `ready` and unblocked (#12 + #13 merged). It builds a 5.5.1 file
-from the DB with `writeGedcom`, writes it to a private bucket, returns a signed
-URL, and tracks an `export_job` row. Reuse the `supabase/functions/` toolchain
-this issue set up (Deno, the engine/shell split — see that dir's `README.md`).
-The DB→`GedcomReadResult` reconstruction is the new work; note the person
-`raw_gedcom` may carry a synthetic top-level `NAME` node the importer added
-(primary-name sub-tags) — re-emit it under the primary `NAME` line.
+Phase 2, issue **#16 — `/import` UI** (`docs/SPEC.md` §8, §10 item 16), needs
+#14. Upload a GEDCOM to the `imports` bucket, call `gedcom-import`, poll the
+`import_job` for progress, show the result. Note: no migration creates the
+`imports` bucket yet (#14 assumed it) — add one alongside this issue, same shape
+as `20260830231234_exports_bucket.sql`.
 
-Then **#16 — `/import` UI** (needs #14). A real end-to-end run of `gedcom-import`
-against a live stack is still pending — fold it into #16 or a dedicated
-integration test once dev-stack ownership is clean (15 sessions were sharing the
-local Supabase this session).
+A real deployed-function run (`supabase functions serve`) of both
+`gedcom-import` and `gedcom-export` is still pending — fold it into #16 or a
+dedicated integration test once dev-stack ownership is clean (15+ sessions were
+sharing the local Supabase this session).
+
+Bookkeeping done this session: closed #14 (work was already merged as `a5d6459`,
+issue left open); labelled #16 `ready`. #15 stays open until
+`feat/gedcom-export` merges.
 
 `gh issue list --label ready` is the queue. Take the lowest-numbered `ready`
 issue unless this file says otherwise. When an issue merges, label the issues it
@@ -305,6 +332,7 @@ unblocks `ready`.
 | 2026-08-30 | Issue #12 — `packages/gedcom` reader: `nodes.ts` line grammar + `mapping.ts` tag tables + `readGedcom` (5.5.1 + 7.0, xref links, `raw_gedcom`), 29 vitest tests                                                                                         | `feat/gedcom-reader`                    |
 | 2026-08-30 | Issue #13 — `packages/gedcom` writer: `writeGedcom` + reverse enum tables in `mapping.ts`, header/xref/raw preserved, `version` option, 26 round-trip vitest tests                                                                                      | `feat/gedcom-writer`                    |
 | 2026-08-30 | Issue #14 — `gedcom-import` edge function: Deno-native `supabase/functions/` + `deno.json`/`deno.lock` + CI `functions` job; resumable `initial`-mode importer (deterministic UUIDv5, cursor phases), 11 Deno tests, schema-validated in a rollback txn | `feat/gedcom-import`                    |
+| 2026-08-30 | Issue #15 — `gedcom-export` edge function: private `exports` bucket migration + pgTAP, `exporter.ts` DB→`GedcomReadResult` rebuild (xref reuse/synthesis, synth HEAD), engine/shell split, 6 Deno tests via the real #14 engine, live-stack verified    | `feat/gedcom-export`                    |
 
 ## Notes for the next session
 
@@ -313,11 +341,11 @@ unblocks `ready`.
   `Depends on:` issue numbers and a `### Done when` checklist.
 - Issue numbers match `docs/SPEC.md` §10 item numbers for 1–40. Issues 41–46 are
   the Post-MVP bullets.
-- #1–#12 are closed and merged to `main`; #13's work is on `feat/gedcom-writer`.
-  Later issues get `ready` as their dependencies close — do this when you finish
-  an issue.
-- Phase 1 is complete (#4–#10 merged). Phase 2 (GEDCOM) is in progress: #11, #12
-  and #13 done, then #14/#15 (edge functions) → #16 (import UI).
+- #1–#14 are merged to `main`; #15's work is on `feat/gedcom-export` (issue open
+  until it merges). Later issues get `ready` as their dependencies close — do
+  this when you finish an issue.
+- Phase 1 is complete (#4–#10 merged). Phase 2 (GEDCOM) is in progress: #11–#15
+  done, then #16 (import UI) closes the phase.
 - The genealogy-date module (#11) lives in `packages/shared`
   (`parseGenealogyDate` / `formatGenealogyDate`, exported from the package root).
   `packages/gedcom` parses every `DATE` through it — do not re-implement date
@@ -356,10 +384,13 @@ unblocks `ready`.
   (`brew install deno`). Run the Deno gate from the repo root with
   `--config supabase/functions/deno.json` (see `.trillian-repo.json` verify) or
   from `supabase/functions/` directly; CI has a parallel `functions` job.
-  Pattern per function: `importer.ts` portable engine with an injected gateway
-  interface (vitest-free, `Deno.test` unit tests), `gateway.ts` the supabase-js
-  impl, `index.ts` the `Deno.serve` shell. `packages/*` stay pure — the ban
-  still applies there, only the `supabase/functions/` shell may touch Deno.
+  Pattern per function: a portable engine (`importer.ts` / `exporter.ts`) with an
+  injected gateway interface (vitest-free, `Deno.test` unit tests), `gateway.ts`
+  the supabase-js impl, `index.ts` the `Deno.serve` shell. `packages/*` stay pure
+  — the ban still applies there, only the `supabase/functions/` shell may touch
+  Deno. `deno.json` `lint.include` + the `check` / `test` tasks list each
+  function dir; CI's `functions` job runs `deno check gedcom-import/
+gedcom-export/`.
 - The `gedcom-import` engine (#14) is `runImport(deps)` in
   `supabase/functions/gedcom-import/importer.ts`. Row ids are
   `uuidv5(<stable key>, jobId)` (deterministic → resume re-runs a batch as an
@@ -373,6 +404,20 @@ unblocks `ready`.
   link but the last); #15 revisits the `@N1@` provenance for export.
   `schema_parity.test.ts` guards the gedcom TS unions against the migration
   enums (the deferred #12 guard — now load-bearing, this is the first writer).
+- The `gedcom-export` engine (#15) is `runExport(deps)` in
+  `supabase/functions/gedcom-export/exporter.ts`. `buildResult(rows, now)` is the
+  inverse of the importer's row-building: it walks the whole row set and rebuilds
+  a `GedcomReadResult`, then `writeGedcom` serialises it. xrefs: a row keeps its
+  stored `gedcom_xref` when valid, else `XrefPool` synthesises `@<I|F|S|R|O><n>@`
+  past every xref already claimed. The importer stashes the primary name's
+  sub-tags as a synthetic top-level `NAME` node in `person.raw_gedcom` —
+  `splitPrimaryName` pulls it back out. The `HEAD` block is synthesised (no table
+  stores it); all notes are emitted inline (the importer stores none as shared,
+  so `@N1@` provenance is lost across a round trip — acceptable, decision in
+  `DECISIONS.md`). Family-owned facts are dropped with a warning (`ParsedFamily`
+  has no facts field). The `gateway.ts` pages every table read by 1000 (PostgREST
+  cap). Private `exports` bucket + `is_moderator()` object policy live in
+  migration `20260830231234`; `imports` (for #14/#16) still needs the same.
 - **Deferred from #12's review — enum-parity guard.**
   `packages/gedcom/src/types.ts` hand-copies the seven Postgres enums
   (`event_type`, `fact_type`, `sex`, `name_type`, `partner_role`, `union_type`,

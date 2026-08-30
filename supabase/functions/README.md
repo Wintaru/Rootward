@@ -42,3 +42,16 @@ service-role key for the self-reinvoke. `initial` mode only.
 Resumable by construction: every row id is `uuidv5(<stable key>, jobId)`, so a
 timeout that re-runs a batch upserts the same rows. The only cross-invocation
 state is `import_job.cursor` (`{ phase, offset }`).
+
+## `gedcom-export` (issue #15)
+
+`POST { "jobId": "<uuid>" }`. Auth: a moderator/admin user JWT, or the
+service-role key. `manual_gedcom` type only.
+
+One pass, no cursor — `export_status` is `pending → running → completed/failed`.
+`exporter.ts` reads every genealogy table (each paged past the PostgREST
+1000-row cap), rebuilds a `GedcomReadResult`, and `writeGedcom` serialises it to
+5.5.1. A row keeps its imported `gedcom_xref`; an app-created row gets a
+synthesised `@I1@` / `@F1@` / … . The file lands at `exports/<jobId>.ged` in the
+private `exports` bucket (migration `20260830231234`); the caller gets a 1-hour
+signed URL and `export_job` records `storage_path` / `size_bytes`.

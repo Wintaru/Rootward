@@ -7,11 +7,11 @@
   },
   "unstable": ["sloppy-imports"],
   "lint": {
-    "include": ["gedcom-import/"],
+    "include": ["gedcom-import/", "gedcom-export/"],
     "rules": { "tags": ["recommended"] }
   },
   "tasks": {
-    "check": "deno check gedcom-import/",
-    "test": "deno test --allow-read gedcom-import/"
+    "check": "deno check gedcom-import/ gedcom-export/",
+    "test": "deno test --allow-read gedcom-import/ gedcom-export/"
   }
 }
