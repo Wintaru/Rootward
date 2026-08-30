@@ -6,7 +6,7 @@
  * C#/iDesign service later (WAYFINDER decision 8).
  */
 
-export { readGedcom } from "./reader";
+export { readGedcom, normalizePlaceName } from "./reader";
 export { writeGedcom } from "./writer";
 export type { GedcomWriteOptions } from "./writer";
 

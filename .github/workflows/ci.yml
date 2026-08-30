@@ -48,6 +48,33 @@ jobs:
       - name: Test
         run: pnpm test
 
+  functions:
+    name: edge functions (deno)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: supabase/functions
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Deno
+        uses: denoland/setup-deno@v2
+        with:
+          # Matches config.toml [edge_runtime].deno_version = 2.
+          deno-version: v2.x
+
+      # `deno check` typechecks the portable packages the functions import; the
+      # engine tests run in the same runtime the edge function deploys to.
+      - name: Format check
+        run: deno fmt --check
+      - name: Lint
+        run: deno lint
+      - name: Typecheck
+        run: deno check gedcom-import/
+      - name: Test
+        run: deno test --allow-read
+
   migrations:
     name: migration check / db tests
     runs-on: ubuntu-latest

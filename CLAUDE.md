@@ -48,13 +48,20 @@ the issues and fix `PROGRESS.md`.
   writes those (`.trillian-repo.json` → `git.prMessages: false`).
 - **One reviewed body of work per PR.** Run the verify gate
   (`pnpm typecheck && pnpm lint && pnpm format:check && pnpm build && pnpm test`),
-  then a code review, before handing over the message.
+  then a code review, before handing over the message. Work under
+  `supabase/functions/` also runs the Deno gate (`deno fmt --check`, `deno lint`,
+  `deno check`, `deno test` — see that directory's `README.md`); `deno` must be
+  installed (`brew install deno`).
 - **Schema is migrations.** Never hand-edit a shipped migration. Add a new one.
 - **RLS is the access boundary.** Every new table gets RLS enabled and an
   allow/deny test in the same PR. Frontend checks are convenience, not security.
 - **The GEDCOM module stays portable.** `packages/gedcom` and the date parser in
   `packages/shared` use pure TypeScript — no Deno or Node built-ins — so a C#
   port stays possible (WAYFINDER decision 8).
+- **Edge functions are Deno, not pnpm.** `supabase/functions/` sits outside the
+  workspace; `deno.json` holds its import map and `sloppy-imports`. Split each
+  function into a portable engine (injected gateway, unit-tested) and a thin
+  `Deno.serve` shell — see `supabase/functions/README.md`.
 - **Data access:** explicit column lists, filter/paginate/aggregate in Postgres,
   one round trip where possible. The tree view fetches only the visible
   neighborhood (WAYFINDER decision 9).

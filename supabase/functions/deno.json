@@ -1,0 +1,17 @@
+{
+  "imports": {
+    "@rootward/gedcom": "../../packages/gedcom/src/index.ts",
+    "@rootward/shared": "../../packages/shared/src/index.ts",
+    "@supabase/supabase-js": "npm:@supabase/supabase-js@2.112.4",
+    "@std/assert": "jsr:@std/assert@1.0.14"
+  },
+  "unstable": ["sloppy-imports"],
+  "lint": {
+    "include": ["gedcom-import/"],
+    "rules": { "tags": ["recommended"] }
+  },
+  "tasks": {
+    "check": "deno check gedcom-import/",
+    "test": "deno test --allow-read gedcom-import/"
+  }
+}

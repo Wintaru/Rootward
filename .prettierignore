@@ -16,3 +16,6 @@ apps/web/lib/db/database.types.ts
 # `apps/web/AGENTS.md` is rewritten by `next dev`; CLAUDE.md just imports it
 apps/web/AGENTS.md
 apps/web/CLAUDE.md
+
+# Deno edge functions — `deno fmt` / `deno lint` own this tree (see supabase/functions/deno.json)
+supabase/functions/

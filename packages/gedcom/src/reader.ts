@@ -76,8 +76,13 @@ class PlaceCollector {
   }
 }
 
-/** Lowercase, collapse punctuation and runs of whitespace, trim (SPEC §4.2). */
-function normalizePlaceName(name: string): string {
+/**
+ * Lowercase, collapse punctuation and runs of whitespace, trim (SPEC §4.2).
+ *
+ * Exported so the `gedcom-import` edge function (#14) maps an event's raw
+ * `place_name` to the same key `readGedcom` deduped `result.places` on.
+ */
+export function normalizePlaceName(name: string): string {
   return name
     .toLowerCase()
     .replace(/[.,;]+/g, " ")

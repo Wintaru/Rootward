@@ -6,8 +6,8 @@ the relevant `docs/SPEC.md` section.
 ## Current state
 
 **Phase:** 2 — GEDCOM (in progress). Phase 0 complete (#1–#3), Phase 1 complete
-(#4–#10 merged). #11 and #12 merged and closed. #13 done, staged on
-`feat/gedcom-writer`.
+(#4–#10 merged). #11, #12 and #13 merged and closed. #14 done, staged on
+`feat/gedcom-import`.
 **Planning:** complete. 35 decisions in `docs/WAYFINDER.md`, full build spec in
 `docs/SPEC.md`. No open questions that block starting.
 **Issues:** created. 46 GitHub issues on `Wintaru/Rootward` — items 1–40 from
@@ -235,45 +235,76 @@ primary-`NAME` sub-tags leaked into `person.raw_gedcom`
 (`ParsedPerson.primary_name_raw_gedcom` added, new `GEDCOM_NAME_SUBTAGS`
 fixture). Verify gate green (147 tests total). See `DECISIONS.md`.
 
+**Issue #14 — `gedcom-import` edge function: done, staged on
+`feat/gedcom-import`.** The `initial`-mode importer (`docs/SPEC.md` §7, §10 item
+14). `supabase/functions/` is now Deno-native — not a pnpm workspace member;
+`deno.json` holds the import map + `sloppy-imports` (the portable packages use
+extensionless imports) + a pinned `deno.lock`. New parallel `functions` job in
+`ci.yml` runs `deno fmt --check` / `lint` / `check` / `test`; Prettier cedes the
+tree (`.prettierignore`). The function splits into `importer.ts` (portable
+engine, injected `ImportGateway`), `gateway.ts` (service-role supabase-js impl),
+`index.ts` (`Deno.serve` shell — moderator-JWT auth, 20s budget, self-reinvoke),
+`uuid.ts` (deterministic UUIDv5 via `crypto.subtle`). Resumable by construction:
+every row id is `uuidv5(<stable key>, jobId)`, so re-running a batch upserts the
+same rows; the only cross-invocation state is `import_job.cursor` (`{ phase,
+offset }`). FK-safe phase order places → repositories → sources → shared_notes →
+media → persons → families. On finish: `status = completed`, `stats`,
+`import_finished` notification. 9 Deno tests (`importer.test.ts` /
+`uuid.test.ts`): completion + notify, mid-kill resume with no duplicate rows,
+`gedcom_xref` on every record, place dedup, non-initial → failed, empty tree,
+the RFC-4122 v5 vector. Row shapes validated against the live schema in a
+rollback transaction (every column / enum / CHECK / the `event.sort_key`
+trigger). `packages/gedcom` exports `normalizePlaceName` for the importer. Full
+pnpm gate green (147). Code review applied: dangling pointers / junk places no
+longer fail the whole import (drop the ref or synthesise a stub + warn), shared
+`NOTE` inlined per owner, `runImport` failure path hardened, a
+`schema_parity.test.ts` enum-drift guard. 11 Deno tests. See `DECISIONS.md`.
+One-time for Josh: `brew install deno`.
+
 ## Next action
 
-Phase 2, issue **#14 — `gedcom-import` edge function** (`docs/SPEC.md` §7, §10
-item 14). Depends on #12 and #13. Merge `feat/gedcom-writer` first, then label
-#14 (and #15, also unblocked by #13) `ready` and take #14. It runs `readGedcom`,
-writes an `import_job` row, assigns UUIDs, and resolves the GEDCOM xref strings
-(`@I1@`) to those ids — the reader deliberately leaves them unresolved. Every
-created record keeps its `gedcom_xref` so re-export (`writeGedcom`) is stable
-(decision 4). Edge function code lives outside `packages/*`, so the Deno/Node
-ban does not apply there — but the `@rootward/gedcom` and `@rootward/shared`
-packages it imports must stay pure.
+Phase 2, issue **#15 — `gedcom-export` edge function** (`docs/SPEC.md` §7, §10
+item 15), `manual_gedcom` only. After `feat/gedcom-import` merges: close #14.
+#15 is already `ready` and unblocked (#12 + #13 merged). It builds a 5.5.1 file
+from the DB with `writeGedcom`, writes it to a private bucket, returns a signed
+URL, and tracks an `export_job` row. Reuse the `supabase/functions/` toolchain
+this issue set up (Deno, the engine/shell split — see that dir's `README.md`).
+The DB→`GedcomReadResult` reconstruction is the new work; note the person
+`raw_gedcom` may carry a synthetic top-level `NAME` node the importer added
+(primary-name sub-tags) — re-emit it under the primary `NAME` line.
+
+Then **#16 — `/import` UI** (needs #14). A real end-to-end run of `gedcom-import`
+against a live stack is still pending — fold it into #16 or a dedicated
+integration test once dev-stack ownership is clean (15 sessions were sharing the
+local Supabase this session).
 
 `gh issue list --label ready` is the queue. Take the lowest-numbered `ready`
 issue unless this file says otherwise. When an issue merges, label the issues it
-unblocks `ready`. After `feat/gedcom-writer` merges: close #13, label #14 and
-#15 `ready`.
+unblocks `ready`.
 
 ## Log
 
-| Date       | Session did                                                                                                                                                        | Result                                  |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------- |
-| 2026-08-30 | Wayfinder planning — all decisions settled                                                                                                                         | `docs/WAYFINDER.md` (1–33)              |
-| 2026-08-30 | Wrote the build spec                                                                                                                                               | `docs/SPEC.md`                          |
-| 2026-08-30 | Repo init, MIT license, project meta, resume protocol                                                                                                              | `chore/scaffold`                        |
-| 2026-08-30 | Spec review + fixes; settled frontend stack and public-access questions                                                                                            | `docs/WAYFINDER.md` (34–35)             |
-| 2026-08-30 | Created the 46-issue set from `docs/SPEC.md` §10 — milestones, labels, dependencies                                                                                | GitHub issues #1–#46                    |
-| 2026-08-30 | Issue #1 — scaffolded the pnpm monorepo; verify gate green                                                                                                         | `chore/scaffold-monorepo`               |
-| 2026-08-30 | Issue #2 — local Supabase dev stack, `pnpm dev` / `dev:status`, `.env.example`                                                                                     | `chore/local-supabase-dev-stack`        |
-| 2026-08-30 | Issue #3 — GitHub Actions CI (`verify` + `migrations` jobs); build kept out of CI                                                                                  | `chore/ci-pipeline`                     |
-| 2026-08-30 | Issue #4 — first migration: 6 enums + `person`/`person_name`/`family`/`family_child`                                                                               | `feat/migration-core-genealogy`         |
-| 2026-08-30 | Issue #5 — migration: `event`/`fact`/`place` + flat `date_*` set + sort-key trigger                                                                                | `feat/migration-events-facts-places`    |
-| 2026-08-30 | Issue #6 — migration: `source`/`repository`/`citation`/`media`/`media_link`/`note`                                                                                 | `feat/migration-sources-media-notes`    |
-| 2026-08-30 | Issue #7 — migration: `account`/`tree_settings`/`audit_log` + `updated_at` + audit triggers                                                                        | `feat/migration-account-settings-audit` |
-| 2026-08-30 | Issue #8 — migration: `invitation`/`access_request`/`claim_attempt`/`notification`/`notification_read`/`import_job`/`export_job`                                   | `feat/migration-onboarding-jobs`        |
-| 2026-08-30 | Issue #9 — RLS: 12 `security definer` helpers, policies on all 23 tables, pgTAP allow/deny harness, `supabase test db` in CI                                       | `feat/rls-policies`                     |
-| 2026-08-30 | Issue #10 — `get_neighborhood` SQL function + `pnpm gen:types` + `lib/db` typed layer + `lib/supabase` clients + pgTAP + CI drift check                            | `feat/db-typed-query-layer`             |
-| 2026-08-30 | Issue #11 — `packages/shared` genealogy-date parser + formatter (5.5.1 + 7.0 calendars, dual dating, phrase fallback), 79 vitest tests                             | `feat/genealogy-date-module`            |
-| 2026-08-30 | Issue #12 — `packages/gedcom` reader: `nodes.ts` line grammar + `mapping.ts` tag tables + `readGedcom` (5.5.1 + 7.0, xref links, `raw_gedcom`), 29 vitest tests    | `feat/gedcom-reader`                    |
-| 2026-08-30 | Issue #13 — `packages/gedcom` writer: `writeGedcom` + reverse enum tables in `mapping.ts`, header/xref/raw preserved, `version` option, 26 round-trip vitest tests | `feat/gedcom-writer`                    |
+| Date       | Session did                                                                                                                                                                                                                                             | Result                                  |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| 2026-08-30 | Wayfinder planning — all decisions settled                                                                                                                                                                                                              | `docs/WAYFINDER.md` (1–33)              |
+| 2026-08-30 | Wrote the build spec                                                                                                                                                                                                                                    | `docs/SPEC.md`                          |
+| 2026-08-30 | Repo init, MIT license, project meta, resume protocol                                                                                                                                                                                                   | `chore/scaffold`                        |
+| 2026-08-30 | Spec review + fixes; settled frontend stack and public-access questions                                                                                                                                                                                 | `docs/WAYFINDER.md` (34–35)             |
+| 2026-08-30 | Created the 46-issue set from `docs/SPEC.md` §10 — milestones, labels, dependencies                                                                                                                                                                     | GitHub issues #1–#46                    |
+| 2026-08-30 | Issue #1 — scaffolded the pnpm monorepo; verify gate green                                                                                                                                                                                              | `chore/scaffold-monorepo`               |
+| 2026-08-30 | Issue #2 — local Supabase dev stack, `pnpm dev` / `dev:status`, `.env.example`                                                                                                                                                                          | `chore/local-supabase-dev-stack`        |
+| 2026-08-30 | Issue #3 — GitHub Actions CI (`verify` + `migrations` jobs); build kept out of CI                                                                                                                                                                       | `chore/ci-pipeline`                     |
+| 2026-08-30 | Issue #4 — first migration: 6 enums + `person`/`person_name`/`family`/`family_child`                                                                                                                                                                    | `feat/migration-core-genealogy`         |
+| 2026-08-30 | Issue #5 — migration: `event`/`fact`/`place` + flat `date_*` set + sort-key trigger                                                                                                                                                                     | `feat/migration-events-facts-places`    |
+| 2026-08-30 | Issue #6 — migration: `source`/`repository`/`citation`/`media`/`media_link`/`note`                                                                                                                                                                      | `feat/migration-sources-media-notes`    |
+| 2026-08-30 | Issue #7 — migration: `account`/`tree_settings`/`audit_log` + `updated_at` + audit triggers                                                                                                                                                             | `feat/migration-account-settings-audit` |
+| 2026-08-30 | Issue #8 — migration: `invitation`/`access_request`/`claim_attempt`/`notification`/`notification_read`/`import_job`/`export_job`                                                                                                                        | `feat/migration-onboarding-jobs`        |
+| 2026-08-30 | Issue #9 — RLS: 12 `security definer` helpers, policies on all 23 tables, pgTAP allow/deny harness, `supabase test db` in CI                                                                                                                            | `feat/rls-policies`                     |
+| 2026-08-30 | Issue #10 — `get_neighborhood` SQL function + `pnpm gen:types` + `lib/db` typed layer + `lib/supabase` clients + pgTAP + CI drift check                                                                                                                 | `feat/db-typed-query-layer`             |
+| 2026-08-30 | Issue #11 — `packages/shared` genealogy-date parser + formatter (5.5.1 + 7.0 calendars, dual dating, phrase fallback), 79 vitest tests                                                                                                                  | `feat/genealogy-date-module`            |
+| 2026-08-30 | Issue #12 — `packages/gedcom` reader: `nodes.ts` line grammar + `mapping.ts` tag tables + `readGedcom` (5.5.1 + 7.0, xref links, `raw_gedcom`), 29 vitest tests                                                                                         | `feat/gedcom-reader`                    |
+| 2026-08-30 | Issue #13 — `packages/gedcom` writer: `writeGedcom` + reverse enum tables in `mapping.ts`, header/xref/raw preserved, `version` option, 26 round-trip vitest tests                                                                                      | `feat/gedcom-writer`                    |
+| 2026-08-30 | Issue #14 — `gedcom-import` edge function: Deno-native `supabase/functions/` + `deno.json`/`deno.lock` + CI `functions` job; resumable `initial`-mode importer (deterministic UUIDv5, cursor phases), 11 Deno tests, schema-validated in a rollback txn | `feat/gedcom-import`                    |
 
 ## Notes for the next session
 
@@ -318,6 +349,30 @@ unblocks `ready`. After `feat/gedcom-writer` merges: close #13, label #14 and
   (no reverse date formatter). Reverse enum tables are in `mapping.ts`
   (`EVENT_TAG_FOR` etc., `satisfies Record<Enum, …>`). `#14`'s re-export path
   calls this — every imported record must keep its `gedcom_xref` for it to work.
+- **Edge functions (#14+) live in `supabase/functions/`, Deno-native.** Not a
+  pnpm workspace member. `deno.json` = import map (`@rootward/*` → package
+  source, `@supabase/supabase-js` pinned, `@std/assert`) + `sloppy-imports`
+  (packages use extensionless imports) + `deno.lock`. `deno` must be installed
+  (`brew install deno`). Run the Deno gate from the repo root with
+  `--config supabase/functions/deno.json` (see `.trillian-repo.json` verify) or
+  from `supabase/functions/` directly; CI has a parallel `functions` job.
+  Pattern per function: `importer.ts` portable engine with an injected gateway
+  interface (vitest-free, `Deno.test` unit tests), `gateway.ts` the supabase-js
+  impl, `index.ts` the `Deno.serve` shell. `packages/*` stay pure — the ban
+  still applies there, only the `supabase/functions/` shell may touch Deno.
+- The `gedcom-import` engine (#14) is `runImport(deps)` in
+  `supabase/functions/gedcom-import/importer.ts`. Row ids are
+  `uuidv5(<stable key>, jobId)` (deterministic → resume re-runs a batch as an
+  upsert, no dupes). `import_job.cursor` = `{ phase, offset }` is the only
+  resume state. Phase order is FK-safe: places → repositories → sources →
+  shared_notes → media → persons → families. Dangling pointers (`HUSB @I9@`
+  with no `@I9@`, a missing `SOUR` / `OBJE` / `REPO`) and junk `PLAC` values do
+  not fail the import — the reference is dropped or a stub row synthesised, with
+  a `stats.warnings` entry. Shared `NOTE` records are inlined per owner
+  (`note.gedcom_xref` is unique — SPEC §4.5 — so one shared row would drop every
+  link but the last); #15 revisits the `@N1@` provenance for export.
+  `schema_parity.test.ts` guards the gedcom TS unions against the migration
+  enums (the deferred #12 guard — now load-bearing, this is the first writer).
 - **Deferred from #12's review — enum-parity guard.**
   `packages/gedcom/src/types.ts` hand-copies the seven Postgres enums
   (`event_type`, `fact_type`, `sex`, `name_type`, `partner_role`, `union_type`,
