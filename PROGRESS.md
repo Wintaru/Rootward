@@ -33,8 +33,8 @@ to `main` and `push` to `main`: `verify` (`pnpm install --frozen-lockfile`,
 `supabase start` → `supabase db lint --fail-on error`). `build` is deliberately
 not in CI (SPEC §10 item 3 / WAYFINDER 32 list it out).
 
-**Issue #4 — Migration: enums + core genealogy tables: done, PR open on
-`feat/migration-core-genealogy`.** First schema migration
+**Issue #4 — Migration: enums + core genealogy tables: done, merged to `main`
+(e026870), issue closed.** First schema migration
 (`supabase/migrations/20260830162505_core_genealogy.sql`): 6 enums (`sex`,
 `person_visibility`, `name_type`, `partner_role`, `union_type`,
 `child_relation`) and `person`, `person_name`, `family`, `family_child` exactly
@@ -44,15 +44,29 @@ per SPEC §4.2. FK on-delete rules and the `family_child` unique
 — the FK to `account` lands in #7 (see the comment on issue #7). Verify gate +
 `supabase db lint` green.
 
+**Issue #5 — Migration: `event`, `fact`, `place` + embedded date columns: done,
+PR open on `feat/migration-events-facts-places`.** Second schema migration
+(`supabase/migrations/20260830164537_events_facts_places.sql`): 8 enums
+(`genealogy_date_kind`, `calendar`, `event_owner`, `fact_owner`, `event_type`,
+`fact_type`, `fact_visibility`, `geocode_source`), the flat `date_*` column set
+per SPEC §4.1 on `event` and `fact`, and `place`. `date_sort_key` is a stored
+generated column via one shared immutable `genealogy_date_sort_key(y,m,d)`
+function; `event.sort_key` is a plain `timestamptz` set by a `BEFORE INSERT OR
+UPDATE` trigger (date + per-`type` ordinal, undated → null). `fact.is_sensitive`
+generated. One-owner CHECK on `event`/`fact`. `place.normalized_name` partial
+unique. No RLS (#9), no shared `updated_at` trigger (#7). Behavioural tests +
+verify gate + `supabase db lint` green. See `DECISIONS.md` for the flat-columns,
+trigger-recompute, and `fact_visibility` calls.
+
 ## Next action
 
-Phase 1, issue **#5 — Migration: `event`, `fact`, `place` + embedded date
-columns + generated `date_sort_key` + trigger-populated `event.sort_key`**
-(`docs/SPEC.md` §10 item 5, §4.1, §4.2). Depends on #4 (merge its PR first).
+Phase 1, issue **#6 — Migration: `source`, `repository`, `citation`, `media`,
+`media_link`, `note`** (`docs/SPEC.md` §4.3–§4.5, §10 item 6). Depends on #4
+(done). Reuse the canonical `date_*` column list from the comment block in
+`20260830164537_events_facts_places.sql` for `citation` and `media`.
 
-Merge #4's PR (`feat/migration-core-genealogy`) first. When it merges, label
-#5, #6, #7, #8 `ready` (they each depend only on #4). #4 itself is labelled
-`ready`; #3 closing did not auto-cascade the label.
+Merge #5's PR (`feat/migration-events-facts-places`) first. #6, #7, #8 are
+already labelled `ready` (they depend only on #4).
 
 `gh issue list --label ready` is the queue. Take the lowest-numbered `ready`
 issue unless this file says otherwise. When an issue merges, label the issues it
@@ -60,17 +74,18 @@ unblocks `ready`.
 
 ## Log
 
-| Date       | Session did                                                                          | Result                           |
-| ---------- | ------------------------------------------------------------------------------------ | -------------------------------- |
-| 2026-08-30 | Wayfinder planning — all decisions settled                                           | `docs/WAYFINDER.md` (1–33)       |
-| 2026-08-30 | Wrote the build spec                                                                 | `docs/SPEC.md`                   |
-| 2026-08-30 | Repo init, MIT license, project meta, resume protocol                                | `chore/scaffold`                 |
-| 2026-08-30 | Spec review + fixes; settled frontend stack and public-access questions              | `docs/WAYFINDER.md` (34–35)      |
-| 2026-08-30 | Created the 46-issue set from `docs/SPEC.md` §10 — milestones, labels, dependencies  | GitHub issues #1–#46             |
-| 2026-08-30 | Issue #1 — scaffolded the pnpm monorepo; verify gate green                           | `chore/scaffold-monorepo`        |
-| 2026-08-30 | Issue #2 — local Supabase dev stack, `pnpm dev` / `dev:status`, `.env.example`       | `chore/local-supabase-dev-stack` |
-| 2026-08-30 | Issue #3 — GitHub Actions CI (`verify` + `migrations` jobs); build kept out of CI    | `chore/ci-pipeline`              |
-| 2026-08-30 | Issue #4 — first migration: 6 enums + `person`/`person_name`/`family`/`family_child` | `feat/migration-core-genealogy`  |
+| Date       | Session did                                                                          | Result                               |
+| ---------- | ------------------------------------------------------------------------------------ | ------------------------------------ |
+| 2026-08-30 | Wayfinder planning — all decisions settled                                           | `docs/WAYFINDER.md` (1–33)           |
+| 2026-08-30 | Wrote the build spec                                                                 | `docs/SPEC.md`                       |
+| 2026-08-30 | Repo init, MIT license, project meta, resume protocol                                | `chore/scaffold`                     |
+| 2026-08-30 | Spec review + fixes; settled frontend stack and public-access questions              | `docs/WAYFINDER.md` (34–35)          |
+| 2026-08-30 | Created the 46-issue set from `docs/SPEC.md` §10 — milestones, labels, dependencies  | GitHub issues #1–#46                 |
+| 2026-08-30 | Issue #1 — scaffolded the pnpm monorepo; verify gate green                           | `chore/scaffold-monorepo`            |
+| 2026-08-30 | Issue #2 — local Supabase dev stack, `pnpm dev` / `dev:status`, `.env.example`       | `chore/local-supabase-dev-stack`     |
+| 2026-08-30 | Issue #3 — GitHub Actions CI (`verify` + `migrations` jobs); build kept out of CI    | `chore/ci-pipeline`                  |
+| 2026-08-30 | Issue #4 — first migration: 6 enums + `person`/`person_name`/`family`/`family_child` | `feat/migration-core-genealogy`      |
+| 2026-08-30 | Issue #5 — migration: `event`/`fact`/`place` + flat `date_*` set + sort-key trigger  | `feat/migration-events-facts-places` |
 
 ## Notes for the next session
 

@@ -128,7 +128,7 @@ more than one date exists on a row.
 | `date_calendar` | enum `calendar` | `gregorian · julian · hebrew · french_republican · unknown`. Default `gregorian`. |
 | `date_dual_year` | boolean | `1700/01` style dual dating. Display as written. |
 | `date_phrase` | text | Free text for `phrase` / `interpreted`, or an unparsed value. |
-| `date_sort_key` | date (generated, stored) | `make_date(coalesce(year1,1), coalesce(month1,1), coalesce(day1,1))` clamped to valid range; null when `year1` null. Timeline ordering, "age at event". |
+| `date_sort_key` | date (generated, stored) | Null when `year1` null. Otherwise `make_date` of `year1`/`month1`/`day1` with year and month clamped into range and missing month/day → 1, then `day1 - 1` added as days so an out-of-range day rolls forward rather than raising (a raise blocks the insert). One shared immutable function backs every embedding table. Timeline ordering, "age at event". |
 
 Parsing/formatting lives in `packages/shared` (`parseGenealogyDate`,
 `formatGenealogyDate`). Julian and Gregorian are fully parsed; Hebrew and French
@@ -231,7 +231,7 @@ Republican are stored raw with `date_phrase` set, no conversion.
 | --- | --- | --- |
 | `id` | uuid PK | |
 | `name` | text not null | Full place string as entered. |
-| `normalized_name` | text | Lowercased, trimmed, punctuation-collapsed. Used for dedupe and lookup. Unique. |
+| `normalized_name` | text | Lowercased, trimmed, punctuation-collapsed. Used for dedupe and lookup. Unique when not null (rows exist before normalization). |
 | `locality / county / state / country` | text | Optional parsed parts. |
 | `latitude / longitude` | numeric(9,6) | Post-MVP (decision 30). |
 | `geocode_source` | enum `geocode_source` | `nominatim · manual · none`. Post-MVP. |
