@@ -26,21 +26,33 @@ local Supabase projects), root `.env.example`, `pnpm dev` (Supabase + web via
 `scripts/dev.mjs`), `pnpm dev:status` / `dev:stop` / `dev:reset`,
 `supabase/seed.sql` placeholder.
 
-**Issue #3 — GitHub Actions CI pipeline: done, PR open on `chore/ci-pipeline`.**
-`.github/workflows/ci.yml` — two parallel jobs on `pull_request` to `main` and
-`push` to `main`: `verify` (`pnpm install --frozen-lockfile`, `typecheck`,
-`lint`, `format:check`, `test`) and `migrations` (Supabase CLI → `supabase
-start` → `supabase db lint --fail-on error`). `build` is deliberately not in CI
-(SPEC §10 item 3 / WAYFINDER 32 list it out). Verify gate green locally. The two
-"Done when" checks that need a live run — CI passes on a no-op PR, and a
-deliberate lint/type/format error fails it — are verified by Josh after he pushes
-`chore/ci-pipeline` and opens the PR. Merge the PR before starting #4.
+**Issue #3 — GitHub Actions CI pipeline: done, merged to `main` (b18ffa4),
+issue closed.** `.github/workflows/ci.yml` — two parallel jobs on `pull_request`
+to `main` and `push` to `main`: `verify` (`pnpm install --frozen-lockfile`,
+`typecheck`, `lint`, `format:check`, `test`) and `migrations` (Supabase CLI →
+`supabase start` → `supabase db lint --fail-on error`). `build` is deliberately
+not in CI (SPEC §10 item 3 / WAYFINDER 32 list it out).
+
+**Issue #4 — Migration: enums + core genealogy tables: done, PR open on
+`feat/migration-core-genealogy`.** First schema migration
+(`supabase/migrations/20260830162505_core_genealogy.sql`): 6 enums (`sex`,
+`person_visibility`, `name_type`, `partner_role`, `union_type`,
+`child_relation`) and `person`, `person_name`, `family`, `family_child` exactly
+per SPEC §4.2. FK on-delete rules and the `family_child` unique
+`(family_id, person_id)` verified against a live reset. No RLS (#9) and no
+`updated_at` trigger (#7) yet. `person.created_by / updated_by` are plain `uuid`
+— the FK to `account` lands in #7 (see the comment on issue #7). Verify gate +
+`supabase db lint` green.
 
 ## Next action
 
-Phase 1, issue **#4 — Migration: enums + `person`, `person_name`, `family`,
-`family_child`** (`docs/SPEC.md` §10 item 4, §4.1). Blocked until #3 merges.
-After #3 merges, label #4–#10 `ready` (closing #3 unblocks Phase 1).
+Phase 1, issue **#5 — Migration: `event`, `fact`, `place` + embedded date
+columns + generated `date_sort_key` + trigger-populated `event.sort_key`**
+(`docs/SPEC.md` §10 item 5, §4.1, §4.2). Depends on #4 (merge its PR first).
+
+Merge #4's PR (`feat/migration-core-genealogy`) first. When it merges, label
+#5, #6, #7, #8 `ready` (they each depend only on #4). #4 itself is labelled
+`ready`; #3 closing did not auto-cascade the label.
 
 `gh issue list --label ready` is the queue. Take the lowest-numbered `ready`
 issue unless this file says otherwise. When an issue merges, label the issues it
@@ -48,16 +60,17 @@ unblocks `ready`.
 
 ## Log
 
-| Date       | Session did                                                                         | Result                           |
-| ---------- | ----------------------------------------------------------------------------------- | -------------------------------- |
-| 2026-08-30 | Wayfinder planning — all decisions settled                                          | `docs/WAYFINDER.md` (1–33)       |
-| 2026-08-30 | Wrote the build spec                                                                | `docs/SPEC.md`                   |
-| 2026-08-30 | Repo init, MIT license, project meta, resume protocol                               | `chore/scaffold`                 |
-| 2026-08-30 | Spec review + fixes; settled frontend stack and public-access questions             | `docs/WAYFINDER.md` (34–35)      |
-| 2026-08-30 | Created the 46-issue set from `docs/SPEC.md` §10 — milestones, labels, dependencies | GitHub issues #1–#46             |
-| 2026-08-30 | Issue #1 — scaffolded the pnpm monorepo; verify gate green                          | `chore/scaffold-monorepo`        |
-| 2026-08-30 | Issue #2 — local Supabase dev stack, `pnpm dev` / `dev:status`, `.env.example`      | `chore/local-supabase-dev-stack` |
-| 2026-08-30 | Issue #3 — GitHub Actions CI (`verify` + `migrations` jobs); build kept out of CI   | `chore/ci-pipeline`              |
+| Date       | Session did                                                                          | Result                           |
+| ---------- | ------------------------------------------------------------------------------------ | -------------------------------- |
+| 2026-08-30 | Wayfinder planning — all decisions settled                                           | `docs/WAYFINDER.md` (1–33)       |
+| 2026-08-30 | Wrote the build spec                                                                 | `docs/SPEC.md`                   |
+| 2026-08-30 | Repo init, MIT license, project meta, resume protocol                                | `chore/scaffold`                 |
+| 2026-08-30 | Spec review + fixes; settled frontend stack and public-access questions              | `docs/WAYFINDER.md` (34–35)      |
+| 2026-08-30 | Created the 46-issue set from `docs/SPEC.md` §10 — milestones, labels, dependencies  | GitHub issues #1–#46             |
+| 2026-08-30 | Issue #1 — scaffolded the pnpm monorepo; verify gate green                           | `chore/scaffold-monorepo`        |
+| 2026-08-30 | Issue #2 — local Supabase dev stack, `pnpm dev` / `dev:status`, `.env.example`       | `chore/local-supabase-dev-stack` |
+| 2026-08-30 | Issue #3 — GitHub Actions CI (`verify` + `migrations` jobs); build kept out of CI    | `chore/ci-pipeline`              |
+| 2026-08-30 | Issue #4 — first migration: 6 enums + `person`/`person_name`/`family`/`family_child` | `feat/migration-core-genealogy`  |
 
 ## Notes for the next session
 
@@ -66,9 +79,13 @@ unblocks `ready`.
   `Depends on:` issue numbers and a `### Done when` checklist.
 - Issue numbers match `docs/SPEC.md` §10 item numbers for 1–40. Issues 41–46 are
   the Post-MVP bullets.
-- #1 and #2 are closed. #3's PR is on `chore/ci-pipeline`; after it merges,
-  `gh issue close 3` and label #4–#10 `ready`. Later issues get `ready` as their
+- #1, #2, #3 are closed and merged to `main`. #4's PR is on
+  `feat/migration-core-genealogy`. Later issues get `ready` as their
   dependencies close — do this when you finish an issue.
+- Migrations live in `supabase/migrations/`. `supabase db reset` replays them
+  from an empty database; never hand-edit a merged migration, add a new one.
+- `person.created_by` / `updated_by` have no FK to `account` yet — issue #7
+  adds it (a comment on #7 records this).
 - CI (`.github/workflows/ci.yml`): `verify` job = install + typecheck + lint +
   format:check + test; `migrations` job = `supabase start` + `supabase db lint`.
   No `build` step — SPEC §10 item 3 and WAYFINDER 32 list it out; add it later if
