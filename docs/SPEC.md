@@ -240,8 +240,8 @@ Republican are stored raw with `date_phrase` set, no conversion.
 
 ### 4.3 Sources — full GEDCOM model (decision 21)
 
-**`repository`** — `id`, `gedcom_xref`, `name`, `address`, `phone`, `email`,
-`website`, `raw_gedcom`.
+**`repository`** — `id`, `gedcom_xref` (unique when not null), `name`, `address`,
+`phone`, `email`, `website`, `raw_gedcom`.
 
 **`source`** — `id`, `gedcom_xref` (unique when not null), `title`, `author`,
 `publication_info`, `repository_id` (→ repository, nullable), `source_text`

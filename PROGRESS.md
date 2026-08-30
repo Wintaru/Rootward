@@ -45,7 +45,7 @@ per SPEC §4.2. FK on-delete rules and the `family_child` unique
 `supabase db lint` green.
 
 **Issue #5 — Migration: `event`, `fact`, `place` + embedded date columns: done,
-PR open on `feat/migration-events-facts-places`.** Second schema migration
+merged to `main` (3583826), issue closed.** Second schema migration
 (`supabase/migrations/20260830164537_events_facts_places.sql`): 8 enums
 (`genealogy_date_kind`, `calendar`, `event_owner`, `fact_owner`, `event_type`,
 `fact_type`, `fact_visibility`, `geocode_source`), the flat `date_*` column set
@@ -58,15 +58,35 @@ unique. No RLS (#9), no shared `updated_at` trigger (#7). Behavioural tests +
 verify gate + `supabase db lint` green. See `DECISIONS.md` for the flat-columns,
 trigger-recompute, and `fact_visibility` calls.
 
+**Issue #6 — Migration: `source`, `repository`, `citation`, `media`,
+`media_link`, `note`: done, PR open on `feat/migration-sources-media-notes`.**
+Third schema migration
+(`supabase/migrations/20260830170126_sources_media_notes.sql`): 3 polymorphic
+owner enums (`citation_owner`, `media_owner`, `note_owner`) and the tables
+`repository`, `source`, `citation`, `media`, `media_link`, `note` per SPEC
+§4.3–§4.5. The flat `date_*` set from §4.1 is embedded on `citation` and `media`,
+copied verbatim from #5's comment block — `date_sort_key` calls the same shared
+`genealogy_date_sort_key()`. `citation.quality` has a 0–3 CHECK.
+`media_link.is_primary` is `not null default false` with a partial unique index
+enforcing one primary per `(owner_type, owner_id)`. `note.text` is `not null`.
+`gedcom_xref` partial unique on `repository`/`source`/`media`/`note`. FK rules:
+`citation→source` and `media_link→media` cascade, `source→repository` sets null,
+polymorphic `owner_id` columns carry no FK (§4.9). No RLS (#9), no shared
+`updated_at` trigger and no `account` FK for `media.uploaded_by` (#7). Verify
+gate + `supabase db lint` green; behavioural checks (double-primary,
+quality-range, three cascade paths, `note.text` not null) verified locally — see
+`DECISIONS.md`. Filename timestamps are UTC (`date -u`) so they sort after #4/#5.
+
 ## Next action
 
-Phase 1, issue **#6 — Migration: `source`, `repository`, `citation`, `media`,
-`media_link`, `note`** (`docs/SPEC.md` §4.3–§4.5, §10 item 6). Depends on #4
-(done). Reuse the canonical `date_*` column list from the comment block in
-`20260830164537_events_facts_places.sql` for `citation` and `media`.
+Phase 1, issue **#7 — Migration: `account`, `tree_settings`, `audit_log` +
+`updated_at` and audit triggers** (`docs/SPEC.md` §4.6, §10 item 7). Already
+`ready`. #7 also adds the deferred `account` FK for `created_by` / `updated_by`
+on `person`/`event`/`fact` and `uploaded_by` on `media`, plus the shared
+`updated_at` bump trigger across the #4–#8 tables (see the comment on issue #7).
 
-Merge #5's PR (`feat/migration-events-facts-places`) first. #6, #7, #8 are
-already labelled `ready` (they depend only on #4).
+Merge #6's PR (`feat/migration-sources-media-notes`) first. #7 and #8 are
+`ready`; #9 (RLS + the pgTAP/SQL test harness) unblocks once #4–#8 are all in.
 
 `gh issue list --label ready` is the queue. Take the lowest-numbered `ready`
 issue unless this file says otherwise. When an issue merges, label the issues it
@@ -86,6 +106,7 @@ unblocks `ready`.
 | 2026-08-30 | Issue #3 — GitHub Actions CI (`verify` + `migrations` jobs); build kept out of CI    | `chore/ci-pipeline`                  |
 | 2026-08-30 | Issue #4 — first migration: 6 enums + `person`/`person_name`/`family`/`family_child` | `feat/migration-core-genealogy`      |
 | 2026-08-30 | Issue #5 — migration: `event`/`fact`/`place` + flat `date_*` set + sort-key trigger  | `feat/migration-events-facts-places` |
+| 2026-08-30 | Issue #6 — migration: `source`/`repository`/`citation`/`media`/`media_link`/`note`   | `feat/migration-sources-media-notes` |
 
 ## Notes for the next session
 
@@ -94,13 +115,15 @@ unblocks `ready`.
   `Depends on:` issue numbers and a `### Done when` checklist.
 - Issue numbers match `docs/SPEC.md` §10 item numbers for 1–40. Issues 41–46 are
   the Post-MVP bullets.
-- #1, #2, #3 are closed and merged to `main`. #4's PR is on
-  `feat/migration-core-genealogy`. Later issues get `ready` as their
+- #1–#5 are closed and merged to `main`. #6's PR is on
+  `feat/migration-sources-media-notes`. Later issues get `ready` as their
   dependencies close — do this when you finish an issue.
 - Migrations live in `supabase/migrations/`. `supabase db reset` replays them
   from an empty database; never hand-edit a merged migration, add a new one.
-- `person.created_by` / `updated_by` have no FK to `account` yet — issue #7
-  adds it (a comment on #7 records this).
+  Filename timestamps must be UTC (`date -u +%Y%m%d%H%M%S`) or a new migration
+  can sort before an earlier one and break the replay.
+- `person`/`event`/`fact`.`created_by` / `updated_by` and `media.uploaded_by`
+  have no FK to `account` yet — issue #7 adds them (a comment on #7 records this).
 - CI (`.github/workflows/ci.yml`): `verify` job = install + typecheck + lint +
   format:check + test; `migrations` job = `supabase start` + `supabase db lint`.
   No `build` step — SPEC §10 item 3 and WAYFINDER 32 list it out; add it later if
