@@ -21,8 +21,8 @@ to keep context small. There is no parallel work. To pick up:
    - **If issues exist but none is `ready`**, follow `docs/SPEC.md` §10 order and
      pick the next unstarted item.
 4. Do that one issue. Do not pull scope forward from later issues.
-5. When done: update `PROGRESS.md`, stage the work, hand Josh the commit message
-   and PR title/body, then stop.
+5. When done: update `PROGRESS.md`, stage the work, hand Josh the commit message,
+   then stop.
 
 If a §11 open question blocks the issue you picked, stop and ask Josh — do not
 guess past it.
@@ -44,7 +44,8 @@ the issues and fix `PROGRESS.md`.
 - **Branch before work.** `git switch -c <type>/<slug> origin/main` (fetch first).
   Types: `feat`, `fix`, `chore`, `refactor`, `docs`, `test`.
 - **Stage, do not commit.** Josh runs every commit and push himself. Hand him the
-  commit message (copyable block) and a PR title + body every time.
+  commit message as a copyable block. Do not draft the PR title or body — Josh
+  writes those (`.trillian-repo.json` → `git.prMessages: false`).
 - **One reviewed body of work per PR.** Run the verify gate
   (`pnpm typecheck && pnpm lint && pnpm format:check && pnpm build && pnpm test`),
   then a code review, before handing over the message.
