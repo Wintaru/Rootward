@@ -78,7 +78,7 @@ quality-range, three cascade paths, `note.text` not null) verified locally — s
 `DECISIONS.md`. Filename timestamps are UTC (`date -u`) so they sort after #4/#5.
 
 **Issue #7 — Migration: `account`, `tree_settings`, `audit_log` + `updated_at`
-and audit triggers: done, PR open on `feat/migration-account-settings-audit`.**
+and audit triggers: done, merged to `main` (baee68c), issue closed.**
 Fourth schema migration
 (`supabase/migrations/20260830171252_accounts_settings_audit.sql`): 4 enums
 (`account_role`, `account_status`, `audit_action`, `backup_frequency`), the
@@ -96,17 +96,29 @@ when no `account` row matches `auth.uid()`). No RLS (#9). Behavioural checks
 enforcement, null-actor path) + verify gate + `supabase db lint` green — see
 `DECISIONS.md`.
 
+**Issue #8 — Migration: `invitation`, `access_request`, `claim_attempt`,
+`notification`, `notification_read`, `import_job`, `export_job`: done, PR open on
+`feat/migration-onboarding-jobs`.** Fifth schema migration
+(`supabase/migrations/20260830172736_onboarding_and_jobs.sql`): 7 enums
+(`invitation_status`, `request_status`, `notification_type`, `import_mode`,
+`import_status`, `export_type`, and `export_status` — added because none of the
+scoped six fit `export_job.status`), and the seven tables per SPEC §4.7–§4.8.
+No `set_updated_at` and no `write_audit_log` trigger on any of them: SPEC §4's
+concurrency-token list is the 15 editable tables and excludes these, and they
+are high-churn operational rows whose `status` / `resolved_by` / `accepted_by`
+columns already record state changes (see `DECISIONS.md`). `invitation.person_id`
+is `not null` (cascade on person delete); `account`-referencing FKs all
+`on delete set null`, `account_id` / `notification_read` FKs `on delete cascade`.
+Moderation-queue + rolling-24h-claim-count + unresolved-notification indexes.
+Behavioural checks (every FK rule, composite-PK reject, enum validation, column
+defaults) + verify gate + `supabase db lint` green.
+
 ## Next action
 
-Phase 1, issue **#8 — Migration: `invitation`, `access_request`,
-`claim_attempt`, `notification`, `notification_read`, `import_job`, `export_job`**
-(`docs/SPEC.md` §4.7–§4.8, §10 item 8). Already `ready`. #8 must also apply the
-shared `set_updated_at` trigger (from #7) to any of its tables that carry
-`updated_at`, for coverage consistent with §4.
-
-Merge #7's PR (`feat/migration-account-settings-audit`) first. #9 (RLS + the
-pgTAP/SQL test harness) unblocks once #7 and #8 are both merged — then label it
-`ready`.
+Phase 1, issue **#9 — RLS: helper functions + policies for every table +
+allow/deny tests in CI** (`docs/SPEC.md` §5, §10 item 9). Depends on #7 (merged)
+and #8. Merge #8's PR (`feat/migration-onboarding-jobs`) first, then label #9
+`ready` and take it. #9 also owns the pgTAP/SQL test harness that #4–#8 deferred.
 
 `gh issue list --label ready` is the queue. Take the lowest-numbered `ready`
 issue unless this file says otherwise. When an issue merges, label the issues it
@@ -114,20 +126,21 @@ unblocks `ready`.
 
 ## Log
 
-| Date       | Session did                                                                                 | Result                                  |
-| ---------- | ------------------------------------------------------------------------------------------- | --------------------------------------- |
-| 2026-08-30 | Wayfinder planning — all decisions settled                                                  | `docs/WAYFINDER.md` (1–33)              |
-| 2026-08-30 | Wrote the build spec                                                                        | `docs/SPEC.md`                          |
-| 2026-08-30 | Repo init, MIT license, project meta, resume protocol                                       | `chore/scaffold`                        |
-| 2026-08-30 | Spec review + fixes; settled frontend stack and public-access questions                     | `docs/WAYFINDER.md` (34–35)             |
-| 2026-08-30 | Created the 46-issue set from `docs/SPEC.md` §10 — milestones, labels, dependencies         | GitHub issues #1–#46                    |
-| 2026-08-30 | Issue #1 — scaffolded the pnpm monorepo; verify gate green                                  | `chore/scaffold-monorepo`               |
-| 2026-08-30 | Issue #2 — local Supabase dev stack, `pnpm dev` / `dev:status`, `.env.example`              | `chore/local-supabase-dev-stack`        |
-| 2026-08-30 | Issue #3 — GitHub Actions CI (`verify` + `migrations` jobs); build kept out of CI           | `chore/ci-pipeline`                     |
-| 2026-08-30 | Issue #4 — first migration: 6 enums + `person`/`person_name`/`family`/`family_child`        | `feat/migration-core-genealogy`         |
-| 2026-08-30 | Issue #5 — migration: `event`/`fact`/`place` + flat `date_*` set + sort-key trigger         | `feat/migration-events-facts-places`    |
-| 2026-08-30 | Issue #6 — migration: `source`/`repository`/`citation`/`media`/`media_link`/`note`          | `feat/migration-sources-media-notes`    |
-| 2026-08-30 | Issue #7 — migration: `account`/`tree_settings`/`audit_log` + `updated_at` + audit triggers | `feat/migration-account-settings-audit` |
+| Date       | Session did                                                                                                                      | Result                                  |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| 2026-08-30 | Wayfinder planning — all decisions settled                                                                                       | `docs/WAYFINDER.md` (1–33)              |
+| 2026-08-30 | Wrote the build spec                                                                                                             | `docs/SPEC.md`                          |
+| 2026-08-30 | Repo init, MIT license, project meta, resume protocol                                                                            | `chore/scaffold`                        |
+| 2026-08-30 | Spec review + fixes; settled frontend stack and public-access questions                                                          | `docs/WAYFINDER.md` (34–35)             |
+| 2026-08-30 | Created the 46-issue set from `docs/SPEC.md` §10 — milestones, labels, dependencies                                              | GitHub issues #1–#46                    |
+| 2026-08-30 | Issue #1 — scaffolded the pnpm monorepo; verify gate green                                                                       | `chore/scaffold-monorepo`               |
+| 2026-08-30 | Issue #2 — local Supabase dev stack, `pnpm dev` / `dev:status`, `.env.example`                                                   | `chore/local-supabase-dev-stack`        |
+| 2026-08-30 | Issue #3 — GitHub Actions CI (`verify` + `migrations` jobs); build kept out of CI                                                | `chore/ci-pipeline`                     |
+| 2026-08-30 | Issue #4 — first migration: 6 enums + `person`/`person_name`/`family`/`family_child`                                             | `feat/migration-core-genealogy`         |
+| 2026-08-30 | Issue #5 — migration: `event`/`fact`/`place` + flat `date_*` set + sort-key trigger                                              | `feat/migration-events-facts-places`    |
+| 2026-08-30 | Issue #6 — migration: `source`/`repository`/`citation`/`media`/`media_link`/`note`                                               | `feat/migration-sources-media-notes`    |
+| 2026-08-30 | Issue #7 — migration: `account`/`tree_settings`/`audit_log` + `updated_at` + audit triggers                                      | `feat/migration-account-settings-audit` |
+| 2026-08-30 | Issue #8 — migration: `invitation`/`access_request`/`claim_attempt`/`notification`/`notification_read`/`import_job`/`export_job` | `feat/migration-onboarding-jobs`        |
 
 ## Notes for the next session
 
@@ -136,8 +149,8 @@ unblocks `ready`.
   `Depends on:` issue numbers and a `### Done when` checklist.
 - Issue numbers match `docs/SPEC.md` §10 item numbers for 1–40. Issues 41–46 are
   the Post-MVP bullets.
-- #1–#6 are closed and merged to `main`. #7's PR is on
-  `feat/migration-account-settings-audit`. Later issues get `ready` as their
+- #1–#7 are closed and merged to `main`. #8's PR is on
+  `feat/migration-onboarding-jobs`. Later issues get `ready` as their
   dependencies close — do this when you finish an issue.
 - Migrations live in `supabase/migrations/`. `supabase db reset` replays them
   from an empty database; never hand-edit a merged migration, add a new one.
@@ -146,12 +159,14 @@ unblocks `ready`.
 - `person`/`event`/`fact`.`created_by` / `updated_by` and `media.uploaded_by`
   now have an `on delete set null` FK to `account` — added in #7.
 - The shared `set_updated_at` trigger (decision 26 concurrency token) exists as
-  of #7 on every #4–#7 table with an `updated_at` column. #8 must add its own
-  `create trigger set_updated_at ...` lines for any table it creates that
-  carries the column.
+  of #7 on every #4–#7 table with an `updated_at` column. #8 added no rows to
+  this list: none of its seven tables carries `updated_at` (SPEC §4's editable
+  list stops at `tree_settings` — the onboarding/job tables run status ladders,
+  not the edit-view version check).
 - `write_audit_log` (#7) is a `SECURITY DEFINER` trigger on the 14 genealogy
-  tables + `account`. #8's job/notification tables are deliberately not audited
-  — decide per table in #8 if that changes.
+  tables + `account`. #8's onboarding/job tables are deliberately not audited
+  (high-churn operational rows; `status` / `resolved_by` / `accepted_by` already
+  record state changes) — see `DECISIONS.md`.
 - CI (`.github/workflows/ci.yml`): `verify` job = install + typecheck + lint +
   format:check + test; `migrations` job = `supabase start` + `supabase db lint`.
   No `build` step — SPEC §10 item 3 and WAYFINDER 32 list it out; add it later if
