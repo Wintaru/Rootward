@@ -6,12 +6,15 @@
   "description": "Open-source, self-hostable family-tree website.",
   "license": "MIT",
   "engines": {
-    "node": ">=22",
+    "node": ">=22.9.0",
     "pnpm": ">=11"
   },
   "packageManager": "pnpm@11.20.0",
   "scripts": {
-    "dev": "pnpm --filter web dev",
+    "dev": "node --env-file-if-exists=.env scripts/dev.mjs",
+    "dev:status": "node --env-file-if-exists=.env scripts/dev-status.mjs",
+    "dev:stop": "supabase stop",
+    "dev:reset": "supabase db reset",
     "build": "pnpm -r --if-present build",
     "typecheck": "pnpm -r --if-present typecheck",
     "lint": "pnpm -r --if-present lint",

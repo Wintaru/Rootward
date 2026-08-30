@@ -1,0 +1,2 @@
+-- Local seed data, loaded by `supabase db reset` (see [db.seed] in config.toml).
+-- Real seed content — demo tree + accounts — lands in issue #38.
