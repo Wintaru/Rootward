@@ -1,0 +1,16 @@
+# Hand- and skill-maintained prose (WAYFINDER via the wayfinder skill only)
+docs/
+CLAUDE.md
+
+# Generated / vendored — not ours to format
+pnpm-lock.yaml
+**/dist/
+**/.next/
+**/coverage/
+apps/web/next-env.d.ts
+apps/web/components/ui/
+apps/web/public/
+
+# `apps/web/AGENTS.md` is rewritten by `next dev`; CLAUDE.md just imports it
+apps/web/AGENTS.md
+apps/web/CLAUDE.md
