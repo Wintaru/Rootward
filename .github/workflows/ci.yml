@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# Least privilege: CI only reads the checkout.
+permissions:
+  contents: read
+
+# One run per ref. A new push to a PR cancels the superseded run; pushes to
+# main always run to completion so every main commit keeps a real status.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  verify:
+    name: typecheck / lint / format / test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Install Node
+        uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Format check
+        run: pnpm format:check
+
+      - name: Test
+        run: pnpm test
+
+  migrations:
+    name: migration check
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: 2.116.0
+
+      # `supabase start` replays every migration in supabase/migrations in order
+      # from an empty database, so a migration that no longer applies — or that
+      # breaks a later one — fails here.
+      - name: Start local stack
+        run: supabase start
+
+      # `db lint` runs plpgsql_check over the resulting schema. --fail-on error
+      # is what gives the step teeth; warnings still print.
+      - name: Lint schema
+        run: supabase db lint --local --level warning --fail-on error
+
+      - name: Stop
+        if: always()
+        run: supabase stop
