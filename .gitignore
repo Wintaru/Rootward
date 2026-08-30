@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+.pnp.*
+.yarn/*
+
+# Build output
+.next/
+out/
+dist/
+build/
+.vercel/
+*.tsbuildinfo
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Supabase
+supabase/.branches/
+supabase/.temp/
+supabase/.env
+
+# Editor / OS
+.DS_Store
+.idea/
+*.swp
+.vscode/*
+!.vscode/extensions.json
+
+# Logs / coverage
+*.log
+npm-debug.log*
+pnpm-debug.log*
+coverage/
+
+# Trillian (agent working files, per-repo config — never committed)
+.trillian-repo.json
+DECISIONS.md
+*-HANDOFF.md
+*-CHECKLIST.md
