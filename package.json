@@ -15,6 +15,7 @@
     "dev:status": "node --env-file-if-exists=.env scripts/dev-status.mjs",
     "dev:stop": "supabase stop",
     "dev:reset": "supabase db reset",
+    "gen:types": "supabase gen types typescript --local --schema public > apps/web/lib/db/database.types.ts",
     "build": "pnpm -r --if-present build",
     "typecheck": "pnpm -r --if-present typecheck",
     "lint": "pnpm -r --if-present lint",

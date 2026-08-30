@@ -76,6 +76,15 @@ jobs:
       - name: Run database tests
         run: supabase test db
 
+      # The committed apps/web/lib/db/database.types.ts is derived from the
+      # migrations. Regenerate it against the fresh schema and fail if it drifts
+      # (issue #10) — the typed data layer must match what the database returns.
+      - name: Check generated types are current
+        run: |
+          supabase gen types typescript --local --schema public \
+            > apps/web/lib/db/database.types.ts
+          git diff --exit-code apps/web/lib/db/database.types.ts
+
       - name: Stop
         if: always()
         run: supabase stop

@@ -114,7 +114,7 @@ Behavioural checks (every FK rule, composite-PK reject, enum validation, column
 defaults) + verify gate + `supabase db lint` green.
 
 **Issue #9 — RLS: helper functions + per-table policies + allow/deny tests:
-done, PR open on `feat/rls-policies`.** Sixth migration
+done, merged to `main` (18621ae), issue closed.** Sixth migration
 (`supabase/migrations/20260830174012_rls_policies.sql`): 12 helper functions
 (`auth_account`, `is_approved`, `is_moderator`, `is_admin`, `person_is_living`,
 `person_is_visible`, `family_is_visible`, `event_is_visible`, `fact_is_visible`,
@@ -135,11 +135,34 @@ SPEC in the same PR — see `DECISIONS.md`: `is_moderator`/`is_admin` also requi
 `media` SELECT = any approved member. Verify gate, `supabase db lint`, and
 `supabase test db` (124 tests) green on a clean `supabase db reset`.
 
+**Issue #10 — Generated Supabase types + `lib/db` typed query layer +
+`getNeighborhood`: done, PR open on `feat/db-typed-query-layer`.** Seventh
+migration (`supabase/migrations/20260830191012_get_neighborhood.sql`): the
+`get_neighborhood(focus, up, down)` SQL function — one `jsonb` payload with the
+focus, ancestors to `up`, descendants to `down`, the focus person's siblings and
+partners (decision 28), plus the `family` rows that link them. `SECURITY
+INVOKER`, so RLS on person / family / family_child / event decides what the
+caller sees; recursion bounded by the `gen` guard (`up` / `down` clamped 0..10),
+`union` in both recursive terms so pedigree collapse expands each node once.
+`pnpm gen:types` writes `apps/web/lib/db/database.types.ts` (Prettier-ignored,
+drift-checked in the CI `migrations` job). Typed layer: `apps/web/lib/db`
+(`getNeighborhood` wrapper + boundary parser + `Neighborhood*` types) and
+`apps/web/lib/supabase` (browser / server / service-role clients;
+`@supabase/ssr`, `@supabase/supabase-js`, `server-only` added). New pgTAP file
+`supabase/tests/get_neighborhood_test.sql` (18 assertions: relative set, depth
+clamp, per-person generation, family edges, exact jsonb key set, RLS deny).
+Verify gate + `supabase db lint` + `supabase test db` (142 tests) + a clean
+seven-migration replay all green. Bookkeeping: #9 was already merged (PROGRESS
+was stale) — closed it; labelled #11 `ready`. Code review: one correctness fix
+applied (`up = 0` no longer orphans siblings) + four should-fixes — see
+`DECISIONS.md`.
+
 ## Next action
 
-Phase 1, issue **#10 — Generated Supabase types + `lib/db` typed query layer +
-`getNeighborhood`** (`docs/SPEC.md` §8.4, §10 item 10). Depends on #9 — merge
-`feat/rls-policies` first, then label #10 `ready` and take it.
+Phase 2, issue **#11 — `packages/shared`: `parseGenealogyDate` /
+`formatGenealogyDate`** (`docs/SPEC.md` §4.1, §10 item 11). Depends only on #1.
+Merge `feat/db-typed-query-layer` first, then take #11. Pure TS, no Deno/Node
+built-ins (decision 8).
 
 `gh issue list --label ready` is the queue. Take the lowest-numbered `ready`
 issue unless this file says otherwise. When an issue merges, label the issues it
@@ -147,22 +170,23 @@ unblocks `ready`.
 
 ## Log
 
-| Date       | Session did                                                                                                                      | Result                                  |
-| ---------- | -------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
-| 2026-08-30 | Wayfinder planning — all decisions settled                                                                                       | `docs/WAYFINDER.md` (1–33)              |
-| 2026-08-30 | Wrote the build spec                                                                                                             | `docs/SPEC.md`                          |
-| 2026-08-30 | Repo init, MIT license, project meta, resume protocol                                                                            | `chore/scaffold`                        |
-| 2026-08-30 | Spec review + fixes; settled frontend stack and public-access questions                                                          | `docs/WAYFINDER.md` (34–35)             |
-| 2026-08-30 | Created the 46-issue set from `docs/SPEC.md` §10 — milestones, labels, dependencies                                              | GitHub issues #1–#46                    |
-| 2026-08-30 | Issue #1 — scaffolded the pnpm monorepo; verify gate green                                                                       | `chore/scaffold-monorepo`               |
-| 2026-08-30 | Issue #2 — local Supabase dev stack, `pnpm dev` / `dev:status`, `.env.example`                                                   | `chore/local-supabase-dev-stack`        |
-| 2026-08-30 | Issue #3 — GitHub Actions CI (`verify` + `migrations` jobs); build kept out of CI                                                | `chore/ci-pipeline`                     |
-| 2026-08-30 | Issue #4 — first migration: 6 enums + `person`/`person_name`/`family`/`family_child`                                             | `feat/migration-core-genealogy`         |
-| 2026-08-30 | Issue #5 — migration: `event`/`fact`/`place` + flat `date_*` set + sort-key trigger                                              | `feat/migration-events-facts-places`    |
-| 2026-08-30 | Issue #6 — migration: `source`/`repository`/`citation`/`media`/`media_link`/`note`                                               | `feat/migration-sources-media-notes`    |
-| 2026-08-30 | Issue #7 — migration: `account`/`tree_settings`/`audit_log` + `updated_at` + audit triggers                                      | `feat/migration-account-settings-audit` |
-| 2026-08-30 | Issue #8 — migration: `invitation`/`access_request`/`claim_attempt`/`notification`/`notification_read`/`import_job`/`export_job` | `feat/migration-onboarding-jobs`        |
-| 2026-08-30 | Issue #9 — RLS: 12 `security definer` helpers, policies on all 23 tables, pgTAP allow/deny harness, `supabase test db` in CI     | `feat/rls-policies`                     |
+| Date       | Session did                                                                                                                             | Result                                  |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| 2026-08-30 | Wayfinder planning — all decisions settled                                                                                              | `docs/WAYFINDER.md` (1–33)              |
+| 2026-08-30 | Wrote the build spec                                                                                                                    | `docs/SPEC.md`                          |
+| 2026-08-30 | Repo init, MIT license, project meta, resume protocol                                                                                   | `chore/scaffold`                        |
+| 2026-08-30 | Spec review + fixes; settled frontend stack and public-access questions                                                                 | `docs/WAYFINDER.md` (34–35)             |
+| 2026-08-30 | Created the 46-issue set from `docs/SPEC.md` §10 — milestones, labels, dependencies                                                     | GitHub issues #1–#46                    |
+| 2026-08-30 | Issue #1 — scaffolded the pnpm monorepo; verify gate green                                                                              | `chore/scaffold-monorepo`               |
+| 2026-08-30 | Issue #2 — local Supabase dev stack, `pnpm dev` / `dev:status`, `.env.example`                                                          | `chore/local-supabase-dev-stack`        |
+| 2026-08-30 | Issue #3 — GitHub Actions CI (`verify` + `migrations` jobs); build kept out of CI                                                       | `chore/ci-pipeline`                     |
+| 2026-08-30 | Issue #4 — first migration: 6 enums + `person`/`person_name`/`family`/`family_child`                                                    | `feat/migration-core-genealogy`         |
+| 2026-08-30 | Issue #5 — migration: `event`/`fact`/`place` + flat `date_*` set + sort-key trigger                                                     | `feat/migration-events-facts-places`    |
+| 2026-08-30 | Issue #6 — migration: `source`/`repository`/`citation`/`media`/`media_link`/`note`                                                      | `feat/migration-sources-media-notes`    |
+| 2026-08-30 | Issue #7 — migration: `account`/`tree_settings`/`audit_log` + `updated_at` + audit triggers                                             | `feat/migration-account-settings-audit` |
+| 2026-08-30 | Issue #8 — migration: `invitation`/`access_request`/`claim_attempt`/`notification`/`notification_read`/`import_job`/`export_job`        | `feat/migration-onboarding-jobs`        |
+| 2026-08-30 | Issue #9 — RLS: 12 `security definer` helpers, policies on all 23 tables, pgTAP allow/deny harness, `supabase test db` in CI            | `feat/rls-policies`                     |
+| 2026-08-30 | Issue #10 — `get_neighborhood` SQL function + `pnpm gen:types` + `lib/db` typed layer + `lib/supabase` clients + pgTAP + CI drift check | `feat/db-typed-query-layer`             |
 
 ## Notes for the next session
 
@@ -171,9 +195,10 @@ unblocks `ready`.
   `Depends on:` issue numbers and a `### Done when` checklist.
 - Issue numbers match `docs/SPEC.md` §10 item numbers for 1–40. Issues 41–46 are
   the Post-MVP bullets.
-- #1–#8 are closed and merged to `main`; #9's PR is on `feat/rls-policies`.
+- #1–#9 are closed and merged to `main`; #10's PR is on `feat/db-typed-query-layer`.
   Later issues get `ready` as their dependencies close — do this when you finish
   an issue.
+- Phase 1 is complete once #10 merges. #11 (`ready`) starts Phase 2.
 - Migrations live in `supabase/migrations/`. `supabase db reset` replays them
   from an empty database; never hand-edit a merged migration, add a new one.
   Filename timestamps must be UTC (`date -u +%Y%m%d%H%M%S`) or a new migration
@@ -200,9 +225,20 @@ unblocks `ready`.
   genealogy table skips `set_updated_at` / `write_audit_log` / RLS.
 - CI (`.github/workflows/ci.yml`): `verify` job = install + typecheck + lint +
   format:check + test; `migrations` job = `supabase start`, `supabase db lint`,
-  `supabase test db` (pgTAP). No `build` step — SPEC §10 item 3 and WAYFINDER 32
-  list it out; add it later if wanted. Runs on PRs to `main` and pushes to
-  `main`.
+  `supabase test db` (pgTAP), then a generated-types drift check (regenerate
+  `apps/web/lib/db/database.types.ts`, `git diff --exit-code`). No `build` step —
+  SPEC §10 item 3 and WAYFINDER 32 list it out; add it later if wanted. Runs on
+  PRs to `main` and pushes to `main`.
+- The data layer (#10): every Supabase query goes through `apps/web/lib/db` — no
+  component builds its own (decision 10). `pnpm gen:types` regenerates the typed
+  schema after any migration (run it, commit the result). `apps/web/lib/supabase`
+  has three clients: `client` (browser), `server` (RSC / actions / route
+  handlers), `service` (service-role, `server-only`, bypasses RLS — for the
+  onboarding-match RPC and GEDCOM jobs). `getNeighborhood(client, focusId, up,
+down)` calls the `get_neighborhood` SQL function. A returned `family` row may
+  name a `partner*_id` not in `persons` (a descendant's spouse) — #24's
+  expand-in-place resolves those; it must refuse to resolve a non-visible id
+  (see the DECISIONS follow-up note).
 - `.trillian-repo.json` (gitignored) carries verify commands and conventions.
   The scripts it names now exist (issue #1): `pnpm typecheck / lint / format /
 format:check / build / test` all run from the repo root.
