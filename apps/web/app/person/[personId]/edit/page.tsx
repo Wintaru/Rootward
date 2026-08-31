@@ -1,12 +1,24 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
+import type { ReactNode } from "react";
 
 import { isActiveModerator, isApproved } from "@/lib/auth/access";
 import { getCurrentAccount } from "@/lib/auth/current-account";
-import { getPersonEditShell } from "@/lib/db";
-import { resolveEditSection } from "@/lib/edit/sections";
+import type { Database } from "@/lib/db/database.types";
+import {
+  getPersonEditShell,
+  getPersonNames,
+  getPersonReferenceNumbers,
+} from "@/lib/db";
+import type { PersonEditShellData } from "@/lib/db/person";
+import { resolveEditSection, type EditSectionSlug } from "@/lib/edit/sections";
+import type { NameGenderFields } from "@/lib/edit/person-fields";
 import { buildEditShellView } from "@/lib/edit/view-model";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { AdditionalNamesSection } from "@/components/person/edit/AdditionalNamesSection";
+import { NameGenderSection } from "@/components/person/edit/NameGenderSection";
+import { ReferenceNumbersSection } from "@/components/person/edit/ReferenceNumbersSection";
 import { EditShell } from "@/components/person/EditShell";
 
 import { EditForbidden } from "./EditForbidden";
@@ -17,8 +29,9 @@ export const metadata: Metadata = {
 
 /**
  * `/person/[personId]/edit` — the full-screen edit shell (SPEC §8.3, §10 item
- * 26). Moderator+ only; this issue builds the shell (layout, section nav,
- * relatives strip, Done) — the sections themselves are #27–#32.
+ * 26) plus, as of #27, the Name & Gender, Additional Names, and Reference
+ * Numbers sections. Moderator+ only; the remaining sections (#28–#32) still
+ * fall back to the shell's placeholder.
  *
  * Gate mirrors `/person/[personId]`'s (unauthenticated → `/login`, not
  * approved → `/onboarding`) plus a moderator check on top, matching
@@ -26,6 +39,13 @@ export const metadata: Metadata = {
  * `getPersonEditShell` reads under the caller's identity — a hidden or absent
  * person both come back `null` → `notFound()` (never leak which), same
  * contract as the profile route.
+ *
+ * Only the active section's own data is fetched (fetch only what you need) —
+ * `?section=additional-names` never pays for the Reference Numbers columns,
+ * and Name & Gender pays for no query at all beyond the shell's own: its
+ * fields are exactly the shell's person-core columns plus `updated_at`, which
+ * `getPersonEditShell` already fetched, so `loadSectionContent` builds that
+ * section's data straight from `data` rather than re-querying `person`.
  */
 export default async function EditPersonPage({
   params,
@@ -51,6 +71,57 @@ export default async function EditPersonPage({
   }
 
   const section = resolveEditSection((await searchParams).section);
+  const sectionContent = await loadSectionContent(
+    supabase,
+    personId,
+    data,
+    section,
+  );
 
-  return <EditShell view={buildEditShellView(data, section)} />;
+  return (
+    <EditShell
+      view={buildEditShellView(data, section)}
+      sectionContent={sectionContent}
+    />
+  );
+}
+
+async function loadSectionContent(
+  supabase: SupabaseClient<Database>,
+  personId: string,
+  shell: PersonEditShellData,
+  section: EditSectionSlug,
+): Promise<ReactNode> {
+  switch (section) {
+    case "name-gender": {
+      const fields: NameGenderFields = {
+        id: shell.person.id,
+        updatedAt: shell.personUpdatedAt,
+        givenName: shell.person.givenName,
+        surname: shell.person.surname,
+        namePrefix: shell.person.namePrefix,
+        nameSuffix: shell.person.nameSuffix,
+        nickname: shell.person.nickname,
+        sex: shell.person.sex,
+      };
+      return <NameGenderSection personId={personId} loaded={fields} />;
+    }
+
+    case "reference-numbers": {
+      const fields = await getPersonReferenceNumbers(supabase, personId);
+      return fields === null ? undefined : (
+        <ReferenceNumbersSection personId={personId} loaded={fields} />
+      );
+    }
+
+    case "additional-names": {
+      const names = await getPersonNames(supabase, personId);
+      return <AdditionalNamesSection personId={personId} loaded={names} />;
+    }
+
+    default:
+      // Events, Facts, Media, Sources, Notes — not built yet (#28–#31); the
+      // shell's own placeholder covers these.
+      return undefined;
+  }
 }

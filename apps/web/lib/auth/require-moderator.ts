@@ -57,16 +57,53 @@ async function loadSessionAccount(context: string): Promise<SessionAccount> {
   return { kind: "authenticated", userId: user.id, account };
 }
 
-/** Resolve whether the current request may use `/import`. */
-export async function resolveImportAccess(): Promise<ImportAccess> {
-  const session = await loadSessionAccount("resolveImportAccess");
+type ModeratorGate =
+  | { readonly kind: "unauthenticated" }
+  | { readonly kind: "forbidden" }
+  | {
+      readonly kind: "allowed";
+      readonly userId: string;
+      readonly account: AccountAccess | null;
+    };
+
+/** The moderator+ check shared by every route/action below — load the
+ * session, then apply the same `isActiveModerator` rule. Each caller below
+ * projects the `allowed` case onto its own narrower result shape (most need
+ * only `userId`; `resolveModerationAccess` also derives `isAdmin` from
+ * `account`). */
+async function resolveModeratorGate(context: string): Promise<ModeratorGate> {
+  const session = await loadSessionAccount(context);
   if (session.kind === "unauthenticated") {
     return { kind: "unauthenticated" };
   }
   if (!isActiveModerator(session.account)) {
     return { kind: "forbidden" };
   }
-  return { kind: "allowed", userId: session.userId };
+  return { kind: "allowed", userId: session.userId, account: session.account };
+}
+
+/** Resolve whether the current request may use `/import`. */
+export async function resolveImportAccess(): Promise<ImportAccess> {
+  const gate = await resolveModeratorGate("resolveImportAccess");
+  return gate.kind === "allowed"
+    ? { kind: "allowed", userId: gate.userId }
+    : gate;
+}
+
+/** Outcome of resolving access to the edit-view save actions
+ * (`app/person/[personId]/edit/actions.ts`) — the same moderator+ gate the
+ * route itself uses (`isActiveModerator`, documented there as covering "the
+ * edit view"), re-checked server-side rather than trusted from the client. */
+export type EditAccess =
+  | { readonly kind: "unauthenticated" }
+  | { readonly kind: "forbidden" }
+  | { readonly kind: "allowed"; readonly userId: string };
+
+export async function resolveEditAccess(): Promise<EditAccess> {
+  const gate = await resolveModeratorGate("resolveEditAccess");
+  return gate.kind === "allowed"
+    ? { kind: "allowed", userId: gate.userId }
+    : gate;
 }
 
 /** Outcome of resolving `/moderation` access. `isAdmin` gates the role field on
@@ -82,16 +119,12 @@ export type ModerationAccess =
 
 /** Resolve whether the current request may use `/moderation`. */
 export async function resolveModerationAccess(): Promise<ModerationAccess> {
-  const session = await loadSessionAccount("resolveModerationAccess");
-  if (session.kind === "unauthenticated") {
-    return { kind: "unauthenticated" };
-  }
-  if (!isActiveModerator(session.account)) {
-    return { kind: "forbidden" };
-  }
-  return {
-    kind: "allowed",
-    userId: session.userId,
-    isAdmin: session.account?.role === "admin",
-  };
+  const gate = await resolveModeratorGate("resolveModerationAccess");
+  return gate.kind === "allowed"
+    ? {
+        kind: "allowed",
+        userId: gate.userId,
+        isAdmin: gate.account?.role === "admin",
+      }
+    : gate;
 }

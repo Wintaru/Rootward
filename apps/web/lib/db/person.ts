@@ -117,9 +117,14 @@ export interface PersonProfileData {
 /** Everything `/person/[personId]/edit`'s shell needs: the header line and the
  * parents / partners / children strip. The individual sections (#27–#32) fetch
  * their own data — the shell has no reason to fan out to `event` / `fact` /
- * `media_link` / `citation` / `note` the way {@link getPersonProfile} does. */
+ * `media_link` / `citation` / `note` the way {@link getPersonProfile} does.
+ * `personUpdatedAt` piggybacks on this same row read so the Name & Gender
+ * section (#27) — whose fields are exactly {@link ProfilePersonCore}'s, plus
+ * this timestamp — never needs a second `person` fetch for data the shell
+ * already has in hand. */
 export interface PersonEditShellData {
   readonly person: ProfilePersonCore;
+  readonly personUpdatedAt: string;
   readonly relationships: Neighborhood;
 }
 
@@ -313,7 +318,7 @@ export async function getPersonEditShell(
 
   const personRes = await client
     .from("person")
-    .select(PERSON_CORE_COLUMNS)
+    .select(`${PERSON_CORE_COLUMNS}, updated_at`)
     .eq("id", personId)
     .maybeSingle();
 
@@ -324,7 +329,11 @@ export async function getPersonEditShell(
 
   const relationships = await getNeighborhood(client, personId, 1, 1);
 
-  return { person: mapPersonCore(personRes.data), relationships };
+  return {
+    person: mapPersonCore(personRes.data),
+    personUpdatedAt: personRes.data.updated_at,
+    relationships,
+  };
 }
 
 // --- row mapping helpers ----------------------------------------------

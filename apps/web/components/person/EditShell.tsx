@@ -1,18 +1,29 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 
 import type { EditRelativeLine, EditShellView } from "@/lib/edit/view-model";
 
 /**
  * Presentational edit-view shell (SPEC §8.3, §10 item 26). Full-screen,
  * MacFamilyTree-style: parents on top, the section rail on the left, the
- * active section's placeholder in the middle, partners + children on the
- * bottom. Every string comes from `buildEditShellView` — this file only lays
- * them out, and section switching / relative navigation are plain links (the
- * URL is the state, same convention as the tree view's `?up`/`?down`), so this
- * stays a server component with no client-side machinery to build ahead of
- * the sections that will actually need it (#27–#32).
+ * active section's content in the middle, partners + children on the bottom.
+ * Every string comes from `buildEditShellView` — this file only lays them
+ * out, and section switching / relative navigation are plain links (the URL
+ * is the state, same convention as the tree view's `?up`/`?down`), so this
+ * stays a server component with no client-side machinery of its own.
+ *
+ * `sectionContent` is the active section's real content once its issue has
+ * built it (#27–#32); `page.tsx` decides which component that is and fetches
+ * its data. A section not yet built (still `undefined`) falls back to the
+ * placeholder.
  */
-export function EditShell({ view }: { readonly view: EditShellView }) {
+export function EditShell({
+  view,
+  sectionContent,
+}: {
+  readonly view: EditShellView;
+  readonly sectionContent?: ReactNode;
+}) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <header className="border-border flex flex-col gap-3 border-b px-6 py-4">
@@ -68,9 +79,13 @@ export function EditShell({ view }: { readonly view: EditShellView }) {
           <h2 className="text-lg font-semibold tracking-tight">
             {view.activeSection.label}
           </h2>
-          <p className="text-muted-foreground mt-2 text-sm">
-            This section is not built yet.
-          </p>
+          {sectionContent === undefined ? (
+            <p className="text-muted-foreground mt-2 text-sm">
+              This section is not built yet.
+            </p>
+          ) : (
+            <div className="mt-4">{sectionContent}</div>
+          )}
         </main>
       </div>
 
