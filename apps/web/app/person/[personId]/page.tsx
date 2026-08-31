@@ -20,7 +20,7 @@ export const metadata: Metadata = {
  * RLS is the real boundary: `getPersonProfile` reads under the caller's identity,
  * so a hidden person and an absent one both come back as `null` → `notFound()`
  * (never leak which). The "Edit" link is shown to moderators+ only, matching the
- * `/person/[personId]/edit` route's own gate (that route 404s until Phase 5).
+ * `/person/[personId]/edit` route's own gate.
  */
 export default async function PersonPage({
   params,

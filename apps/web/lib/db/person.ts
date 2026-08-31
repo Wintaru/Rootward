@@ -114,6 +114,42 @@ export interface PersonProfileData {
   readonly relationships: Neighborhood;
 }
 
+/** Everything `/person/[personId]/edit`'s shell needs: the header line and the
+ * parents / partners / children strip. The individual sections (#27–#32) fetch
+ * their own data — the shell has no reason to fan out to `event` / `fact` /
+ * `media_link` / `citation` / `note` the way {@link getPersonProfile} does. */
+export interface PersonEditShellData {
+  readonly person: ProfilePersonCore;
+  readonly relationships: Neighborhood;
+}
+
+// --- shared person-core select -----------------------------------------
+
+const PERSON_CORE_COLUMNS =
+  "id, given_name, surname, name_prefix, name_suffix, nickname, sex, is_living";
+
+function mapPersonCore(row: {
+  id: string;
+  given_name: string | null;
+  surname: string | null;
+  name_prefix: string | null;
+  name_suffix: string | null;
+  nickname: string | null;
+  sex: Sex | null;
+  is_living: boolean | null;
+}): ProfilePersonCore {
+  return {
+    id: row.id,
+    givenName: row.given_name,
+    surname: row.surname,
+    namePrefix: row.name_prefix,
+    nameSuffix: row.name_suffix,
+    nickname: row.nickname,
+    sex: row.sex,
+    isLiving: row.is_living,
+  };
+}
+
 // --- fetch -------------------------------------------------------------
 
 /**
@@ -139,9 +175,7 @@ export async function getPersonProfile(
   ] = await Promise.all([
     client
       .from("person")
-      .select(
-        "id, given_name, surname, name_prefix, name_suffix, nickname, sex, is_living",
-      )
+      .select(PERSON_CORE_COLUMNS)
       .eq("id", personId)
       .maybeSingle(),
     client
@@ -209,19 +243,9 @@ export async function getPersonProfile(
   }
 
   const relationships = await getNeighborhood(client, personId, 1, 1);
-  const person = personRes.data;
 
   return {
-    person: {
-      id: person.id,
-      givenName: person.given_name,
-      surname: person.surname,
-      namePrefix: person.name_prefix,
-      nameSuffix: person.name_suffix,
-      nickname: person.nickname,
-      sex: person.sex,
-      isLiving: person.is_living,
-    },
+    person: mapPersonCore(personRes.data),
     names: (namesRes.data ?? []).map((row) => ({
       id: row.id,
       type: row.type,
@@ -271,6 +295,36 @@ export async function getPersonProfile(
     notes: (notesRes.data ?? []).map((row) => ({ id: row.id, text: row.text })),
     relationships,
   };
+}
+
+/**
+ * Load the header and relatives strip for `/person/[personId]/edit`'s shell
+ * (SPEC §8.3, §10 item 26), or `null` when the person is absent or hidden by
+ * RLS — same never-leak-which contract as {@link getPersonProfile}. The person
+ * row is fetched alone first so a 404 never pays for the neighbourhood query.
+ */
+export async function getPersonEditShell(
+  client: Db,
+  personId: string,
+): Promise<PersonEditShellData | null> {
+  if (!isUuid(personId)) {
+    return null;
+  }
+
+  const personRes = await client
+    .from("person")
+    .select(PERSON_CORE_COLUMNS)
+    .eq("id", personId)
+    .maybeSingle();
+
+  throwOnError("person", personRes.error);
+  if (personRes.data === null) {
+    return null;
+  }
+
+  const relationships = await getNeighborhood(client, personId, 1, 1);
+
+  return { person: mapPersonCore(personRes.data), relationships };
 }
 
 // --- row mapping helpers ----------------------------------------------

@@ -5,16 +5,11 @@ the relevant `docs/SPEC.md` section.
 
 ## Current state
 
-**Phase:** 4 — Tree view is **done**. Phase 0 (#1–#3), Phase 1 (#4–#10), Phase 2
-(#11–#16), Phase 3 (#17, #38, #18, #19, #20) all merged. #21 merged (`4c92f5e`),
-#22 merged (`00da1e6`), #23 merged (`5be36e5`), #25 merged (`70c2c73`) — #25 was
-still open on GitHub despite being merged (same stale-issue pattern as #17 /
-#20–#23 before it) and was closed by hand at the start of this session, along
-with #38 (merged `31e4bf3`, also left open). **#24 done, staged on
-`feat/tree-expand-in-place`** — see below. Phase 4 (#21–#25) is now fully
-merged-or-staged. Next: Phase 5 at #26 (Edit shell, `Depends on: #10`, labelled
-`ready` this session — its only dependency has long been merged, closing the
-pre-existing gap noted last session). Nothing depends on #24 itself.
+**Phase:** 5 — Phase 0 (#1–#3), Phase 1 (#4–#10), Phase 2 (#11–#16), Phase 3
+(#17, #38, #18, #19, #20), and Phase 4 (#21–#25) all merged, including #24
+(merged `767cc3d`, closed by hand this session — same stale-issue pattern as
+#17 / #20–#23 / #25 before it). **#26 done, staged on `feat/edit-shell`** — see
+below. Next: #27, #28, or #32 (all now `ready`, all depend only on #26).
 **Planning:** complete. 35 decisions in `docs/WAYFINDER.md`, full build spec in
 `docs/SPEC.md`. No open questions that block starting.
 **Issues:** created. 46 GitHub issues on `Wintaru/Rootward` — items 1–40 from
@@ -782,22 +777,78 @@ imports the shared type, and `FamilyTree.tsx`'s relation-set check is a
 `satisfies Record<ExpandRelation, true>` object so a new relation added to the
 type fails to compile there until acknowledged). See `DECISIONS.md`.
 
+**Issue #26 — Edit shell: full-screen layout, section nav, relatives strip,
+Done: done, staged on `feat/edit-shell`.** The first Phase 5 issue
+(`docs/SPEC.md` §8.3, §10 item 26, WAYFINDER decisions 10 / 21 / 26). Shell
+only — the eight sections themselves (Name & Gender, Additional Names,
+Events, Facts, Media, Sources, Notes, Reference Numbers) are #27–#32 and
+render a "not built yet" placeholder here. No migration — RLS from #9 is the
+whole boundary, same never-leak-hidden-vs-absent contract as #25.
+
+- **`apps/web/lib/person/relatives.ts`** (new) — `assembleName` /
+  `personName` / `formatLifespan` / `resolveRelationships` pulled out of
+  `lib/person/view-model.ts` (behavior-preserving move, confirmed by the
+  unchanged `view-model.test.ts` still passing) so the edit shell's relatives
+  strip reuses the exact same family-walk logic as the read-only profile
+  instead of a second copy that can drift from it.
+- **`apps/web/lib/db/person.ts`** — `PERSON_CORE_COLUMNS` + `mapPersonCore`
+  extracted (previously inlined only in `getPersonProfile`) and reused by a
+  new lean `getPersonEditShell(client, personId)`: just the person core row
+  plus one `getNeighborhood(id, 1, 1)`, sequential so a 404 never pays for the
+  neighbourhood query — deliberately not `getPersonProfile`'s full fan-out
+  (events/facts/media/citations/notes), since the shell doesn't render any of
+  that yet (fetch only what you need).
+- **`apps/web/lib/edit/sections.ts`** (new, pure) — the eight-section
+  registry, `resolveEditSection` (`?section=` → slug, unknown/missing →
+  `name-gender`), `editSectionHref` (bare URL for the default section,
+  `?section=` otherwise — mirrors `lib/tree/tree-view-params.ts`'s
+  `treeHref` convention).
+- **`apps/web/lib/edit/view-model.ts`** (new, pure) — `buildEditShellView`
+  builds the header (name + sex/lifespan subtitle), the section nav list with
+  an active flag, and the two relative strips: parents on top, partners then
+  children combined on the bottom (no siblings row — SPEC §8.3 only lists
+  parents and partners+children, unlike the profile page's four-way split).
+- **`apps/web/app/person/[personId]/edit/page.tsx`** + **`EditForbidden.tsx`**
+  — server-guard route: unauthenticated → `/login`, not approved →
+  `/onboarding`, approved-but-not-moderator → `EditForbidden` (mirrors
+  `ModerationForbidden` / `ImportForbidden`), absent/hidden person →
+  `notFound()`. `isActiveModerator` already documented itself as gating "the
+  edit view" (`lib/auth/access.ts`) — no new access resolver needed.
+- **`apps/web/components/person/EditShell.tsx`** (new) — presentational,
+  plain server component (no `"use client"`, no hooks): header + parents
+  strip, left nav + active-section placeholder, footer partners/children
+  strip. Section switching and relative navigation are plain `<Link>`s (the
+  URL is the state, same convention as the tree view's `?up`/`?down`) — no
+  client-side machinery built ahead of the sections that will actually need
+  it.
+- Tests: `lib/edit/sections.test.ts` (9), `lib/edit/view-model.test.ts` (8).
+  Full pnpm gate (**337**) + `pnpm build` green. Deno gate green (untouched —
+  no `supabase/functions/` change). No `supabase db lint` / `test db` (no
+  SQL). Code review: 1 should-fix applied (a doc comment on
+  `/person/[personId]/page.tsx` claiming `/edit` "404s until Phase 5" was now
+  false — this PR ships that route).
+- **Not done:** the live signed-in browser pass (joins the same deferred
+  integration pass as #21–#25 — the web app is down).
+
 ## Next action
 
-**Phase 4 is complete.** Phase 5 (edit view, #26–#37) starts at #26 (Edit
-shell — `docs/SPEC.md` §8.3, §10 item 26), labelled `ready` this session: its
-only dependency (#10) has long been merged, closing the pre-existing gap noted
-last session (nothing in Phase 4 depended on it, so it went unnoticed until
-Phase 4 finished).
+**Phase 5 is under way.** #27 (Sections: Name & Gender, Additional Names,
+Reference Numbers), #28 (DateInput component + Events section), and #32
+(Presence indicators on the edit view) are all `ready` — each depends only on
+#26. `docs/SPEC.md` §8.3 / WAYFINDER decision 22 is the `DateInput` contract
+#28 needs; decision 26 is the version-check + `ConflictDialog` contract #31
+needs once #27 lands.
 
-Nothing depends on #24 — it unblocks no other issue.
+Nothing depends on #26 being merged specifically — the three issues above were
+labelled `ready` this session on the strength of #26 being done, ahead of the
+merge itself (same bookkeeping-ahead-of-merge pattern as prior sessions).
 
-Still pending across #14–#25: a deployed-function run (`supabase functions
+Still pending across #14–#26: a deployed-function run (`supabase functions
 serve`) plus a real signed-in browser session driving `/login` → `/import` →
-`/onboarding` → `/moderation` → `/tree/<root>` → `/person/<id>` end to end,
-now also covering the #24 expand-in-place clicks. Do this as a dedicated
-integration pass, and restart the local stack first so the `config.toml`
-Google + redirect-URL change loads.
+`/onboarding` → `/moderation` → `/tree/<root>` → `/person/<id>` →
+`/person/<id>/edit` end to end. Do this as a dedicated integration pass, and
+restart the local stack first so the `config.toml` Google + redirect-URL
+change loads.
 
 **Shared local stack:** migrations through `20260831201221` (this session's
 `expand_relatives`) were applied additively with `supabase migration up`, and
@@ -846,6 +897,7 @@ unblocks `ready`.
 | 2026-08-31 | Issue #23 — re-centre + deep links (no migration): focus person is the `[personId]` segment, depth override is `?up`/`?down` (pure `tree-view-params.ts` — `resolveTreeDepth` / `treeHref`); `getDefaultGenerations` reads the `tree_settings` singleton (parallel with auth); `FamilyTree` built once and kept mounted across navigations, each new `tree` prop fed to the live chart via `updateData`/`updateMainId`/`updateTree` so `family-chart` animates the diff; `setOnCardClick` → `router.push(treeHref)`, depth stepper → `router.replace`, `useTransition` pending dim; `clampDepth`→exported `clampGenerations` + `MAX_GENERATIONS` constant; `tree-depth-parity.test.ts` guards the constants vs. the migrations. 13 vitest added (pnpm 280) + build green. Closed stale-open issue #22; labelled #25 `ready`. Review: no must-fix, 4 advisories applied.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `feat/tree-recenter-deeplinks`          |
 | 2026-08-31 | Issue #25 — `/person/[personId]` read-only profile (no migration, RLS from #9 is the whole boundary): `getPersonProfile` fans out 6 parallel explicit-column queries (polymorphic tables filtered on `owner_type`) + one `getNeighborhood(id,1,1)` reused for parents/siblings/partners/children; wired `@rootward/shared` into `apps/web` for the first time (`tsconfig` `paths` + `transpilePackages`, no build-output dependency) so the timeline formats dates with `formatGenealogyDate`, closing #11's deferred enum-parity guard; pure `buildPersonProfileView` (sort_key timeline, fact restriction badges, relationship-group split) → presentational `PersonProfile`; `labels.ts` humanises enums by rule + a short override table. 21 vitest added (pnpm 301) + build green. Closed stale-open issue #23; labelled #24 `ready`. Review: 2 should-fix applied (missing query `.order()`, error-check ordering) + 3 advisories applied.                                                                                                                                                                                                                                                                                                                                                                                                                                                          | `feat/person-profile`                   |
 | 2026-08-31 | Issue #24 — expand-in-place for collapsed branches (`20260831201221_expand_relatives.sql`): `get_neighborhood` gains `can_expand_up`/`can_expand_down` per person (frontier CTEs, guarded on the `base_persons`-chosen generation so pedigree collapse can't false-positive); new `expand_relatives(person, relation)` — `parents`/`children`/`self` — the scoped one-branch fetch behind the affordance. Frontend: `expandRelatives()` RPC wrapper, pure `lib/tree/expand-tree.ts` (`expandedGeneration`, `mergeNeighborhoodFragment`, `findUnresolvedPartners`); `FamilyTree.tsx` now takes the raw `Neighborhood` (conversion moved client-side), holds mergeable local state via React's render-time prop-sync pattern (not an effect — two hook-lint rules reject that), capture-phase click delegation for the three `▲`/`▼`/`+` card buttons, and a `navigationTokenRef` (bumped in an effect, not during render) that discards a stale expand fetch's result if a navigation lands first. 18 pgTAP + 5 pgTAP + 22 vitest added (pnpm 320, supabase test db 219) + build green. Review: 1 must-fix applied (the navigation-token race) + 2 should-fix applied (the SQL false positive; `ExpandRelation` hand-duplicated in three places, now one shared type + a `satisfies Record<...>` compile-time check). Labelled #26 `ready` (Phase 4 complete, #26's only dependency has long been merged). | `feat/tree-expand-in-place`             |
+| 2026-08-31 | Closed stale-open issue #24 (merged `767cc3d`, left open). Issue #26 — Edit shell (no migration): `lib/person/relatives.ts` extracted from `view-model.ts` (`resolveRelationships`/`assembleName`/`personName`/`formatLifespan`, behavior-preserving) so the edit shell reuses the profile's relationship-resolution logic; `getPersonEditShell` (lean — person core + one `getNeighborhood(id,1,1)`, no events/facts/media fan-out) built on a shared `PERSON_CORE_COLUMNS`/`mapPersonCore` also now used by `getPersonProfile`; pure `lib/edit/sections.ts` (8-section registry, `?section=` URL state, `editSectionHref` mirrors `treeHref`) + `lib/edit/view-model.ts` (`buildEditShellView` — header, section nav, parents-top / partners+children-bottom strips, no siblings row); server-guard `/person/[personId]/edit` route (unauth → `/login`, pending → `/onboarding`, non-moderator → `EditForbidden`, absent/hidden → `notFound()`) + presentational `EditShell` (plain server component, `<Link>`-driven nav, no client machinery ahead of #27–#32's real section content). 17 vitest added (pnpm 337) + build green. Review: 1 should-fix applied (a stale "404s until Phase 5" doc comment on the profile route, now false since this PR ships `/edit`). Labelled #27/#28/#32 `ready` (each depends only on #26).                                                                        | `feat/edit-shell`                       |
 
 ## Notes for the next session
 
@@ -854,15 +906,16 @@ unblocks `ready`.
   `Depends on:` issue numbers and a `### Done when` checklist.
 - Issue numbers match `docs/SPEC.md` §10 item numbers for 1–40. Issues 41–46 are
   the Post-MVP bullets.
-- #1–#23, #25, and #38 are merged to `main`. #24 is on
-  `feat/tree-expand-in-place` (issue open until it merges). Later issues get
-  `ready` as their dependencies close — do this when you finish an issue. #17 /
-  #20 / #21 / #22 / #23 / #25 / #38 were each closed by hand after their work
-  merged but the issue stayed open (`d6ee22f` / `536c920` / `4c92f5e` /
-  `00da1e6` / `5be36e5` / `70c2c73` / `31e4bf3`).
+- #1–#25 and #38 are merged to `main`. #26 is on `feat/edit-shell` (issue open
+  until it merges). Later issues get `ready` as their dependencies close — do
+  this when you finish an issue. #17 / #20 / #21 / #22 / #23 / #24 / #25 / #38
+  were each closed by hand after their work merged but the issue stayed open
+  (`d6ee22f` / `536c920` / `4c92f5e` / `00da1e6` / `5be36e5` / this session /
+  `70c2c73` / `31e4bf3`).
 - Phase 1 complete (#4–#10). Phase 2 (GEDCOM) complete (#11–#16). Phase 3 (auth
   & onboarding) complete (#17, #38, #18, #19, #20). Phase 4 (tree view,
-  #21–#25) complete — #24 staged, the rest merged.
+  #21–#25) complete. Phase 5 (edit view, #26–#37) under way — #26 staged, the
+  rest not started.
 - **Seed data (#38).** `supabase/seed.sql` now loads a demo admin
   (`admin@rootward.test` / `rootward-admin`) + the 28-person Ashby tree on every
   `supabase db reset` / first `supabase start`. **After merging `feat/seed-demo-data`,
@@ -986,6 +1039,23 @@ serve` + a stack restart for the `config.toml` change (see "Next action").
   the "have we already synced this prop" check). `findUnresolvedPartners`
   surfaces only one off-window spouse per known partner — a second marriage's
   second gap is left for the post-MVP extended-family pass.
+- **Edit shell (#26).** `/person/[personId]/edit` is the shell only — section
+  content is #27–#32. `lib/edit/sections.ts` is the URL/slug contract every
+  section issue builds against: `?section=<slug>` off the eight-entry
+  `EDIT_SECTIONS` registry (`name-gender` is the default and the bare-URL
+  case, mirroring `treeHref`). `lib/person/relatives.ts` now holds
+  `resolveRelationships` / `assembleName` / `personName` / `formatLifespan` —
+  moved out of `lib/person/view-model.ts` (the profile page) so the edit
+  shell's relatives strip and the profile's relationship groups share one
+  implementation; any future person-display helper needed by both belongs
+  there, not duplicated. `getPersonEditShell` (`lib/db/person.ts`) is
+  deliberately lean (person core + one `getNeighborhood(id,1,1)`, no
+  events/facts/media fan-out) — a section issue that needs its own data should
+  add its own typed query, not widen this one, since sections do not all need
+  the same rows. `EditShell.tsx` is a plain server component with no client
+  state; a section issue that needs interactivity (the `DateInput` live parse
+  in #28, say) introduces its own client component scoped to that section
+  rather than promoting the whole shell to `"use client"`.
 - The `imports` bucket + its `is_moderator()` `storage.objects` policy live in
   migration `20260830235147` (mirror of the #15 `exports` bucket). Both were
   applied to the shared local stack with `supabase migration up` (additive) —
