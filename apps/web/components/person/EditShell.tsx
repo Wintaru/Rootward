@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import type { EditRelativeLine, EditShellView } from "@/lib/edit/view-model";
+import { PresenceBanner } from "@/components/person/edit/PresenceBanner";
 
 /**
  * Presentational edit-view shell (SPEC §8.3, §10 item 26). Full-screen,
@@ -16,13 +17,22 @@ import type { EditRelativeLine, EditShellView } from "@/lib/edit/view-model";
  * built it (#27–#32); `page.tsx` decides which component that is and fetches
  * its data. A section not yet built (still `undefined`) falls back to the
  * placeholder.
+ *
+ * `currentUser` (#32) feeds the `PresenceBanner` client island — the one bit
+ * of client-side machinery this otherwise-server component renders, same as
+ * `sectionContent` — so other moderators editing this person show up here.
  */
 export function EditShell({
   view,
   sectionContent,
+  currentUser,
 }: {
   readonly view: EditShellView;
   readonly sectionContent?: ReactNode;
+  readonly currentUser: {
+    readonly userId: string;
+    readonly displayName: string;
+  };
 }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -43,6 +53,10 @@ export function EditShell({
             Done
           </Link>
         </div>
+        <PresenceBanner
+          personId={view.id}
+          self={{ ...currentUser, section: view.activeSection.slug }}
+        />
         <RelativesStrip
           label="Parents"
           people={view.parents}

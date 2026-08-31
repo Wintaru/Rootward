@@ -6,12 +6,11 @@ the relevant `docs/SPEC.md` section.
 ## Current state
 
 **Phase:** 5 — Phase 0 (#1–#3), Phase 1 (#4–#10), Phase 2 (#11–#16), Phase 3
-(#17, #38, #18, #19, #20), and Phase 4 (#21–#25) all merged. **#26, #27, and
-#28 all merged to `main` (`5c3ef28`, `f43c609`, `dc48652`), all closed by hand
-across sessions — same stale-issue-left-open pattern as #17 / #20–#23 / #25
-before them. #31 done, staged on `feat/edit-notes-conflict-dialog`** — see
-below. Next: #32 (`ready`, depends only on #26, already merged); #29 and #30
-are not yet `ready`.
+(#17, #38, #18, #19, #20), and Phase 4 (#21–#25) all merged. **#26, #27, #28,
+and #31 all merged to `main` (`5c3ef28`, `f43c609`, `dc48652`, `bc046ec`), all
+closed by hand across sessions — same stale-issue-left-open pattern as #17 /
+#20–#23 / #25 before them. #32 done, staged on `feat/edit-presence`** — see
+below. Next: #29 and #30 (`ready`, each depends only on #28, already merged).
 **Planning:** complete. 35 decisions in `docs/WAYFINDER.md`, full build spec in
 `docs/SPEC.md`. No open questions that block starting.
 **Issues:** created. 46 GitHub issues on `Wintaru/Rootward` — items 1–40 from
@@ -1115,33 +1114,114 @@ session).
 - **Not done:** the live signed-in browser pass (joins the same deferred
   integration pass as #21–#28); the deferred hook-extraction cleanup above.
 
+**Issue #32 — Presence indicators on the edit view: done, staged on
+`feat/edit-presence`.** The last WAYFINDER decision-26 piece
+(`docs/SPEC.md` §8.3 / §8.5, §10 item 32). New migration
+`20260831230616_edit_presence_authorization.sql`: two `realtime.messages`
+policies (`edit_presence_select` / `edit_presence_insert`) requiring
+`extension = 'presence'`, the row's own `topic` column matching `person:%`,
+and `public.is_moderator()`. Closed stale-open issue #31 as part of this
+session's bookkeeping (merged `bc046ec`, left open — same pattern as every
+prior session).
+
+- **`lib/edit/presence.ts`** (new, pure) — `EditPresenceUser` (`userId`,
+  `displayName`, `section`), `presenceChannelName(personId)` (`person:{id}`),
+  and `describeOtherEditors(state, selfUserId)`: parses
+  `channel.presenceState()`'s untyped shape (a map of presence key → array of
+  tracked payloads, one entry per open connection under that key) into the
+  other editors, excluding self, validating `section` against `EDIT_SECTIONS`
+  (not just `typeof === "string"`) so a malformed or adversarial payload is
+  dropped rather than crashing the banner's render for every other viewer —
+  a must-fix from code review, below.
+- **`components/person/edit/PresenceBanner.tsx`** (new, client) — joins the
+  `person:{id}` channel once per person + identity (`config: { private:
+true, presence: { key: self.userId } }`), tracks on `SUBSCRIBED`, and
+  re-tracks on a section change without rejoining (so other subscribers see
+  one continuous presence with an updated section, not a leave/join
+  flicker) — a second effect keyed on `self`'s primitive fields, guarded on
+  `channel.state === "joined"`. Renders nothing when no one else is present.
+- **`lib/edit/sections.ts`** gained `editSectionLabel(slug)` — a total
+  function (never throws on an unrecognised value, same "don't error on a
+  stale/unknown value" posture as `resolveEditSection`) for the banner's
+  "is editing <section>" line.
+- **`EditShell.tsx`** (still a plain server component) takes a `currentUser:
+{userId, displayName}` prop and renders `<PresenceBanner>` in its header,
+  between the title row and the parents strip — the one client island it
+  renders, same as `sectionContent`.
+- **`app/person/[personId]/edit/page.tsx`** resolves the caller's own
+  `account.display_name` via `getAccountDisplayName` in parallel with
+  `getPersonEditShell` (needed regardless of whether the person is found),
+  falling back to a generic "A moderator" label — deliberately not the
+  caller's email (see below).
+- Tests: `presence.test.ts` (8, new), `sections.test.ts` (+2).
+  `edit_presence_test.sql` (new, 8 pgTAP: moderator/approved-viewer/anon ×
+  select/insert on the presence channel, plus that the `person:%` and
+  `extension = 'presence'` filters are actually enforced and not just
+  `is_moderator()`). Full pnpm gate (**456**) + `pnpm build` green. Deno gate
+  green (untouched). `supabase db lint` + `supabase test db` (**227**)
+  green on a clean `supabase db reset`.
+- **Code review (one pass, all fixes applied before staging — no re-review,
+  per "ONE review per body of work"):** 3 must-fix — (1) an unvalidated
+  `section` string in a presence payload crashed `editSectionLabel`'s
+  non-null assertion mid-render for every other viewer on the channel, since
+  the channel carried no authorization at all (next finding) so anyone could
+  track an adversarial payload; fixed by validating `section` at parse time
+  _and_ making `editSectionLabel` fail soft, defense in depth. (2) The
+  channel was originally a plain (non-private) one — Supabase evaluates
+  `realtime.messages` RLS only for a `private: true` channel, so a
+  non-private channel is authorized by _nothing_, directly contradicting
+  "RLS is the access boundary" (CLAUDE.md, WAYFINDER decision 6/35); fixed
+  with `private: true` + the migration above. A first draft of those
+  policies checked `realtime.topic()` (the session's bound-channel setting)
+  instead of the row's own `topic` column — `edit_presence_test.sql`'s
+  "cannot track presence on a non-person topic" assertion caught that this
+  authorized a write tagged with _any_ topic string, as long as the
+  connection happened to already be joined to some `person:` channel; fixed
+  by checking the row's own `topic` column, matching Supabase's documented
+  row-column authorization pattern. (3) The display-name fallback broadcast
+  the caller's real email over that (at-the-time-unauthenticated) channel
+  when `account.display_name` was unset; fixed by dropping the email
+  fallback for a generic label — belt-and-suspenders on top of (2). 2
+  should-fix applied: the section re-track effect depended on `self` by
+  object reference (a fresh literal every server render, including ones
+  unrelated to identity/section) instead of its primitive fields; a stale
+  "see DECISIONS.md" comment reference that pointed at an entry that didn't
+  exist yet, now written. See `DECISIONS.md` for the full presence-channel
+  authorization trade-off, including the `realtime.topic()` vs. row-`topic`
+  correction.
+- **Not done:** the live signed-in browser pass (joins the same deferred
+  integration pass as #21–#31 — needs two real browser sessions on the same
+  person to see each other's presence, not just pgTAP + unit coverage).
+  Labelled #29 and #30 `ready` (both depend only on #28, already merged;
+  bookkeeping this session found they'd been left unlabelled since #28's
+  own session).
+
 ## Next action
 
-**Phase 5 continues.** #32 (Presence indicators on the edit view) is `ready`
-— it depends only on #26 (merged). #29 (Facts section) and #30 (Sources
-section) are not yet `ready` — check their `Depends on:` once #32 is under
-way.
+**Phase 5 continues.** #29 (Facts section) and #30 (Sources section) are both
+`ready` — each depends only on #28, already merged. Facts (#29) is
+lower-numbered; take it next unless this file says otherwise by then.
 
-Nothing depends on #26/#27/#28 being merged specifically — issues get
+Nothing depends on #26/#27/#28/#31/#32 being merged specifically — issues get
 labelled `ready` on the strength of the dependency being _done_, ahead of the
 merge itself (same bookkeeping-ahead-of-merge pattern as prior sessions).
 
-Still pending across #14–#31: a deployed-function run (`supabase functions
+Still pending across #14–#32: a deployed-function run (`supabase functions
 serve`) plus a real signed-in browser session driving `/login` → `/import` →
 `/onboarding` → `/moderation` → `/tree/<root>` → `/person/<id>` →
 `/person/<id>/edit` (now including the Name & Gender / Additional Names /
-Reference Numbers / Events / Notes sections, and a live multi-tab conflict
-walkthrough for the `ConflictDialog`) end to end. Do this as a dedicated
-integration pass, and restart the local stack first so the `config.toml`
-Google + redirect-URL change loads.
+Reference Numbers / Events / Notes sections, a live multi-tab conflict
+walkthrough for the `ConflictDialog`, **and two browser tabs on the same
+person's edit view to see the #32 presence banner update live**) end to end.
+Do this as a dedicated integration pass, and restart the local stack first so
+the `config.toml` Google + redirect-URL change loads.
 
-**Shared local stack:** migrations through `20260831201221` (this session's
-`expand_relatives`) were applied additively with `supabase migration up`, and
-the `get_neighborhood` fix from code review was re-applied directly (a
-`create or replace`, not a new migration file, so no separate `migration up`
-step exists for it — the file on disk and the live function already match).
-`supabase db reset` is safe (all Phase 3/4 branches merged or, for #24,
-additive-safe). #21–#25 add no other migration.
+**Shared local stack:** migrations through `20260831230616` (this session's
+`edit_presence_authorization`) are applied — this session ran a full
+`supabase db reset` (not just `migration up`) after fixing the `realtime.topic()`
+vs. row-`topic` bug the RLS pgTAP test caught, so the seed and every prior
+migration replayed clean too. `supabase db reset` remains safe going forward
+(every branch through #32 is either merged or additive-safe).
 
 `gh issue list --label ready` is the queue. Take the lowest-numbered `ready`
 issue unless this file says otherwise. When an issue merges, label the issues it
@@ -1186,6 +1266,7 @@ unblocks `ready`.
 | 2026-08-31 | Closed stale-open issue #26 (merged `5c3ef28`, left open). Issue #27 — Sections: Name & Gender, Additional Names, Reference Numbers (no migration, `person_update`/`person_name_write` RLS from #9): `lib/db/person-edit.ts` (version-checked `updatePersonFields` + `saveAdditionalNames` CRUD — bulk insert, per-row update/delete, "a mismatch rejects only that row" per decision 26); `lib/edit/person-fields.ts` (pure Name & Gender / Reference Numbers draft + diff) and `lib/edit/additional-names.ts` (pure reducer — client-assigned row ids sidestep insert-response-order correlation, `diffAdditionalNames`/`reconcileAdditionalNamesAfterSave` handle reorder-as-update and partial-conflict reconciliation); `app/person/[personId]/edit/actions.ts` (server actions re-checking `resolveEditAccess`) + three client sections + `EditShell`'s new `sectionContent` slot. 34 vitest added (pnpm 371) + build green. Review: 4 should-fix applied (a redundant `person` round trip for Name & Gender/Reference Numbers — fixed by having the shell's `getPersonEditShell` carry `updated_at` and Reference Numbers get its own lean 5-column query; a non-atomic-save doc comment; an empty-added-row insert guard; `resolveEditAccess` deduped against `resolveImportAccess`/`resolveModerationAccess` via one shared `resolveModeratorGate`) + 2 nits applied. Labelled #31 `ready` (depends only on #27).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | `feat/edit-name-gender-reference`       |
 | 2026-08-31 | Closed stale-open issues #26 and #27 (merged `5c3ef28`/`f43c609`, both left open). Issue #28 — `DateInput` component + Events section (no migration, `event_write`/`place_write` RLS from #9): `lib/edit/date-input.ts` (pure `interpretDateInput` — live preview + phrase-flag, `parseGenealogyDate`/`formatGenealogyDate` from `@rootward/shared`) backs the `DateInput` client component; `lib/db/place.ts` (`searchPlaces` with escaped `ilike` wildcards, `findOrCreatePlaceId` with a `23505`-retry race guard) backs `PlaceInput` (debounced autocomplete, no client-tracked `placeId`); `lib/db/event-edit.ts` + `lib/edit/events.ts` mirror #27's `person-edit.ts`/`additional-names.ts` pattern for person-owned `event` rows, with two deliberate deviations — no client reorder (`sort_key` is server-trigger-computed, so `reconcileEventsAfterSave` re-sorts by each saved row's returned key instead) and an added row is skipped only when `type` is unset (not "every field blank", since `event.type` is the one not-null column). `lib/person/labels.ts`'s private `label` helper is now the exported `enumTokenLabel`, for the Type picker's option list (no saved record to read a `type_other` off of, so it cannot reuse the display-only `eventTypeLabel`). 41 vitest added (pnpm 412) + build green. Review: 2 must-fix applied (a switched-away `type_other` silently persisting — the reducer now clears it the moment `type` changes off `"other"`; the picker's mislabeled "Other" option) + 1 should-fix applied (the `ilike` wildcard escape). Labelled #31/#32 `ready` (#26/#27 both merged).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | `feat/edit-events-dateinput`            |
 | 2026-08-31 | Closed stale-open issue #28 (merged `dc48652`, left open). Issue #31 — Notes section + row-level version check + `ConflictDialog` (no migration, `note_write` RLS from #9): `lib/db/conflict.ts` (`RowConflict<Row>`, the `{theirs, changedBy}` shape every write function now returns on a version-check loss instead of a bare `{ok:false}`) + `lib/db/account-lookup.ts`; retrofitted `person-edit.ts`/`event-edit.ts` to refetch the current row on conflict; `lib/db/note-edit.ts` (new — `getPersonNotes`/`saveNotes`, scoped to person + person's own events per WAYFINDER decision 21, narrower than the issue's own wording); `lib/edit/conflict.ts` (shared `ConflictItem` type) + `components/person/edit/ConflictDialog.tsx` (the one dialog every section renders); `lib/edit/notes.ts` (pure CRUD — `moved` swaps with the nearest same-owner row, not the adjacent index) + `NotesSection.tsx`; every multi-row section gained a `describe*Conflicts` mapper, a `row_reset` reducer action, and an identical `performSave`/`retryKeepMine`/`resolveConflict` pattern (a conflicted save keeps its original diff alive so a later "keep mine" can resend that row's patch against the fresh `updated_at`). 34 vitest added (pnpm 446) + build green. Self-review caught and fixed one bug before code review (`row_reset` couldn't restore a row already removed from local state — `state.map` silently no-ops on a missing id). Code review: 1 must-fix applied (`ConflictDialog`'s resolve buttons now disable while a save is in flight — an in-flight "keep mine" retry's stale closure could otherwise silently overwrite a concurrent "take theirs" resolution on a different conflict) + 1 should-fix applied (`NoteOwner` narrowed to a local `SectionNoteOwner = "person" \| "event"` so the section's own types can't represent the 6 owner kinds it doesn't handle). 1 should-fix deferred: the three multi-row sections' conflict-resolution state machine is near-verbatim duplicated (~70 lines each) — a shared hook would remove it, not extracted this session. Labelled #32 `ready` (depends only on #26, already merged). | `feat/edit-notes-conflict-dialog`       |
+| 2026-08-31 | Closed stale-open issue #31 (merged `bc046ec`, left open). Issue #32 — Presence indicators on the edit view (`20260831230616_edit_presence_authorization.sql`): pure `lib/edit/presence.ts` (`describeOtherEditors` parses `presenceState()`, validates `section` against `EDIT_SECTIONS`) + client `PresenceBanner.tsx` (joins `person:{id}` once per identity, re-tracks on a section change without rejoining) + `EditShell`'s `currentUser` prop. Code review (one pass, all fixed before staging): 3 must-fix — an unvalidated `section` crashed `editSectionLabel` for every other viewer; the channel was non-private, so `realtime.messages` RLS was never evaluated at all (fixed with `private: true` + two new `is_moderator()` policies — a first policy draft checked `realtime.topic()` instead of the row's own `topic` column, which a new pgTAP assertion caught as authorizing any topic string); the display-name fallback broadcast the caller's real email over that channel (dropped for a generic label). 2 should-fix applied (re-track effect depended on `self` by reference instead of its primitive fields; a dangling `DECISIONS.md` reference, now written). 10 vitest added (pnpm 456) + build green; `edit_presence_test.sql` (8 pgTAP) + `supabase db lint` + `supabase test db` (**227**) green on a clean `supabase db reset`. Labelled #29/#30 `ready` (both depend only on #28, left unlabelled since #28's own session).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | `feat/edit-presence`                    |
 
 ## Notes for the next session
 
@@ -1194,17 +1275,18 @@ unblocks `ready`.
   `Depends on:` issue numbers and a `### Done when` checklist.
 - Issue numbers match `docs/SPEC.md` §10 item numbers for 1–40. Issues 41–46 are
   the Post-MVP bullets.
-- #1–#27 and #38 are merged to `main`. #28 is on
-  `feat/edit-events-dateinput` (issue open until it merges). Later issues
-  get `ready` as their dependencies close — do this when you finish an issue.
-  #17 / #20 / #21 / #22 / #23 / #24 / #25 / #26 / #27 / #38 were each closed
-  by hand after their work merged but the issue stayed open (`d6ee22f` /
-  `536c920` / `4c92f5e` / `00da1e6` / `5be36e5` / prior session / `70c2c73` /
-  `31e4bf3` / `f43c609` / prior session).
+- #1–#28, #31, and #38 are merged to `main`. #32 is on
+  `feat/edit-presence` (issue open until it merges). Later issues get
+  `ready` as their dependencies close — do this when you finish an issue.
+  #17 / #20 / #21 / #22 / #23 / #24 / #25 / #26 / #27 / #28 / #31 / #38 were
+  each closed by hand after their work merged but the issue stayed open
+  (`d6ee22f` / `536c920` / `4c92f5e` / `00da1e6` / `5be36e5` / prior session /
+  `70c2c73` / `31e4bf3` / `f43c609` / `dc48652` / `bc046ec` / prior session) —
+  budget for this pattern every session; it has recurred every time so far.
 - Phase 1 complete (#4–#10). Phase 2 (GEDCOM) complete (#11–#16). Phase 3 (auth
   & onboarding) complete (#17, #38, #18, #19, #20). Phase 4 (tree view,
-  #21–#25) complete. Phase 5 (edit view, #26–#37) under way — #26/#27 merged,
-  #28 staged, the rest not started.
+  #21–#25) complete. Phase 5 (edit view, #26–#37) under way — #26–#28/#31/#32
+  done (merged or staged), #29/#30 `ready`, #33–#37 not started.
 - **Seed data (#38).** `supabase/seed.sql` now loads a demo admin
   (`admin@rootward.test` / `rootward-admin`) + the 28-person Ashby tree on every
   `supabase db reset` / first `supabase start`. **After merging `feat/seed-demo-data`,
@@ -1375,6 +1457,21 @@ AND updated_at = $2` and returns `{ ok: false }` on a zero-row result
   section built before it just shows a plain "reload to see the latest" banner
   on `{ status: "conflict" }`, which is the deliberate, issue-scoped stopping
   point (`DECISIONS.md`).
+- **Presence (#32).** `person:{id}` is a Realtime **private** channel — this
+  matters for any future channel added to the app, not just this one:
+  Supabase evaluates `realtime.messages` RLS only for a channel joined with
+  `config.private: true`, so a plain channel is authorized by nothing at the
+  Postgres level regardless of what the app-level route gate does. The two
+  policies live in `20260831230616_edit_presence_authorization.sql`
+  (`edit_presence_select` / `edit_presence_insert`, both `is_moderator()`
+  gated) and check the row's own `topic` column, not `realtime.topic()` (the
+  session's bound-channel setting) — the latter authorizes a write tagged
+  with _any_ topic string as long as the connection is joined to some
+  matching channel, which is not the same thing (see `DECISIONS.md`). Any
+  future private channel's policy should follow the same row-column pattern.
+  `lib/edit/presence.ts` (pure parsing) + `components/person/edit/PresenceBanner.tsx`
+  (the channel lifecycle) + `EditShell`'s `currentUser` prop (the display name,
+  resolved server-side, never the caller's email).
 - The `imports` bucket + its `is_moderator()` `storage.objects` policy live in
   migration `20260830235147` (mirror of the #15 `exports` bucket). Both were
   applied to the shared local stack with `supabase migration up` (additive) —

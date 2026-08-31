@@ -4,6 +4,7 @@ import {
   DEFAULT_EDIT_SECTION,
   EDIT_SECTIONS,
   editSectionHref,
+  editSectionLabel,
   resolveEditSection,
 } from "./sections";
 
@@ -38,6 +39,16 @@ describe("editSectionHref", () => {
     expect(editSectionHref("p1", "events")).toBe(
       "/person/p1/edit?section=events",
     );
+  });
+});
+
+describe("editSectionLabel", () => {
+  it("returns the nav label for a slug", () => {
+    expect(editSectionLabel("events")).toBe("Events");
+  });
+
+  it("falls back for an unrecognised slug rather than throwing", () => {
+    expect(editSectionLabel("not-a-section")).toBe("another section");
   });
 });
 

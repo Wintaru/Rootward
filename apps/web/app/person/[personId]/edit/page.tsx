@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 
 import { isActiveModerator, isApproved } from "@/lib/auth/access";
 import { getCurrentAccount } from "@/lib/auth/current-account";
+import { getAccountDisplayName } from "@/lib/db/account-lookup";
 import type { Database } from "@/lib/db/database.types";
 import {
   getPersonEditShell,
@@ -50,6 +51,14 @@ export const metadata: Metadata = {
  * fields are exactly the shell's person-core columns plus `updated_at`, which
  * `getPersonEditShell` already fetched, so `loadSectionContent` builds that
  * section's data straight from `data` rather than re-querying `person`.
+ *
+ * `selfDisplayName` (#32) resolves the caller's own `account.display_name`
+ * for the `PresenceBanner` every other moderator editing this person sees —
+ * fetched in parallel with the shell, since it is needed regardless of
+ * whether the person is found. Falls back to a generic label, not the
+ * caller's email — the presence channel is private + `is_moderator()`-gated
+ * (see the #32 migration), but there is no reason to broadcast a real email
+ * address to every other moderator as a matter of course.
  */
 export default async function EditPersonPage({
   params,
@@ -69,7 +78,10 @@ export default async function EditPersonPage({
   }
 
   const supabase = await createSupabaseServerClient();
-  const data = await getPersonEditShell(supabase, personId);
+  const [data, selfDisplayName] = await Promise.all([
+    getPersonEditShell(supabase, personId),
+    getAccountDisplayName(supabase, current.userId),
+  ]);
   if (data === null) {
     notFound();
   }
@@ -86,6 +98,10 @@ export default async function EditPersonPage({
     <EditShell
       view={buildEditShellView(data, section)}
       sectionContent={sectionContent}
+      currentUser={{
+        userId: current.userId,
+        displayName: selfDisplayName ?? "A moderator",
+      }}
     />
   );
 }

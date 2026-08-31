@@ -42,3 +42,17 @@ export function editSectionHref(
   const base = `/person/${personId}/edit`;
   return section === DEFAULT_EDIT_SECTION ? base : `${base}?section=${section}`;
 }
+
+/** The nav label for a section slug — the presence banner's only other
+ * consumer of this registry (SPEC §8.3 / §8.5, §10 item 32). Takes a plain
+ * `string`, not `EditSectionSlug`: the banner's caller already validates
+ * membership (`describeOtherEditors`), but this stays total — never throwing
+ * on an unrecognised value — rather than trust that validation from a second
+ * file not to have a gap, same "don't error on a stale/unknown value"
+ * posture as `resolveEditSection` above. */
+export function editSectionLabel(slug: string): string {
+  return (
+    EDIT_SECTIONS.find((section) => section.slug === slug)?.label ??
+    "another section"
+  );
+}
