@@ -22,7 +22,8 @@
       }
     ],
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./*"],
+      "@rootward/shared": ["../../packages/shared/src/index.ts"]
     }
   },
   "include": [

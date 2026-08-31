@@ -32,6 +32,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@rootward/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       '@supabase/ssr':
         specifier: ^0.12.5
         version: 0.12.5(@supabase/supabase-js@2.112.4)
