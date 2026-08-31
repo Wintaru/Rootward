@@ -3,10 +3,11 @@ import { notFound, redirect } from "next/navigation";
 
 import { isApproved } from "@/lib/auth/access";
 import { getCurrentAccount } from "@/lib/auth/current-account";
-import { getNeighborhood, isUuid } from "@/lib/db";
+import { getDefaultGenerations, getNeighborhood, isUuid } from "@/lib/db";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { FamilyTree } from "@/components/tree/FamilyTree";
 import { toFamilyChartData } from "@/lib/tree/to-family-chart";
+import { resolveTreeDepth } from "@/lib/tree/tree-view-params";
 
 export const metadata: Metadata = {
   title: "Family tree · Rootward",
@@ -17,16 +18,26 @@ export const metadata: Metadata = {
  * §8.2). Approved members only; a signed-in-but-pending visitor belongs on
  * `/onboarding`, an anonymous one on `/login`.
  *
- * One `getNeighborhood` fetch at the default depths renders the visible
- * neighbourhood. Click-to-re-centre with URL history and an in-session depth
- * override are issue #23.
+ * The focus person is the route segment and the depth override is `?up` / `?down`
+ * (WAYFINDER decision 28) — so a click re-centre and a depth change are both a
+ * `router.push`, one `get_neighborhood` recursion per navigation, and the back
+ * button walks the history. The `FamilyTree` client shell animates between the
+ * old and new payloads.
  */
 export default async function TreePage({
   params,
+  searchParams,
 }: PageProps<"/tree/[personId]">) {
   const { personId } = await params;
 
-  const current = await getCurrentAccount();
+  // The depth defaults are the invariant `tree_settings` singleton — fetch them
+  // alongside the auth check rather than after it.
+  const supabase = await createSupabaseServerClient();
+  const [current, defaults] = await Promise.all([
+    getCurrentAccount(),
+    getDefaultGenerations(supabase),
+  ]);
+
   if (current === null) {
     redirect("/login");
   }
@@ -38,8 +49,13 @@ export default async function TreePage({
     notFound();
   }
 
-  const supabase = await createSupabaseServerClient();
-  const neighborhood = await getNeighborhood(supabase, personId);
+  const depth = resolveTreeDepth(await searchParams, defaults);
+  const neighborhood = await getNeighborhood(
+    supabase,
+    personId,
+    depth.up,
+    depth.down,
+  );
 
   // Empty means the focus person does not exist or RLS hides them — a 404 to
   // the caller either way (never leak which).
@@ -51,7 +67,7 @@ export default async function TreePage({
 
   return (
     <main className="flex flex-1 flex-col">
-      <FamilyTree tree={tree} />
+      <FamilyTree tree={tree} depth={depth} depthDefaults={defaults} />
     </main>
   );
 }

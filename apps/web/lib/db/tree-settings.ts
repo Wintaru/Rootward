@@ -1,11 +1,53 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database } from "./database.types";
+import {
+  DEFAULT_GENERATIONS_DOWN,
+  DEFAULT_GENERATIONS_UP,
+  clampGenerations,
+} from "./neighborhood";
 
 type Db = SupabaseClient<Database>;
 
 /** The singleton `tree_settings` row always has id 1 (CHECK, migration #7). */
 const TREE_SETTINGS_ID = 1;
+
+/** Generations to show each way from the focus person (SPEC §8.2, §4.6). */
+export interface DefaultGenerations {
+  readonly up: number;
+  readonly down: number;
+}
+
+/**
+ * The deployment's default tree depth (SPEC §4.6, decisions 9 / 28). The tree
+ * view starts here; a visitor overrides it for their session with the depth
+ * control (issue #23). Falls back to the {@link DEFAULT_GENERATIONS_UP} /
+ * {@link DEFAULT_GENERATIONS_DOWN} column defaults if the row is missing, and
+ * clamps to `0..MAX_GENERATIONS` so a bad settings value cannot ask the
+ * `get_neighborhood` function for more than it returns.
+ */
+export async function getDefaultGenerations(
+  client: Db,
+): Promise<DefaultGenerations> {
+  const { data, error } = await client
+    .from("tree_settings")
+    .select("default_generations_up, default_generations_down")
+    .eq("id", TREE_SETTINGS_ID)
+    .maybeSingle();
+
+  if (error !== null) {
+    throw new Error(`getDefaultGenerations: ${error.message}`);
+  }
+
+  return {
+    up: clampGenerations(
+      data?.default_generations_up ?? DEFAULT_GENERATIONS_UP,
+    ),
+    down: clampGenerations(
+      data?.default_generations_down ?? DEFAULT_GENERATIONS_DOWN,
+    ),
+  };
+}
 
 /**
  * The person the tree view opens on (SPEC §4.6, decision 21). `null` on a fresh

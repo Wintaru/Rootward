@@ -10,10 +10,17 @@ export * from "./types";
 export * from "./import-jobs";
 export * from "./invitations";
 export * from "./onboarding";
-export { getAllowSelfSignup, getDefaultRootPersonId } from "./tree-settings";
+export {
+  getAllowSelfSignup,
+  getDefaultGenerations,
+  getDefaultRootPersonId,
+} from "./tree-settings";
+export type { DefaultGenerations } from "./tree-settings";
 export {
   DEFAULT_GENERATIONS_DOWN,
   DEFAULT_GENERATIONS_UP,
+  MAX_GENERATIONS,
+  clampGenerations,
   getNeighborhood,
 } from "./neighborhood";
 export { isUuid } from "./uuid";

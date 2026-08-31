@@ -18,6 +18,14 @@ export const DEFAULT_GENERATIONS_UP = 2;
 export const DEFAULT_GENERATIONS_DOWN = 2;
 
 /**
+ * Upper bound on generations each way. Mirrors the `least(…, 10)` clamp in the
+ * `get_neighborhood` SQL function (migration `20260830191012`) — the in-session
+ * depth control (issue #23) caps at the same value so a request never asks for
+ * more than the function will return.
+ */
+export const MAX_GENERATIONS = 10;
+
+/**
  * The tree view's single fetch: the focus person, ancestors `up` generations,
  * descendants `down` generations, plus the focus person's siblings and partners,
  * with the family rows that link them (WAYFINDER decisions 9, 28).
@@ -44,8 +52,8 @@ export async function getNeighborhood(
 
   const { data, error } = await client.rpc("get_neighborhood", {
     p_focus: focusId,
-    p_up: clampDepth(up),
-    p_down: clampDepth(down),
+    p_up: clampGenerations(up),
+    p_down: clampGenerations(down),
   });
 
   if (error) {
@@ -55,9 +63,13 @@ export async function getNeighborhood(
   return parseNeighborhood(data);
 }
 
-/** Non-negative integer. The SQL clamps the upper bound (0..10). */
-function clampDepth(value: number): number {
-  return Math.max(0, Math.trunc(value));
+/**
+ * Whole number of generations in `0..MAX_GENERATIONS` — the same bound the
+ * `get_neighborhood` SQL function enforces. The single clamp for the fetch
+ * depth, the `tree_settings` defaults, and the in-session override.
+ */
+export function clampGenerations(value: number): number {
+  return Math.min(MAX_GENERATIONS, Math.max(0, Math.trunc(value)));
 }
 
 // --- boundary validation ---------------------------------------------------

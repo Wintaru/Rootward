@@ -1,8 +1,10 @@
 "use client";
 
 import { createChart } from "family-chart";
-import { useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useRef, useTransition } from "react";
 
+import { isUuid } from "@/lib/db/uuid";
 import {
   computeGenerationBands,
   readLaidOutTree,
@@ -13,6 +15,12 @@ import type {
   FamilyChartPersonData,
   FamilyChartTree,
 } from "@/lib/tree/to-family-chart";
+import {
+  MAX_GENERATIONS,
+  MIN_GENERATIONS,
+  treeHref,
+  type TreeDepth,
+} from "@/lib/tree/tree-view-params";
 import {
   removeGenerationBands,
   renderGenerationBands,
@@ -36,33 +44,73 @@ const CARD_Y_SPACING = 150;
 /** Layout gap between a band's left label and the leftmost card on its row. */
 const LABEL_GUTTER = 24;
 
+type Chart = ReturnType<typeof createChart>;
+
 interface FamilyTreeProps {
   readonly tree: FamilyChartTree;
+  /** Generations requested for this render (route defaults + `?up` / `?down`). */
+  readonly depth: TreeDepth;
+  /** The `tree_settings` defaults — an override links back to a clean URL. */
+  readonly depthDefaults: TreeDepth;
 }
 
 /**
  * The `family-chart` hourglass view (SPEC §8.2). `family-chart` is a d3
  * renderer, not a React one — it owns a DOM subtree — so this component is a
- * thin shell: a container ref, and one effect that builds the chart and tears
- * it down. All data shaping already happened in `toFamilyChartData` on the
- * server; re-centring on click stays the library's built-in for now
- * (`router.push` navigation is issue #23).
+ * thin shell: it builds the chart once, then feeds each new `tree` prop through
+ * `updateData` / `updateTree` so the library animates between neighbourhoods
+ * instead of the chart being torn down and rebuilt.
+ *
+ * Clicking a card navigates to `/tree/<id>` (issue #23, decision 28). The page
+ * refetches that person's neighbourhood server-side — one query per navigation —
+ * and the new payload arrives here as the next `tree` prop, which the sync
+ * effect animates to. The focus person is the URL, so the back button walks the
+ * history. The depth control does the same with `?up` / `?down`.
  *
  * A repeated ancestor (pedigree collapse) is drawn once per path, each copy
  * carrying a `×N` badge. `family-chart`'s `setDuplicateBranchToggle` would add a
  * collapse control but it reaches into a `.card-inner` element that a fully
  * custom card does not have and throws — so it is left off here.
  */
-export function FamilyTree({ tree }: FamilyTreeProps) {
+export function FamilyTree({ tree, depth, depthDefaults }: FamilyTreeProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<Chart | null>(null);
+  const router = useRouter();
+  const [isNavigating, startNavigation] = useTransition();
 
+  // Kept fresh after every render so the card-click handler (bound once, in the
+  // build effect) always navigates with the current focus / depth / router
+  // without the chart being rebuilt.
+  const navigateRef = useRef<(personId: string) => void>(() => {});
+  useEffect(() => {
+    navigateRef.current = (personId: string) => {
+      // Clicking the focus card is a no-op re-centre.
+      if (personId === tree.mainId) {
+        return;
+      }
+      startNavigation(() => {
+        router.push(treeHref(personId, depth, depthDefaults));
+      });
+    };
+  });
+
+  // Mount value only — the build effect below reads it once, then every data
+  // change flows through the sync effect.
+  const initialTreeRef = useRef(tree);
+  const isFirstSync = useRef(true);
+
+  // Build the chart once.
   useEffect(() => {
     const container = containerRef.current;
     if (container === null) {
       return;
     }
+    // A dev-StrictMode remount re-runs this effect; make the sync effect skip
+    // its first pass again so it does not re-animate the fresh chart.
+    isFirstSync.current = true;
 
-    const chart = createChart(container, [...tree.data])
+    const initial = initialTreeRef.current;
+    const chart = createChart(container, [...initial.data])
       .setTransitionTime(TRANSITION_MS)
       .setCardXSpacing(CARD_X_SPACING)
       .setCardYSpacing(CARD_Y_SPACING)
@@ -71,7 +119,7 @@ export function FamilyTree({ tree }: FamilyTreeProps) {
       // "unknown" — so no "add spouse" placeholder cards.
       .setSingleParentEmptyCard(false);
 
-    chart
+    const card = chart
       .setCardHtml()
       .setCardDim({ w: CARD_WIDTH, h: CARD_HEIGHT })
       .setMiniTree(false)
@@ -79,24 +127,148 @@ export function FamilyTree({ tree }: FamilyTreeProps) {
         personCardHtml(cardDataOf(node), duplicateCountOf(node)),
       );
 
+    // Replace the library's in-window re-centre with a real navigation. The
+    // page refetches and the sync effect animates to the result.
+    card.setOnCardClick((_event: unknown, node: unknown) => {
+      const personId = readNodeId(node);
+      if (personId !== null) {
+        navigateRef.current(personId);
+      }
+    });
+
     // Redraw the generation bands after every layout — the initial render and
-    // each click re-centre — so they stay aligned with the animated rows.
+    // each re-centre — so they stay aligned with the animated rows.
     chart.setAfterUpdate((props?: AfterUpdateProps) => {
       drawGenerationBands(container, chart, props);
     });
 
-    chart.updateMainId(tree.mainId);
+    chart.updateMainId(initial.mainId);
     chart.updateTree({ initial: true, tree_position: "main_to_middle" });
+    chartRef.current = chart;
 
     // `family-chart` has no teardown API. Clearing the container drops the SVG
     // and its d3 zoom behaviour; the library attaches no window-level listeners
     // that would outlive it.
     return () => {
       container.innerHTML = "";
+      chartRef.current = null;
     };
+  }, []);
+
+  // Feed each new payload to the live chart so the library animates the diff
+  // (nodes entering / exiting as the window shifts). Skips the first run — the
+  // build effect above already drew `tree`.
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (chart === null) {
+      return;
+    }
+    if (isFirstSync.current) {
+      isFirstSync.current = false;
+      return;
+    }
+    chart.updateData([...tree.data]);
+    chart.updateMainId(tree.mainId);
+    chart.updateTree({ tree_position: "main_to_middle" });
   }, [tree]);
 
-  return <div ref={containerRef} className="f3 rw-tree" />;
+  return (
+    <div
+      className="rw-tree-viewport"
+      aria-busy={isNavigating}
+      data-navigating={isNavigating}
+    >
+      <div ref={containerRef} className="f3 rw-tree" />
+      <TreeDepthControls
+        depth={depth}
+        depthDefaults={depthDefaults}
+        disabled={isNavigating}
+        onChange={(next) => {
+          startNavigation(() => {
+            router.replace(treeHref(tree.mainId, next, depthDefaults));
+          });
+        }}
+      />
+    </div>
+  );
+}
+
+interface TreeDepthControlsProps {
+  readonly depth: TreeDepth;
+  readonly depthDefaults: TreeDepth;
+  readonly disabled: boolean;
+  readonly onChange: (next: TreeDepth) => void;
+}
+
+/**
+ * In-session depth override (SPEC §8.2). A `router.replace` per step — the
+ * override lives in `?up` / `?down` but does not clutter the focus-person back
+ * history (decision 28: the back button walks *focus* history).
+ */
+function TreeDepthControls({
+  depth,
+  depthDefaults,
+  disabled,
+  onChange,
+}: TreeDepthControlsProps) {
+  return (
+    <div className="rw-tree-depth" role="group" aria-label="Generations shown">
+      <DepthStepper
+        label="Ancestors"
+        value={depth.up}
+        disabled={disabled}
+        onStep={(delta) => onChange({ ...depth, up: depth.up + delta })}
+      />
+      <DepthStepper
+        label="Descendants"
+        value={depth.down}
+        disabled={disabled}
+        onStep={(delta) => onChange({ ...depth, down: depth.down + delta })}
+      />
+      {(depth.up !== depthDefaults.up || depth.down !== depthDefaults.down) && (
+        <button
+          type="button"
+          className="rw-tree-depth__reset"
+          disabled={disabled}
+          onClick={() => onChange(depthDefaults)}
+        >
+          Reset
+        </button>
+      )}
+    </div>
+  );
+}
+
+interface DepthStepperProps {
+  readonly label: string;
+  readonly value: number;
+  readonly disabled: boolean;
+  readonly onStep: (delta: number) => void;
+}
+
+function DepthStepper({ label, value, disabled, onStep }: DepthStepperProps) {
+  return (
+    <div className="rw-tree-depth__stepper">
+      <span className="rw-tree-depth__label">{label}</span>
+      <button
+        type="button"
+        aria-label={`Fewer ${label.toLowerCase()}`}
+        disabled={disabled || value <= MIN_GENERATIONS}
+        onClick={() => onStep(-1)}
+      >
+        −
+      </button>
+      <span className="rw-tree-depth__value">{value}</span>
+      <button
+        type="button"
+        aria-label={`More ${label.toLowerCase()}`}
+        disabled={disabled || value >= MAX_GENERATIONS}
+        onClick={() => onStep(1)}
+      >
+        +
+      </button>
+    </div>
+  );
 }
 
 /**
@@ -115,7 +287,7 @@ interface AfterUpdateProps {
  */
 function drawGenerationBands(
   container: HTMLElement,
-  chart: ReturnType<typeof createChart>,
+  chart: Chart,
   props: AfterUpdateProps | undefined,
 ): void {
   const view = container.querySelector<SVGGElement>("svg .view");
@@ -177,4 +349,14 @@ function cardDataOf(node: unknown): FamilyChartPersonData {
 function duplicateCountOf(node: unknown): number {
   const count = (node as { duplicate?: unknown }).duplicate;
   return typeof count === "number" ? count : 0;
+}
+
+/**
+ * The person id off a clicked `family-chart` node, or `null` for anything that
+ * is not a real person — a library-synthesised placeholder, or a shape the
+ * library changes in a future version.
+ */
+function readNodeId(node: unknown): string | null {
+  const id = (node as { data?: { id?: unknown } }).data?.id;
+  return typeof id === "string" && isUuid(id) ? id : null;
 }

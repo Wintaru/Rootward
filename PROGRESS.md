@@ -7,10 +7,11 @@ the relevant `docs/SPEC.md` section.
 
 **Phase:** 4 — Tree view is **in progress**. Phase 0 (#1–#3), Phase 1
 (#4–#10), Phase 2 (#11–#16), Phase 3 (#17, #38, #18, #19, #20) all merged. #21
-merged (`4c92f5e`) — issue was still open on GitHub, closed it this session
-(same as #17 / #20 before it); labelled #22 and #23 `ready`.
-**#22 done, staged on `feat/tree-generation-bands`** — see below. Next is #23
-(getNeighborhood wiring + re-center + deep links) then #24–#25.
+merged (`4c92f5e`), #22 merged (`00da1e6`) — both were still open on GitHub,
+closed by hand this session (same as #17 / #20 before them).
+**#23 done, staged on `feat/tree-recenter-deeplinks`** — see below. Next is #25
+(read-only `/person/[personId]`, already `ready`); #24 (expand-in-place)
+becomes `ready` when #23 merges.
 **Planning:** complete. 35 decisions in `docs/WAYFINDER.md`, full build spec in
 `docs/SPEC.md`. No open questions that block starting.
 **Issues:** created. 46 GitHub issues on `Wintaru/Rootward` — items 1–40 from
@@ -594,18 +595,65 @@ bottom }` per band. Labels are `Root Generation` / `Generation N` /
   re-indexed and re-aligned every band. Full pnpm gate (**267**) + `pnpm build`
   green. Deno gate not run (no `supabase/functions/` change).
 
+**Issue #23 — `getNeighborhood` wiring + re-center + deep links: done, staged on
+`feat/tree-recenter-deeplinks`.** Click-to-re-centre and URL-as-focus for the
+tree view (`docs/SPEC.md` §8.2 / §8.1, §10 item 23, WAYFINDER decision 28). No
+migration — SQL untouched.
+
+- **`apps/web/lib/tree/tree-view-params.ts`** (new, pure) — `resolveTreeDepth`
+  reads `?up` / `?down` off the route (falls back to the `tree_settings`
+  defaults, clamps `0..MAX_GENERATIONS`); `treeHref` builds `/tree/<id>` and
+  adds `up` / `down` only when they differ from the default, so the common URL
+  stays bare. Re-exports `clampGenerations` / `MAX_GENERATIONS` /
+  `MIN_GENERATIONS`.
+- **`apps/web/lib/db/neighborhood.ts`** — the old private `clampDepth` is now the
+  exported `clampGenerations` (one clamp for the fetch depth, the settings
+  defaults, and the stepper) and `MAX_GENERATIONS = 10` is a named constant
+  mirroring the `get_neighborhood` `least(…, 10)`.
+- **`apps/web/lib/db/tree-settings.ts`** — `getDefaultGenerations(client)` reads
+  `default_generations_up` / `_down` from the singleton, clamped, column
+  defaults as the fallback.
+- **`apps/web/app/tree/[personId]/page.tsx`** — reads `searchParams`, fetches
+  the depth defaults in parallel with the auth check, resolves the requested
+  depth, one `getNeighborhood` at that depth. Passes `depth` + `depthDefaults`
+  to `FamilyTree`.
+- **`apps/web/components/tree/FamilyTree.tsx`** — the chart is now **built once**
+  and kept mounted across navigations (React reconciles it — the segment and
+  component position do not change), so each new server-fetched `tree` prop is
+  fed to the live chart with `updateData` / `updateMainId` / `updateTree` and
+  `family-chart` animates the diff. `setOnCardClick` → `router.push(treeHref(…))`
+  (was the library's in-window re-centre). A depth-stepper overlay
+  (`TreeDepthControls`) does `router.replace` per step so a depth tweak does not
+  pile up in the focus back-history. `useTransition` drives a pending dim
+  (`[data-navigating]` on the viewport wrapper).
+- **`family-tree.css`** — `.rw-tree-viewport` wrapper (React-owned, survives a
+  chart rebuild), the depth control, the navigating dim.
+- Tests: `tree-view-params.test.ts` (10 — depth parse / clamp / href),
+  `tree-depth-parity.test.ts` (3 — greps the two migrations, asserts the `10`
+  and the `2`s match the TS constants, same pattern as `onboarding-parity`). No
+  jsdom render project (same defer as #21 / #22).
+- Full pnpm gate (**280**) + `pnpm build` green. Deno gate not run (no
+  `supabase/functions/` change); no `supabase db lint` / `test db` (no SQL).
+- Code review: no must-fix. Applied — parallelised the settings read with auth,
+  added the migration parity guard, narrowed the client imports off the
+  `@/lib/db` barrel, made the first-sync skip StrictMode-safe. Deferred (see
+  `DECISIONS.md`): caching the invariant `tree_settings` read (revisit with
+  #37's settings-edit revalidation); the optimistic pre-fetch re-centre.
+- **Not done:** the live signed-in browser pass driving a real re-centre +
+  back-button + depth override. Joins the deferred `/login → … → /tree`
+  integration pass — the web app is down and `/tree` needs an approved session.
+
 ## Next action
 
-**Phase 4, issue #23 — `getNeighborhood` wiring + re-center + `/tree/[personId]`
-deep links** (`docs/SPEC.md` §8.2, §10 item 23): the `tree_settings` depth read,
-click a card → `router.push('/tree/<id>')` (URL-as-focus, back button works),
-in-session depth override. #21 deferred all of this — card clicks currently use
-`family-chart`'s built-in in-window re-centre. Then #24 (expand-in-place), #25
-(read-only `/person/[personId]`). `#38`'s seed tree (Ashby family, pedigree
-collapse) is the fixture.
+**Phase 4, issue #25 — `/person/[personId]` read-only profile** (`docs/SPEC.md`
+§8.3-ish / §10 item 25): names, sex, events (timeline by `sort_key`), facts
+(sensitive-fact hiding), relationships, media, sources, notes — all through
+`lib/db`. "Edit" button for moderator+ → `/person/[personId]/edit` (that route
+404s until Phase 5). Depends only on #10 (merged), so it is `ready` now. #24
+(expand-in-place) depends on #23 and becomes `ready` when
+`feat/tree-recenter-deeplinks` merges.
 
-**When `feat/tree-generation-bands` merges:** nothing new to label — #23 is
-already `ready`, #24 waits on #23, #25 waits on #23.
+**When `feat/tree-recenter-deeplinks` merges:** label #24 `ready`.
 
 Still pending across #14–#21: a deployed-function run (`supabase functions
 serve`) plus a real signed-in browser session driving `/login` → `/import` →
@@ -615,7 +663,7 @@ dedicated integration pass, and restart the local stack first so the
 
 **Shared local stack:** migrations through `20260831162624` were applied
 additively with `supabase migration up`; `seed.sql` was loaded by hand for #18.
-`supabase db reset` is safe (all onboarding branches merged). #20 and #21 add no
+`supabase db reset` is safe (all onboarding branches merged). #20–#23 add no
 migration.
 
 `gh issue list --label ready` is the queue. Take the lowest-numbered `ready`
@@ -654,6 +702,7 @@ unblocks `ready`.
 | 2026-08-31 | Issue #20 — Invite flow + `/moderation` stub (no migration): `inviteToClaim` server action (write `invitation` row → `auth.admin.inviteUserByEmail` → roll back on send failure); `maybeAcceptInvitation` in `/auth/callback` links a pending/unlinked account to `invitation.person_id`/`role`/`active` (`WHERE status='pending' AND person_id IS NULL` + `23505` → `conflict`); `lib/db/invitations.ts` typed layer; `resolveModerationAccess` shares `loadSessionAccount`; `AccountRole`/`AccountStatus` moved to `lib/db/types.ts`. 11 vitest (pnpm 223) + deno 38 + build green. Closed stale-open issue #17. 1 must-fix + 4 should-fix review fixes applied.                                                                                                                                                                                                                                    | `feat/invite-flow`                      |
 | 2026-08-31 | Issue #22 — generation bands overlay (no migration): pure `computeGenerationBands` (cluster laid-out `family-chart` node `y` centres into rows, index vs focus row, `Root Generation` / `Generation ±N` labels + birth-year span, tiling edges) + `readLaidOutTree` defensive parse; imperative `generation-bands-overlay.ts` owns an SVG `<g>` first-child of `svg .view` (zoom layer) — per-band `<g>` translate + full-bleed rect + gutter labels, CSS transitions match the card animation; `FamilyTree` `setAfterUpdate` repaint; shared card-box constants. 20 vitest added (pnpm 267) + build green. Browser-verified vs. seed: 6 bands centred on rows, pedigree-collapse row folded, re-centre re-aligns. Closed stale-open issue #21; labelled #22/#23 `ready`.                                                                                                                             | `feat/tree-generation-bands`            |
 | 2026-08-31 | Issue #21 — `family-chart` hourglass tree view (no migration, adds `family-chart@0.9.0`): `/tree/[personId]` server route (`isApproved` gate, `getNeighborhood` at default depths, `notFound` on non-UUID / empty); pure `toFamilyChartData` (family edges → rel sets, dedup, self-loop guard, sex→gender-for-layout) + `personCardHtml` (escaped string, silhouette/photo, lifespan, `×N` dup badge); `FamilyTree` client shell (`createChart` + `setCardInnerHtmlCreator`, `setSingleParentEmptyCard(false)`, no `setDuplicateBranchToggle` — throws on custom card); scoped CSS (blue/orange tint, `.card-main` focus ring); `isUuid` extracted to `lib/db/uuid.ts`. 29 vitest added (pnpm 252) + build green. Browser-verified vs. the seed: hourglass on Samuel, pedigree collapse renders `×2` no crash. Closed stale-open issue #20. Deferred to #23: depth read, click-recentre, URL history. | `feat/tree-family-chart`                |
+| 2026-08-31 | Issue #23 — re-centre + deep links (no migration): focus person is the `[personId]` segment, depth override is `?up`/`?down` (pure `tree-view-params.ts` — `resolveTreeDepth` / `treeHref`); `getDefaultGenerations` reads the `tree_settings` singleton (parallel with auth); `FamilyTree` built once and kept mounted across navigations, each new `tree` prop fed to the live chart via `updateData`/`updateMainId`/`updateTree` so `family-chart` animates the diff; `setOnCardClick` → `router.push(treeHref)`, depth stepper → `router.replace`, `useTransition` pending dim; `clampDepth`→exported `clampGenerations` + `MAX_GENERATIONS` constant; `tree-depth-parity.test.ts` guards the constants vs. the migrations. 13 vitest added (pnpm 280) + build green. Closed stale-open issue #22; labelled #25 `ready`. Review: no must-fix, 4 advisories applied.                               | `feat/tree-recenter-deeplinks`          |
 
 ## Notes for the next session
 
@@ -662,14 +711,14 @@ unblocks `ready`.
   `Depends on:` issue numbers and a `### Done when` checklist.
 - Issue numbers match `docs/SPEC.md` §10 item numbers for 1–40. Issues 41–46 are
   the Post-MVP bullets.
-- #1–#21 and #38 are merged to `main`. #22 is on `feat/tree-generation-bands`
+- #1–#22 and #38 are merged to `main`. #23 is on `feat/tree-recenter-deeplinks`
   (issue open until it merges). Later issues get `ready` as their dependencies
-  close — do this when you finish an issue. #17 / #20 / #21 were each closed by
-  hand after their work merged but the issue stayed open (`d6ee22f` / `536c920`
-  / `4c92f5e`).
+  close — do this when you finish an issue. #17 / #20 / #21 / #22 were each
+  closed by hand after their work merged but the issue stayed open (`d6ee22f` /
+  `536c920` / `4c92f5e` / `00da1e6`).
 - Phase 1 complete (#4–#10). Phase 2 (GEDCOM) complete (#11–#16). Phase 3 (auth
   & onboarding) complete (#17, #38, #18, #19, #20). Phase 4 (tree view, #21–#25)
-  in progress — #21 merged, #22 staged.
+  in progress — #21 / #22 merged, #23 staged.
 - **Seed data (#38).** `supabase/seed.sql` now loads a demo admin
   (`admin@rootward.test` / `rootward-admin`) + the 28-person Ashby tree on every
   `supabase db reset` / first `supabase start`. **After merging `feat/seed-demo-data`,
@@ -741,6 +790,22 @@ serve` + a stack restart for the `config.toml` change (see "Next action").
   centre, so `LaidOutNode.y` is the card centre. Card-box dimensions are now
   shared TS constants in `FamilyTree.tsx` and must match `.rw-card` in the CSS.
   No jsdom render test (same defer as #21).
+- **Re-centre + deep links (#23).** The focus person is the `[personId]`
+  segment; the depth override is `?up` / `?down` (pure
+  `lib/tree/tree-view-params.ts` — `resolveTreeDepth` reads them, `treeHref`
+  writes them only when they differ from the `tree_settings` default).
+  `FamilyTree` is now **built once and stays mounted across navigations** — do
+  not re-key it on `personId`; each new `tree` prop is fed to the live chart
+  (`updateData` → `updateMainId` → `updateTree`) so `family-chart` animates the
+  diff. A card click is `router.push(treeHref)`, a depth step is
+  `router.replace` (keeps depth out of the focus back-history). One
+  `get_neighborhood` per navigation, server-side. `lib/db/neighborhood.ts`
+  exports `clampGenerations` / `MAX_GENERATIONS` (mirrors the SQL
+  `least(…, 10)`); `getDefaultGenerations` (in `tree-settings.ts`) reads the
+  singleton. `lib/db/tree-depth-parity.test.ts` greps the two migrations and
+  fails if the `10` or the `2`s drift from the TS constants. Deferred
+  (`DECISIONS.md`): caching the invariant settings read — revisit with #37's
+  settings-edit revalidation.
 - The `imports` bucket + its `is_moderator()` `storage.objects` policy live in
   migration `20260830235147` (mirror of the #15 `exports` bucket). Both were
   applied to the shared local stack with `supabase migration up` (additive) —
