@@ -1,0 +1,163 @@
+0 HEAD
+1 SOUR MacFamilyTree
+2 VERS 10.4
+2 NAME MacFamilyTree
+1 GEDC
+2 VERS 5.5.1
+2 FORM LINEAGE-LINKED
+1 CHAR UTF-8
+1 COPR Public-domain demo data for Rootward
+1 LANG English
+1 SUBM @U1@
+0 @I1@ INDI
+1 NAME Ezekiel /Marsh/
+2 GIVN Ezekiel
+2 SURN Marsh
+1 SEX M
+1 BIRT
+2 DATE 12 MAR 1739/40
+2 PLAC Salem, Essex, Massachusetts, USA
+1 DEAT
+2 DATE BEF 1810
+2 PLAC Salem, Essex, Massachusetts, USA
+1 OCCU Cooper
+2 DATE FROM 1762 TO 1799
+1 NOTE @N1@
+1 _CUSTOM founder of the demo line
+0 @I2@ INDI
+1 NAME Prudence /Wells/
+2 TYPE maiden
+1 NAME Prudence /Marsh/
+2 TYPE married
+1 SEX F
+1 BIRT
+2 DATE ABT 1744
+1 DEAT
+2 DATE BET 1805 AND 1812
+0 @I3@ INDI
+1 NAME Josiah /Marsh/
+1 SEX M
+1 BIRT
+2 DATE 4 JUL 1766
+2 PLAC Salem, Essex, Massachusetts, USA
+1 DEAT
+2 DATE 19 SEP 1831
+1 FAMC @F1@
+1 SOUR @S1@
+2 PAGE vol. 3, p. 118
+2 QUAY 3
+0 @I4@ INDI
+1 NAME Abigail /Marsh/
+1 SEX F
+1 BIRT
+2 DATE ABT 1769
+1 FAMC @F1@
+0 @I5@ INDI
+1 NAME Charlotte /Hale/
+2 TYPE maiden
+1 SEX F
+1 BIRT
+2 DATE 1771
+0 @I6@ INDI
+1 NAME Silas /Reed/
+1 SEX M
+1 BIRT
+2 DATE ABT 1764
+0 @I7@ INDI
+1 NAME Thomas /Marsh/
+1 SEX M
+1 BIRT
+2 DATE (during the war years, exact date unknown)
+1 FAMC @F2@
+0 @I8@ INDI
+1 NAME Mary /Reed/
+2 TYPE maiden
+1 SEX F
+1 BIRT
+2 DATE 2 FEB 1793
+2 PLAC Danvers, Essex, Massachusetts, USA
+1 FAMC @F3@
+0 @I9@ INDI
+1 NAME William /Marsh/
+1 SEX M
+1 BIRT
+2 DATE 3 JUL 1801
+2 PLAC Danvers, Essex, Massachusetts, USA
+1 DEAT
+2 DATE 27 NOV 1867
+1 FAMC @F4@
+1 SOUR @S1@
+2 PAGE vol. 7, p. 42
+2 QUAY 2
+0 @I10@ INDI
+1 NAME Eleanor /Finch/
+2 TYPE maiden
+1 SEX F
+1 BIRT
+2 DATE ABT 1806
+0 @I11@ INDI
+1 NAME Henry /Marsh/
+1 SEX M
+1 BIRT
+2 DATE 15 AUG 1834
+2 PLAC Lowell, Middlesex, Massachusetts, USA
+1 RESI
+2 DATE 1860
+2 PLAC Lowell, Middlesex, Massachusetts, USA
+1 FAMC @F5@
+1 OBJE @O1@
+0 @F1@ FAM
+1 HUSB @I1@
+1 WIFE @I2@
+1 CHIL @I3@
+1 CHIL @I4@
+1 MARR
+2 DATE 6 MAY 1765
+2 PLAC Salem, Essex, Massachusetts, USA
+0 @F2@ FAM
+1 HUSB @I3@
+1 WIFE @I5@
+1 CHIL @I7@
+1 MARR
+2 DATE ABT 1789
+0 @F3@ FAM
+1 HUSB @I6@
+1 WIFE @I4@
+1 CHIL @I8@
+1 MARR
+2 DATE 11 JUN 1790
+0 @F4@ FAM
+1 HUSB @I7@
+1 WIFE @I8@
+1 CHIL @I9@
+1 MARR
+2 DATE 24 DEC 1799
+2 PLAC Danvers, Essex, Massachusetts, USA
+1 NOTE Thomas and Mary were first cousins; Ezekiel and Prudence Marsh are their
+2 CONC  shared grandparents, so the demo tree exercises pedigree collapse.
+0 @F5@ FAM
+1 HUSB @I9@
+1 WIFE @I10@
+1 CHIL @I11@
+1 MARR
+2 DATE 2 APR 1833
+0 @S1@ SOUR
+1 TITL Essex County, Massachusetts, Vital Records to 1850
+1 AUTH Essex Institute
+1 PUBL Salem, 1916
+1 REPO @R1@
+0 @R1@ REPO
+1 NAME Phillips Library
+1 ADDR 132 Essex Street
+2 CITY Salem
+2 CTRY USA
+1 WWW https://www.pem.org/library
+0 @N1@ NOTE The Marsh family of Essex County is fictional demo data shipped with
+1 CONT Rootward. Any resemblance to real persons is coincidental.
+0 @O1@ OBJE
+1 FILE henry-marsh-daguerreotype.jpg
+2 FORM jpeg
+1 TITL Henry Marsh, c. 1855
+0 @U1@ SUBM
+1 NAME Rootward Demo
+0 TRLR

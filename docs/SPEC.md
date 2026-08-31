@@ -861,7 +861,15 @@ frontend|auth|edge|infra`, `mvp`, `post-mvp`, `blocked`, `ready`.
 37. `/settings` — tree settings + role management.
 
 ### Phase 8 — Ship
-38. Seed data + a demo GEDCOM + `supabase/seed.sql`.
+38. Seed data + a demo GEDCOM + `supabase/seed.sql`. *(Built early — it blocks
+    #18's `pg_trgm` tuning and #21's pedigree collapse.)* `supabase/seed.sql`
+    seeds a demo admin + the "Ashby family" (multi-generation, a first-cousin
+    marriage for pedigree collapse, living/deceased + hidden/moderators-only for
+    RLS, name near-collisions for the #18 match). `docs/reference/demo-tree.ged`
+    is a **separate** fictional family (the Marshes) for import/export testing —
+    kept independent so a SQL tree and a GEDCOM tree of the same people can't
+    drift. `supabase/tests/seed_smoke_test.sql` guards the seed; `rls_test.sql`
+    truncates the data tables up front because `supabase test db` loads the seed.
 39. Deploy docs: Vercel + Supabase Cloud, and Docker Compose self-host.
 40. README, CONTRIBUTING, self-host guide, screenshots.
 
@@ -891,6 +899,12 @@ shadcn/ui); public visibility → decision 35 (nothing public but `/login`).
 - Whether `match_update` diff engine lands in Phase 2 or waits for its Post-MVP
   approval UI — spec allows either.
 - Exact `pg_trgm` similarity threshold for name matching — tune against the
-  seeded demo tree in issue 18.
+  seeded demo tree in issue 18. *(The demo tree now exists — issue 38, built
+  early. It carries deliberate name near-collisions, `Catherine`/`Katherine`
+  and two `John`s and an unrelated `Ashby` line, as false-positive fodder.)*
+- Self-claim challenge strength (issue 18) — **decided**: link on one correct
+  answer among those posed. The 5-attempt / 24h cap and the `self_claim_linked`
+  moderator notification are the brute-force guards (see `DECISIONS.md`
+  2026-08-31).
 - Local verify gate runs `build`; CI adds a migration check. Intentional split —
   fold together if it causes confusion.

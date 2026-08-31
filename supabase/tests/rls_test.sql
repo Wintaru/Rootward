@@ -14,6 +14,34 @@
 -- (superuser, for fixture edits). The persona differs by the `sub` claim.
 
 begin;
+
+-- This suite asserts absolute row counts (e.g. "a moderator sees every
+-- person"), so its fixtures must be the only rows present. supabase/seed.sql
+-- (issue #38) populates the genealogy tables on `db reset` / `supabase start`,
+-- and `supabase test db` runs against that seeded database. Clear every data
+-- table for the length of the transaction; the final `rollback` restores the
+-- seed. Runs as the BYPASSRLS superuser pg_prove connects as, before any
+-- identity switch.
+--
+-- Every table listed explicitly (not left to `cascade`) so a future seed that
+-- populates a table with no FK path to `person` cannot leave stale rows behind
+-- a new count assertion. `cascade` is kept only as a safety net. `tree_settings`
+-- is truncated too (the singleton is re-seeded below) -- the anon/pending
+-- assertions expect exactly one row or zero via RLS.
+set client_min_messages to warning;
+truncate table
+  public.person, public.person_name, public.family, public.family_child,
+  public.place, public.event, public.fact,
+  public.repository, public.source, public.citation,
+  public.media, public.media_link, public.note,
+  public.account, public.tree_settings, public.audit_log,
+  public.invitation, public.access_request, public.claim_attempt,
+  public.notification, public.notification_read,
+  public.import_job, public.export_job
+  restart identity cascade;
+insert into public.tree_settings (id) values (1);
+reset client_min_messages;
+
 select plan(117);
 
 -- ---------------------------------------------------------------------------

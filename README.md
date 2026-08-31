@@ -50,7 +50,18 @@ app together. Open http://127.0.0.1:3000.
 | `pnpm dev`        | Supabase stack + web app (http://127.0.0.1:3000) |
 | `pnpm dev:status` | Up/down summary of both, with the local URLs     |
 | `pnpm dev:stop`   | Stops the Supabase stack (`supabase stop`)       |
-| `pnpm dev:reset`  | Drops and re-migrates the local database         |
+| `pnpm dev:reset`  | Drops and re-migrates the local database + seed  |
+
+**Demo data.** `supabase db reset` (and the first `supabase start`) load
+`supabase/seed.sql` — a demo family tree and an admin account. Sign in at
+`/login`:
+
+- email: `admin@rootward.test`
+- password: `rootward-admin`
+
+Password sign-in is local-dev only; the product uses magic link + Google. A
+magic link for the same address also works — it appears in Mailpit at
+http://127.0.0.1:57324.
 
 After the stack is up, `supabase status -o env` prints the local keys as
 `ANON_KEY` / `SERVICE_ROLE_KEY` — copy those two values into

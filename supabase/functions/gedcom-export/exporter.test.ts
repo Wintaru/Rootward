@@ -310,6 +310,45 @@ Deno.test("an empty tree still produces a valid file", async () => {
   assertEquals(reread.persons.length, 0);
 });
 
+Deno.test("the demo GEDCOM (docs/reference/demo-tree.ged) round-trips", async () => {
+  // The shipped demo file (issue #38) — a multi-generation family with a
+  // first-cousin marriage (pedigree collapse), sources, a media ref, and
+  // varied date forms. Import it, export it, re-import: the record set must be
+  // unchanged and the file must re-read without warnings.
+  const demo = Deno.readTextFileSync(
+    new URL("../../../docs/reference/demo-tree.ged", import.meta.url),
+  );
+
+  const first = await importToTree(demo);
+  const gw = new FakeExportGateway({ tree: first });
+  const outcome = await runExport({
+    jobId: JOB_ID,
+    gateway: gw,
+    now: FIXED_NOW,
+  });
+  assertEquals(outcome.status, "completed");
+
+  const reread = readGedcom(gw.onlyUpload);
+  assertEquals(reread.warnings, []);
+  assertEquals(reread.version, "5.5.1");
+
+  const second = await importToTree(gw.onlyUpload);
+  assertEquals(second.persons.length, first.persons.length);
+  assertEquals(second.families.length, first.families.length);
+  assertEquals(second.events.length, first.events.length);
+  assertEquals(second.familyChildren.length, first.familyChildren.length);
+  assertEquals(second.sources.length, first.sources.length);
+  assertEquals(second.repositories.length, first.repositories.length);
+
+  // 11 individuals, 5 families; the repeated ancestor (@I1@) still appears once.
+  assertEquals(reread.persons.length, 11);
+  assertEquals(reread.families.length, 5);
+  assertEquals(
+    reread.persons.filter((p) => p.gedcom_xref === "@I1@").length,
+    1,
+  );
+});
+
 Deno.test("a non-manual_gedcom job fails without writing a file", async () => {
   const gw = new FakeExportGateway({ type: "manual_full" });
   const outcome = await runExport({
