@@ -11,8 +11,8 @@ the relevant `docs/SPEC.md` section.
 branches were already merged and deleted, issues now closed. #17 merged
 (`d6ee22f`). **#38 (Phase 8 seed data) pulled forward** — it blocks #18's
 `pg_trgm` threshold tuning and #21's pedigree-collapse work, so it was built
-out of phase order. #38 merged (`31e4bf3`). #17 merged (`d6ee22f`). #18 done,
-staged on `feat/onboarding-match` — see below. #19 / #20 next.
+out of phase order. #38 merged (`31e4bf3`). #18 merged (`3bb3215`). #19 done,
+staged on `feat/onboarding-ui` — see below. #20 next.
 **Planning:** complete. 35 decisions in `docs/WAYFINDER.md`, full build spec in
 `docs/SPEC.md`. No open questions that block starting.
 **Issues:** created. 46 GitHub issues on `Wintaru/Rootward` — items 1–40 from
@@ -428,38 +428,58 @@ functions serve` run — joins the deferred integration pass. Migration applied
 with `supabase migration up`; `seed.sql` loaded by hand to tune (shared stack
 not reset).
 
+**Issue #19 — `/onboarding` UI: done, staged on `feat/onboarding-ui`.** The
+self-claim + request-access flow (`docs/SPEC.md` §8.1 / §9.3, §10 item 19).
+New migration `20260831162624_access_request_notify.sql`: `notify_access_requested`,
+a `security definer` `search_path = ''` `AFTER INSERT` trigger on `access_request`
+that raises one `access_requested` notification per account (deduped against an
+open one — SPEC §5, a client cannot INSERT `notification`). It fires for the #18
+attempt-cap path too; that path's own `claim_attempt_cap` notification and this
+`access_requested` row coexist by design. Frontend (mirrors #16's server-guard →
+client-workspace → pure-reducer → hook → `lib/db` shape):
+`app/onboarding/page.tsx` (server — `getCurrentAccount()` + `resolveOnboardingStage`
+in `lib/auth/access.ts`; no session → `/login`, `active` → `/`, `suspended` →
+`<OnboardingSuspended />`, else the workspace + `getAllowSelfSignup`),
+`app/onboarding/OnboardingWorkspace.tsx` (client, exhaustive switch),
+`lib/onboarding/orchestrator.ts` (pure state machine — `identify → searching →
+challenge → verifying → linked | no_match | request_access → requesting →
+requested`; `resolveVerify` folds `already_claimed` / `unknown` to `no_match`,
+`rate_limited` is terminal), `lib/onboarding/useOnboarding.ts` (container hook —
+the `onboarding-match` calls + `access_request` insert + `router.replace("/")`
+on link), `lib/db/onboarding.ts` (`searchOnboardingMatch` / `verifyOnboardingMatch`
+/ `submitAccessRequest` + `challengeLabel` fallback map). Challenges the top
+candidate only (see `DECISIONS.md` — the multi-candidate collision routes to a
+moderator). New tests: `supabase/tests/access_request_notify_test.sql` (9 pgTAP:
+security-definer, trigger wired, payload, dedup, per-account independence),
+`apps/web/lib/onboarding/orchestrator.test.ts` (21), `lib/db/onboarding-parity.test.ts`
+(2 — reads `matcher.ts`, guards the challenge-key + verify-status copies),
+`lib/auth/access.test.ts` (+5). `rls_test.sql` fixture reordered (pre-seed the
+notification before the `access_request` insert so the trigger dedups). Full pnpm
+gate (212) + deno gate (38) + `supabase db lint` + `supabase test db` (**196**)
+green. Code review: 4 fixes applied (birth-year range check, forms stay mounted
+while submitting, `restart` from the request form, dropped unused `isTerminal`) —
+see `DECISIONS.md`. **Not done:** the live `supabase functions serve` +
+signed-in-browser integration pass (still deferred, now covers `/onboarding` too).
+
 ## Next action
 
-**Phase 3, issue #19 — `/onboarding` UI** (`docs/SPEC.md` §8.1 / §9.3, §10 item
-19): the claim flow (name + birth → `onboarding-match` `search` → challenge form
-→ `verify`) plus the request-access form. Then #20 (invite flow + `/moderation`
-stub).
+**Phase 3, issue #20 — Invite flow + `/moderation` stub** (`docs/SPEC.md` §9.2,
+§10 item 20): the moderator "Invite to claim" action on a person record (writes
+`invitation` + sends a Supabase Auth invite), the acceptance handler that links
+`account.person_id = invitation.person_id` / `status = active` / `role =
+invitation.role`, and a `/moderation` route stub. Then Phase 4 (the tree view,
+#21–#24).
 
-- **#19 owns two things #18 deliberately left out** (see `DECISIONS.md` /
-  SPEC §7 last bullet): the request-access form (the user submits a message;
-  `access_request` INSERT is allowed by RLS for the caller's own pending row),
-  and an **insert trigger on `access_request`** that raises the
-  `access_requested` notification (SPEC §5 names this path; a client cannot
-  INSERT `notification`). A plain `no_match` / `already_claimed` from `verify`
-  routes the UI to that form.
-- `onboarding-match` contract: `POST` `{ action, givenName, surname, birthYear,
-birthMonth? }` for search; add `personId` + `answers: { <challenge>: string }`
-  for verify. Every business outcome is HTTP 200 with a `status` — switch on it.
-  Call it with the pending user's JWT (`supabase.functions.invoke`).
-- Challenge labels for the form: `spouse_first_name` → "A spouse's first name",
-  `parent_first_name` → "A parent's first name", `birth_place` → "Place of
-  birth", `birth_day` → "Day of the month you were born".
+Still pending across #14–#19: a deployed-function run (`supabase functions
+serve`) plus a real signed-in browser session driving `/login` → `/import` →
+`/onboarding` end to end. Do this as a dedicated integration pass, and restart
+the local stack first so the `config.toml` Google + redirect-URL change loads.
 
-Still pending across #14–#18: a deployed-function run (`supabase functions
-serve`) plus a real signed-in browser session driving `/login` → `/import` (and
-now `/onboarding`) end to end. Do this as a dedicated integration pass, and
-restart the local stack first so the `config.toml` Google + redirect-URL change
-loads.
-
-**Shared local stack:** the #18 migration was applied additively with `supabase
-migration up` and `seed.sql` was loaded by hand. A session that runs `supabase
-db reset` needs `feat/onboarding-match` merged first (or it loses `pg_trgm` +
-the search function).
+**Shared local stack:** migrations through `20260831162624` were applied
+additively with `supabase migration up`; `seed.sql` was loaded by hand for #18.
+A session that runs `supabase db reset` needs `feat/onboarding-match` and
+`feat/onboarding-ui` merged first (or it loses `pg_trgm`, the search function,
+and the `access_requested` trigger).
 
 `gh issue list --label ready` is the queue. Take the lowest-numbered `ready`
 issue unless this file says otherwise. When an issue merges, label the issues it
@@ -467,32 +487,33 @@ unblocks `ready`.
 
 ## Log
 
-| Date       | Session did                                                                                                                                                                                                                                                                                                                                                                                                                           | Result                                  |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
-| 2026-08-30 | Wayfinder planning — all decisions settled                                                                                                                                                                                                                                                                                                                                                                                            | `docs/WAYFINDER.md` (1–33)              |
-| 2026-08-30 | Wrote the build spec                                                                                                                                                                                                                                                                                                                                                                                                                  | `docs/SPEC.md`                          |
-| 2026-08-30 | Repo init, MIT license, project meta, resume protocol                                                                                                                                                                                                                                                                                                                                                                                 | `chore/scaffold`                        |
-| 2026-08-30 | Spec review + fixes; settled frontend stack and public-access questions                                                                                                                                                                                                                                                                                                                                                               | `docs/WAYFINDER.md` (34–35)             |
-| 2026-08-30 | Created the 46-issue set from `docs/SPEC.md` §10 — milestones, labels, dependencies                                                                                                                                                                                                                                                                                                                                                   | GitHub issues #1–#46                    |
-| 2026-08-30 | Issue #1 — scaffolded the pnpm monorepo; verify gate green                                                                                                                                                                                                                                                                                                                                                                            | `chore/scaffold-monorepo`               |
-| 2026-08-30 | Issue #2 — local Supabase dev stack, `pnpm dev` / `dev:status`, `.env.example`                                                                                                                                                                                                                                                                                                                                                        | `chore/local-supabase-dev-stack`        |
-| 2026-08-30 | Issue #3 — GitHub Actions CI (`verify` + `migrations` jobs); build kept out of CI                                                                                                                                                                                                                                                                                                                                                     | `chore/ci-pipeline`                     |
-| 2026-08-30 | Issue #4 — first migration: 6 enums + `person`/`person_name`/`family`/`family_child`                                                                                                                                                                                                                                                                                                                                                  | `feat/migration-core-genealogy`         |
-| 2026-08-30 | Issue #5 — migration: `event`/`fact`/`place` + flat `date_*` set + sort-key trigger                                                                                                                                                                                                                                                                                                                                                   | `feat/migration-events-facts-places`    |
-| 2026-08-30 | Issue #6 — migration: `source`/`repository`/`citation`/`media`/`media_link`/`note`                                                                                                                                                                                                                                                                                                                                                    | `feat/migration-sources-media-notes`    |
-| 2026-08-30 | Issue #7 — migration: `account`/`tree_settings`/`audit_log` + `updated_at` + audit triggers                                                                                                                                                                                                                                                                                                                                           | `feat/migration-account-settings-audit` |
-| 2026-08-30 | Issue #8 — migration: `invitation`/`access_request`/`claim_attempt`/`notification`/`notification_read`/`import_job`/`export_job`                                                                                                                                                                                                                                                                                                      | `feat/migration-onboarding-jobs`        |
-| 2026-08-30 | Issue #9 — RLS: 12 `security definer` helpers, policies on all 23 tables, pgTAP allow/deny harness, `supabase test db` in CI                                                                                                                                                                                                                                                                                                          | `feat/rls-policies`                     |
-| 2026-08-30 | Issue #10 — `get_neighborhood` SQL function + `pnpm gen:types` + `lib/db` typed layer + `lib/supabase` clients + pgTAP + CI drift check                                                                                                                                                                                                                                                                                               | `feat/db-typed-query-layer`             |
-| 2026-08-30 | Issue #11 — `packages/shared` genealogy-date parser + formatter (5.5.1 + 7.0 calendars, dual dating, phrase fallback), 79 vitest tests                                                                                                                                                                                                                                                                                                | `feat/genealogy-date-module`            |
-| 2026-08-30 | Issue #12 — `packages/gedcom` reader: `nodes.ts` line grammar + `mapping.ts` tag tables + `readGedcom` (5.5.1 + 7.0, xref links, `raw_gedcom`), 29 vitest tests                                                                                                                                                                                                                                                                       | `feat/gedcom-reader`                    |
-| 2026-08-30 | Issue #13 — `packages/gedcom` writer: `writeGedcom` + reverse enum tables in `mapping.ts`, header/xref/raw preserved, `version` option, 26 round-trip vitest tests                                                                                                                                                                                                                                                                    | `feat/gedcom-writer`                    |
-| 2026-08-30 | Issue #14 — `gedcom-import` edge function: Deno-native `supabase/functions/` + `deno.json`/`deno.lock` + CI `functions` job; resumable `initial`-mode importer (deterministic UUIDv5, cursor phases), 11 Deno tests, schema-validated in a rollback txn                                                                                                                                                                               | `feat/gedcom-import`                    |
-| 2026-08-30 | Issue #15 — `gedcom-export` edge function: private `exports` bucket migration + pgTAP, `exporter.ts` DB→`GedcomReadResult` rebuild (xref reuse/synthesis, synth HEAD), engine/shell split, 6 Deno tests via the real #14 engine, live-stack verified                                                                                                                                                                                  | `feat/gedcom-export`                    |
-| 2026-08-30 | Issue #16 — `/import` UI: `imports` bucket migration + pgTAP, moderator-guarded route, upload → `gedcom-import` invoke → stall-driven resume poll, pure reducer + first `apps/web` vitest harness, 24 tests                                                                                                                                                                                                                           | `feat/import-ui`                        |
-| 2026-08-31 | Reconciled #15/#16 (already merged `dddefba`/`cfc0388`, issues closed). Issue #17 — Supabase Auth: `on_auth_user_created` trigger, `/login` + magic-link/Google, Next 16 `proxy.ts` session gate, `/auth/callback` + web-tier ADMIN_EMAIL bootstrap, §8.1 `/` router, pgTAP + 13 vitest tests                                                                                                                                         | `feat/auth-supabase`                    |
-| 2026-08-31 | Issue #38 (pulled forward from Phase 8, blocks #18/#21) — `supabase/seed.sql` demo admin + 28-person Ashby tree w/ pedigree collapse; `docs/reference/demo-tree.ged` Marsh family; `seed_smoke_test.sql` (12); `rls_test.sql` truncate-first for seed independence; `exporter.test.ts` demo round-trip. `supabase test db` 174, gates green.                                                                                          | `feat/seed-demo-data`                   |
-| 2026-08-31 | Issue #18 — `onboarding-match` edge function: `20260831154954` migration (`pg_trgm` + trigram GIN indexes + `onboarding_match_search` `security definer` SQL fn, threshold 0.3 tuned vs seed); Deno engine/gateway/shell (`search` → candidates + challenge keys, `verify` → link/no_match/already_claimed/already_linked/rate_limited); 18 engine tests + 13 pgTAP + drift guard. pnpm 184 / deno 36 / `supabase test db` 187 green. | `feat/onboarding-match`                 |
+| Date       | Session did                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | Result                                  |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| 2026-08-30 | Wayfinder planning — all decisions settled                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | `docs/WAYFINDER.md` (1–33)              |
+| 2026-08-30 | Wrote the build spec                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | `docs/SPEC.md`                          |
+| 2026-08-30 | Repo init, MIT license, project meta, resume protocol                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | `chore/scaffold`                        |
+| 2026-08-30 | Spec review + fixes; settled frontend stack and public-access questions                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | `docs/WAYFINDER.md` (34–35)             |
+| 2026-08-30 | Created the 46-issue set from `docs/SPEC.md` §10 — milestones, labels, dependencies                                                                                                                                                                                                                                                                                                                                                                                                                                                               | GitHub issues #1–#46                    |
+| 2026-08-30 | Issue #1 — scaffolded the pnpm monorepo; verify gate green                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | `chore/scaffold-monorepo`               |
+| 2026-08-30 | Issue #2 — local Supabase dev stack, `pnpm dev` / `dev:status`, `.env.example`                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | `chore/local-supabase-dev-stack`        |
+| 2026-08-30 | Issue #3 — GitHub Actions CI (`verify` + `migrations` jobs); build kept out of CI                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | `chore/ci-pipeline`                     |
+| 2026-08-30 | Issue #4 — first migration: 6 enums + `person`/`person_name`/`family`/`family_child`                                                                                                                                                                                                                                                                                                                                                                                                                                                              | `feat/migration-core-genealogy`         |
+| 2026-08-30 | Issue #5 — migration: `event`/`fact`/`place` + flat `date_*` set + sort-key trigger                                                                                                                                                                                                                                                                                                                                                                                                                                                               | `feat/migration-events-facts-places`    |
+| 2026-08-30 | Issue #6 — migration: `source`/`repository`/`citation`/`media`/`media_link`/`note`                                                                                                                                                                                                                                                                                                                                                                                                                                                                | `feat/migration-sources-media-notes`    |
+| 2026-08-30 | Issue #7 — migration: `account`/`tree_settings`/`audit_log` + `updated_at` + audit triggers                                                                                                                                                                                                                                                                                                                                                                                                                                                       | `feat/migration-account-settings-audit` |
+| 2026-08-30 | Issue #8 — migration: `invitation`/`access_request`/`claim_attempt`/`notification`/`notification_read`/`import_job`/`export_job`                                                                                                                                                                                                                                                                                                                                                                                                                  | `feat/migration-onboarding-jobs`        |
+| 2026-08-30 | Issue #9 — RLS: 12 `security definer` helpers, policies on all 23 tables, pgTAP allow/deny harness, `supabase test db` in CI                                                                                                                                                                                                                                                                                                                                                                                                                      | `feat/rls-policies`                     |
+| 2026-08-30 | Issue #10 — `get_neighborhood` SQL function + `pnpm gen:types` + `lib/db` typed layer + `lib/supabase` clients + pgTAP + CI drift check                                                                                                                                                                                                                                                                                                                                                                                                           | `feat/db-typed-query-layer`             |
+| 2026-08-30 | Issue #11 — `packages/shared` genealogy-date parser + formatter (5.5.1 + 7.0 calendars, dual dating, phrase fallback), 79 vitest tests                                                                                                                                                                                                                                                                                                                                                                                                            | `feat/genealogy-date-module`            |
+| 2026-08-30 | Issue #12 — `packages/gedcom` reader: `nodes.ts` line grammar + `mapping.ts` tag tables + `readGedcom` (5.5.1 + 7.0, xref links, `raw_gedcom`), 29 vitest tests                                                                                                                                                                                                                                                                                                                                                                                   | `feat/gedcom-reader`                    |
+| 2026-08-30 | Issue #13 — `packages/gedcom` writer: `writeGedcom` + reverse enum tables in `mapping.ts`, header/xref/raw preserved, `version` option, 26 round-trip vitest tests                                                                                                                                                                                                                                                                                                                                                                                | `feat/gedcom-writer`                    |
+| 2026-08-30 | Issue #14 — `gedcom-import` edge function: Deno-native `supabase/functions/` + `deno.json`/`deno.lock` + CI `functions` job; resumable `initial`-mode importer (deterministic UUIDv5, cursor phases), 11 Deno tests, schema-validated in a rollback txn                                                                                                                                                                                                                                                                                           | `feat/gedcom-import`                    |
+| 2026-08-30 | Issue #15 — `gedcom-export` edge function: private `exports` bucket migration + pgTAP, `exporter.ts` DB→`GedcomReadResult` rebuild (xref reuse/synthesis, synth HEAD), engine/shell split, 6 Deno tests via the real #14 engine, live-stack verified                                                                                                                                                                                                                                                                                              | `feat/gedcom-export`                    |
+| 2026-08-30 | Issue #16 — `/import` UI: `imports` bucket migration + pgTAP, moderator-guarded route, upload → `gedcom-import` invoke → stall-driven resume poll, pure reducer + first `apps/web` vitest harness, 24 tests                                                                                                                                                                                                                                                                                                                                       | `feat/import-ui`                        |
+| 2026-08-31 | Reconciled #15/#16 (already merged `dddefba`/`cfc0388`, issues closed). Issue #17 — Supabase Auth: `on_auth_user_created` trigger, `/login` + magic-link/Google, Next 16 `proxy.ts` session gate, `/auth/callback` + web-tier ADMIN_EMAIL bootstrap, §8.1 `/` router, pgTAP + 13 vitest tests                                                                                                                                                                                                                                                     | `feat/auth-supabase`                    |
+| 2026-08-31 | Issue #38 (pulled forward from Phase 8, blocks #18/#21) — `supabase/seed.sql` demo admin + 28-person Ashby tree w/ pedigree collapse; `docs/reference/demo-tree.ged` Marsh family; `seed_smoke_test.sql` (12); `rls_test.sql` truncate-first for seed independence; `exporter.test.ts` demo round-trip. `supabase test db` 174, gates green.                                                                                                                                                                                                      | `feat/seed-demo-data`                   |
+| 2026-08-31 | Issue #18 — `onboarding-match` edge function: `20260831154954` migration (`pg_trgm` + trigram GIN indexes + `onboarding_match_search` `security definer` SQL fn, threshold 0.3 tuned vs seed); Deno engine/gateway/shell (`search` → candidates + challenge keys, `verify` → link/no_match/already_claimed/already_linked/rate_limited); 18 engine tests + 13 pgTAP + drift guard. pnpm 184 / deno 36 / `supabase test db` 187 green.                                                                                                             | `feat/onboarding-match`                 |
+| 2026-08-31 | Issue #19 — `/onboarding` UI: `20260831162624` migration (`notify_access_requested` `security definer` AFTER INSERT trigger on `access_request` → deduped `access_requested` notification); server-guard page → `OnboardingWorkspace` → pure `orchestrator.ts` reducer → `useOnboarding` hook → `lib/db/onboarding.ts` (`search`/`verify`/`submitAccessRequest`); challenges top candidate only; 9 pgTAP + 23 vitest + parity guard; `rls_test.sql` fixture reordered. pnpm 212 / deno 38 / `supabase test db` 196 green. 4 review fixes applied. | `feat/onboarding-ui`                    |
 
 ## Notes for the next session
 
@@ -633,10 +654,23 @@ gedcom-export/`.
   `verify` writes exactly one `claim_attempt` **except** the `rate_limited`
   refusal (writes none — so a retry loop can't roll the 24h window). The
   `SEARCH_THRESHOLD` / `p_threshold` default is `0.3`, tuned against the seed —
-  `DECISIONS.md` has the score table. **#19 still owes:** the request-access form
-  and an insert trigger on `access_request` → `access_requested` notification
-  (SPEC §5 / §7 last bullet); `onboarding-match` only auto-writes an
-  `access_request` on the attempt cap.
+  `DECISIONS.md` has the score table.
+- **`/onboarding` (#19)** is `apps/web/app/onboarding/` + `lib/onboarding/`
+  (`orchestrator.ts` pure reducer, `useOnboarding.ts` hook) + `lib/db/onboarding.ts`
+  (`searchOnboardingMatch` / `verifyOnboardingMatch` / `submitAccessRequest`;
+  `challengeLabel` has a fallback so a new server challenge key does not break the
+  form). `resolveOnboardingStage` in `lib/auth/access.ts` gates the page. The
+  flow challenges `candidates[0]` only (multi-candidate collision → request-access
+  → moderator; see `DECISIONS.md`). Challenge keys + verify statuses are restated
+  from `matcher.ts` — `lib/db/onboarding-parity.test.ts` reads that file and
+  guards the copies. **#19 closed the #18 owe:** migration `20260831162624`'s
+  `notify_access_requested` trigger (`security definer`, `AFTER INSERT` on
+  `access_request`, deduped per account) raises the `access_requested`
+  notification. It fires for the #18 attempt-cap path too — that path's own
+  `claim_attempt_cap` notification and the `access_requested` row coexist by
+  design. Any new pgTAP suite that inserts an `access_request` now also gets a
+  `notification` row — `rls_test.sql` pre-seeds the notification first so the
+  trigger's dedup keeps its counts stable.
 - **Deferred from #12's review — enum-parity guard.**
   `packages/gedcom/src/types.ts` hand-copies the seven Postgres enums
   (`event_type`, `fact_type`, `sex`, `name_type`, `partner_role`, `union_type`,

@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { type AccountAccess, isActiveModerator } from "./access";
+import {
+  type AccountAccess,
+  isActiveModerator,
+  resolveOnboardingStage,
+} from "./access";
 
 describe("isActiveModerator", () => {
   const cases: ReadonlyArray<{
@@ -39,6 +43,42 @@ describe("isActiveModerator", () => {
   for (const { account, expected, why } of cases) {
     it(`${expected ? "allows" : "denies"} ${why}`, () => {
       expect(isActiveModerator(account)).toBe(expected);
+    });
+  }
+});
+
+describe("resolveOnboardingStage", () => {
+  const cases: ReadonlyArray<{
+    account: AccountAccess | null;
+    kind: "onboard" | "approved" | "suspended";
+    why: string;
+  }> = [
+    { account: null, kind: "onboard", why: "row not created yet" },
+    {
+      account: { role: "viewer", status: "pending" },
+      kind: "onboard",
+      why: "signed in, not approved",
+    },
+    {
+      account: { role: "viewer", status: "active" },
+      kind: "approved",
+      why: "approved member",
+    },
+    {
+      account: { role: "moderator", status: "active" },
+      kind: "approved",
+      why: "active moderator",
+    },
+    {
+      account: { role: "viewer", status: "suspended" },
+      kind: "suspended",
+      why: "suspended account",
+    },
+  ];
+
+  for (const { account, kind, why } of cases) {
+    it(`${why} → ${kind}`, () => {
+      expect(resolveOnboardingStage(account).kind).toBe(kind);
     });
   }
 });

@@ -26,3 +26,22 @@ export async function getDefaultRootPersonId(
   }
   return data?.default_root_person_id ?? null;
 }
+
+/**
+ * Whether the self-claim path is offered on `/onboarding` (SPEC §9.3,
+ * decision 12). `false` on an invite-only tree — the claim flow is hidden and
+ * only the request-access form shows. Defaults to `true` if the row is somehow
+ * missing, matching the column default.
+ */
+export async function getAllowSelfSignup(client: Db): Promise<boolean> {
+  const { data, error } = await client
+    .from("tree_settings")
+    .select("allow_self_signup")
+    .eq("id", TREE_SETTINGS_ID)
+    .maybeSingle();
+
+  if (error !== null) {
+    throw new Error(`getAllowSelfSignup: ${error.message}`);
+  }
+  return data?.allow_self_signup ?? true;
+}

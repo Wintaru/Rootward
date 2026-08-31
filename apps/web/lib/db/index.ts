@@ -8,7 +8,8 @@ export type { Database, Json } from "./database.types";
 export { Constants } from "./database.types";
 export * from "./types";
 export * from "./import-jobs";
-export { getDefaultRootPersonId } from "./tree-settings";
+export * from "./onboarding";
+export { getAllowSelfSignup, getDefaultRootPersonId } from "./tree-settings";
 export {
   DEFAULT_GENERATIONS_DOWN,
   DEFAULT_GENERATIONS_UP,

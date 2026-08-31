@@ -41,3 +41,26 @@ export type ImportAccess =
   | { readonly kind: "unauthenticated" }
   | { readonly kind: "forbidden" }
   | { readonly kind: "allowed"; readonly userId: string };
+
+/**
+ * What `/onboarding` should do for a signed-in visitor (SPEC §8.1 / §9.3).
+ * `onboard` covers both a `pending` account and the brief window before the
+ * `on_auth_user_created` trigger's row is readable — treat a missing row as
+ * not-yet-approved rather than an error.
+ */
+export type OnboardingStage =
+  | { readonly kind: "onboard" }
+  | { readonly kind: "approved" }
+  | { readonly kind: "suspended" };
+
+export function resolveOnboardingStage(
+  account: AccountAccess | null,
+): OnboardingStage {
+  if (account === null || account.status === "pending") {
+    return { kind: "onboard" };
+  }
+  if (account.status === "suspended") {
+    return { kind: "suspended" };
+  }
+  return { kind: "approved" };
+}
