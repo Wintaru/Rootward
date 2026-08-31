@@ -11,10 +11,16 @@ export default defineConfig({
       "@rootward/shared": fileURLToPath(
         new URL("./packages/shared/src/index.ts", import.meta.url),
       ),
+      // `apps/web` path alias (mirrors its tsconfig `paths`). Trailing slash so
+      // it never swallows `@rootward/*` or `@supabase/*`.
+      "@/": fileURLToPath(new URL("./apps/web/", import.meta.url)),
     },
   },
   test: {
-    include: ["packages/*/src/**/*.{test,spec}.ts"],
+    include: [
+      "packages/*/src/**/*.{test,spec}.ts",
+      "apps/web/**/*.{test,spec}.ts",
+    ],
     passWithNoTests: true,
   },
 });

@@ -5,10 +5,11 @@ the relevant `docs/SPEC.md` section.
 
 ## Current state
 
-**Phase:** 2 — GEDCOM (in progress). Phase 0 complete (#1–#3), Phase 1 complete
+**Phase:** 2 — GEDCOM (finishing). Phase 0 complete (#1–#3), Phase 1 complete
 (#4–#10 merged). #11–#14 merged to `main` (#12/#13/#14 landed as commits
 `6a1104f` / `d9fb862` / `a5d6459` — PROGRESS was stale, said "staged"). #15 done,
-staged on `feat/gedcom-export`.
+staged on `feat/gedcom-export`. #16 done, staged on `feat/import-ui` — Phase 2
+closes when #15 and #16 merge.
 **Planning:** complete. 35 decisions in `docs/WAYFINDER.md`, full build spec in
 `docs/SPEC.md`. No open questions that block starting.
 **Issues:** created. 46 GitHub issues on `Wintaru/Rootward` — items 1–40 from
@@ -288,22 +289,42 @@ against the live local stack (real gateway + storage upload + signed URL +
 `export_job` ladder) — see `DECISIONS.md`. Full pnpm + Deno gates green;
 `supabase db lint` + `supabase test db` (148) green.
 
+**Issue #16 — `/import` UI: done, staged on `feat/import-ui`.** The upload →
+progress → result page (`docs/SPEC.md` §8.1, §10 item 16). New migration
+`20260830235147_imports_bucket.sql` — the private `imports` bucket + an
+`is_moderator()` `storage.objects` policy, same shape as the #15 exports bucket
+(#14 assumed it existed); pgTAP `supabase/tests/imports_bucket_test.sql` (6
+allow/deny assertions). First frontend route and first `apps/web` test harness:
+`apps/web/**/*.{test,spec}.ts` folded into the root `vitest.config.ts` with a
+`@/` alias, `vitest` added to `apps/web` devDeps. Layers:
+`app/import/page.tsx` (server component — `resolveImportAccess()` in
+`lib/auth/require-moderator.ts` does `auth.getUser()` + an `account` role read;
+unauthenticated → `redirect("/login")`, non-moderator → `<ImportForbidden />`),
+`app/import/ImportWorkspace.tsx` (client, exhaustive switch on the flow state),
+`lib/import/useGedcomImport.ts` (the container hook — create job, upload to
+`imports/<jobId>.ged`, invoke `gedcom-import` with the moderator JWT, then poll),
+`lib/import/orchestrator.ts` (pure reducer + `isStalled()` — no timers, no
+client), `lib/db/import-jobs.ts` (typed queries, decision 10). Resume: the hook
+re-invokes the function when `processed_records` stalls past `STALL_MS` (30s);
+the engine picks up from `import_job.cursor`. 24 vitest tests (reducer, progress,
+access predicate, a scripted timeout-then-resume-to-completion run). No auth
+scaffolding pulled forward from #17 — no middleware, `/login` still 404s. Full
+pnpm + Deno gates green; `supabase db lint` + `supabase test db` (154) green on
+the shared local stack (`supabase migration up`, additive). See `DECISIONS.md`.
+
 ## Next action
 
-Phase 2, issue **#16 — `/import` UI** (`docs/SPEC.md` §8, §10 item 16), needs
-#14. Upload a GEDCOM to the `imports` bucket, call `gedcom-import`, poll the
-`import_job` for progress, show the result. Note: no migration creates the
-`imports` bucket yet (#14 assumed it) — add one alongside this issue, same shape
-as `20260830231234_exports_bucket.sql`.
+**Phase 3 — Auth & onboarding.** Issue **#17 — Supabase Auth** (`docs/SPEC.md`
+§9.1, §10 item 17): magic link + Google, `/login`, session middleware, the
+`account`-creation trigger on `auth.users` + `ADMIN_EMAIL` bootstrap. This
+unblocks a real browser test of `/import` (#16) and everything after.
 
-A real deployed-function run (`supabase functions serve`) of both
-`gedcom-import` and `gedcom-export` is still pending — fold it into #16 or a
-dedicated integration test once dev-stack ownership is clean (15+ sessions were
-sharing the local Supabase this session).
+Still pending across #14–#16: a deployed-function run (`supabase functions
+serve`) plus a real signed-in browser session driving `/import` end to end —
+needs #17's `/login`. Fold it into #17 or a dedicated integration pass.
 
-Bookkeeping done this session: closed #14 (work was already merged as `a5d6459`,
-issue left open); labelled #16 `ready`. #15 stays open until
-`feat/gedcom-export` merges.
+Bookkeeping this session: #16 stays open until `feat/import-ui` merges; label
+#17 `ready` (and #18) once #16 lands if not already.
 
 `gh issue list --label ready` is the queue. Take the lowest-numbered `ready`
 issue unless this file says otherwise. When an issue merges, label the issues it
@@ -333,6 +354,7 @@ unblocks `ready`.
 | 2026-08-30 | Issue #13 — `packages/gedcom` writer: `writeGedcom` + reverse enum tables in `mapping.ts`, header/xref/raw preserved, `version` option, 26 round-trip vitest tests                                                                                      | `feat/gedcom-writer`                    |
 | 2026-08-30 | Issue #14 — `gedcom-import` edge function: Deno-native `supabase/functions/` + `deno.json`/`deno.lock` + CI `functions` job; resumable `initial`-mode importer (deterministic UUIDv5, cursor phases), 11 Deno tests, schema-validated in a rollback txn | `feat/gedcom-import`                    |
 | 2026-08-30 | Issue #15 — `gedcom-export` edge function: private `exports` bucket migration + pgTAP, `exporter.ts` DB→`GedcomReadResult` rebuild (xref reuse/synthesis, synth HEAD), engine/shell split, 6 Deno tests via the real #14 engine, live-stack verified    | `feat/gedcom-export`                    |
+| 2026-08-30 | Issue #16 — `/import` UI: `imports` bucket migration + pgTAP, moderator-guarded route, upload → `gedcom-import` invoke → stall-driven resume poll, pure reducer + first `apps/web` vitest harness, 24 tests                                             | `feat/import-ui`                        |
 
 ## Notes for the next session
 
@@ -341,11 +363,30 @@ unblocks `ready`.
   `Depends on:` issue numbers and a `### Done when` checklist.
 - Issue numbers match `docs/SPEC.md` §10 item numbers for 1–40. Issues 41–46 are
   the Post-MVP bullets.
-- #1–#14 are merged to `main`; #15's work is on `feat/gedcom-export` (issue open
-  until it merges). Later issues get `ready` as their dependencies close — do
-  this when you finish an issue.
-- Phase 1 is complete (#4–#10 merged). Phase 2 (GEDCOM) is in progress: #11–#15
-  done, then #16 (import UI) closes the phase.
+- #1–#14 are merged to `main`; #15's work is on `feat/gedcom-export` and #16's on
+  `feat/import-ui` (both issues open until they merge). Later issues get `ready`
+  as their dependencies close — do this when you finish an issue.
+- Phase 1 is complete (#4–#10 merged). Phase 2 (GEDCOM): #11–#16 done; the phase
+  closes when #15 and #16 merge. Phase 3 (auth) starts at #17.
+- **Frontend (#16 is the first route).** `apps/web` now has tests: the root
+  `pnpm test` (`vitest.config.ts`) globs `apps/web/**/*.{test,spec}.ts` with a
+  `@/` alias (trailing slash — must not swallow `@rootward/*` / `@supabase/*`);
+  `vitest` is an `apps/web` devDep so `tsc` / eslint resolve it. Node env only —
+  no jsdom yet; add a vitest project when a component needs rendering tests.
+  Pattern: server component guards access, a client `use*` hook is the container
+  (effects + queries), a pure reducer holds the state machine, `lib/db/*`
+  holds every query (decision 10). `/import` = `app/import/` +
+  `lib/import/{orchestrator,useGedcomImport}.ts` + `lib/db/import-jobs.ts` +
+  `lib/auth/{access,require-moderator}.ts`.
+- **Auth is not built yet (#17).** `resolveImportAccess()` reads
+  `auth.getUser()` + `account.role`; there is no session middleware and `/login`
+  404s. `/import` redirects there anyway for an unauthenticated visitor
+  (decision 35). #17 adds middleware, `/login`, and the `account`-creation
+  trigger — until then no route can be exercised in a real browser.
+- The `imports` bucket + its `is_moderator()` `storage.objects` policy live in
+  migration `20260830235147` (mirror of the #15 `exports` bucket). Both were
+  applied to the shared local stack with `supabase migration up` (additive) —
+  a session that runs `supabase db reset` needs this branch merged first.
 - The genealogy-date module (#11) lives in `packages/shared`
   (`parseGenealogyDate` / `formatGenealogyDate`, exported from the package root).
   `packages/gedcom` parses every `DATE` through it — do not re-implement date
