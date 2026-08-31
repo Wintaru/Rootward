@@ -4,9 +4,12 @@ import { useId, useReducer, useState } from "react";
 
 import { saveEvents } from "@/app/person/[personId]/edit/actions";
 import { Constants } from "@/lib/db";
+import type { RowConflict } from "@/lib/db/conflict";
 import type { EventEditRow } from "@/lib/db/event-edit";
 import type { EventType } from "@/lib/db/types";
+import type { ConflictResolution } from "@/lib/edit/conflict";
 import {
+  describeEventConflicts,
   diffEvents,
   eventsFromLoaded,
   eventsReducer,
@@ -14,9 +17,11 @@ import {
   reconcileEventsAfterSave,
   type EventDraft,
   type EventFieldKey,
+  type EventsDiff,
 } from "@/lib/edit/events";
 import { enumTokenLabel } from "@/lib/person/labels";
 
+import { ConflictDialog } from "./ConflictDialog";
 import { DateInput } from "./DateInput";
 import { Field, inputClass, SaveBar } from "./form";
 import { PlaceInput } from "./PlaceInput";
@@ -29,6 +34,15 @@ import { PlaceInput } from "./PlaceInput";
  * loaded at (WAYFINDER decision 26). The list re-sorts by `sort_key` after a
  * save — that column is server-trigger-computed, not client-ordered, so
  * there is no manual reorder control here (unlike Additional Names).
+ *
+ * A conflicted row surfaces through the shared `ConflictDialog` (#31): "keep
+ * mine" re-sends that one row's original patch against the row's fresh
+ * `updated_at` (`conflictState.diff` keeps the full original diff around for
+ * exactly this — a later "keep mine" click still needs the patch for a row
+ * that has not been retried yet); "take theirs" discards the local edit.
+ * Both paths reuse `performSave` with a diff scoped to just that one row —
+ * `reconcileEventsAfterSave` only ever touches rows present in the result it
+ * is given, so every other row's local state is untouched either way.
  */
 export function EventsSection({
   personId,
@@ -43,6 +57,10 @@ export function EventsSection({
     "idle" | "saving" | "saved" | "conflict" | "error"
   >("idle");
   const [error, setError] = useState<string | null>(null);
+  const [conflictState, setConflictState] = useState<{
+    readonly diff: EventsDiff;
+    readonly conflicts: readonly RowConflict<EventEditRow>[];
+  } | null>(null);
 
   const diff = diffEvents(baseline, rows);
   const dirty = !isEventsDiffEmpty(diff);
@@ -68,14 +86,11 @@ export function EventsSection({
     setStatus("idle");
   }
 
-  async function save() {
-    if (!dirty || status === "saving") {
-      return;
-    }
+  async function performSave(diffToSend: EventsDiff) {
     setStatus("saving");
     setError(null);
     try {
-      const outcome = await saveEvents({ personId, ...diff });
+      const outcome = await saveEvents({ personId, ...diffToSend });
       if (outcome.status !== "saved") {
         setError(outcome.message);
         setStatus("error");
@@ -88,18 +103,122 @@ export function EventsSection({
       );
       setBaseline(reconciled.baseline);
       // Safe wholesale replace — every control is disabled while
-      // `status === "saving"`, so `rows` cannot have changed since `diff`
-      // was computed above.
+      // `status === "saving"`, so `rows` cannot have changed since `diffToSend`
+      // was computed.
       dispatch({ type: "reconciled", rows: reconciled.current });
-      setStatus(outcome.result.conflictIds.length > 0 ? "conflict" : "saved");
+
+      const touchedIds = new Set([
+        ...diffToSend.updates.map((update) => update.id),
+        ...diffToSend.deletes.map((del) => del.id),
+      ]);
+      const previousConflicts = conflictState?.conflicts ?? [];
+      const merged = [
+        ...previousConflicts.filter((conflict) => !touchedIds.has(conflict.id)),
+        ...outcome.result.conflicts,
+      ];
+
+      if (merged.length === 0) {
+        setConflictState(null);
+        setStatus("saved");
+      } else {
+        setConflictState({
+          diff: conflictState?.diff ?? diffToSend,
+          conflicts: merged,
+        });
+        setStatus("conflict");
+      }
     } catch {
       setError("Something went wrong. Try again in a moment.");
       setStatus("error");
     }
   }
 
+  async function save() {
+    if (!dirty || status === "saving") {
+      return;
+    }
+    await performSave(diff);
+  }
+
+  function retryKeepMine(id: string) {
+    if (conflictState === null) {
+      return;
+    }
+    const conflict = conflictState.conflicts.find((c) => c.id === id);
+    if (conflict === undefined || conflict.theirs === null) {
+      return;
+    }
+
+    const update = conflictState.diff.updates.find((u) => u.id === id);
+    const del = conflictState.diff.deletes.find((d) => d.id === id);
+    const singleDiff: EventsDiff =
+      update !== undefined
+        ? {
+            inserts: [],
+            updates: [
+              { ...update, expectedUpdatedAt: conflict.theirs.updatedAt },
+            ],
+            deletes: [],
+          }
+        : del !== undefined
+          ? {
+              inserts: [],
+              updates: [],
+              deletes: [
+                { id: del.id, expectedUpdatedAt: conflict.theirs.updatedAt },
+              ],
+            }
+          : { inserts: [], updates: [], deletes: [] };
+
+    void performSave(singleDiff);
+  }
+
+  function resolveConflict(id: string, resolution: ConflictResolution) {
+    // The dialog's own buttons are disabled while saving (belt and braces —
+    // see `ConflictDialog`'s doc comment on the race this closes), but guard
+    // here too since this handler is the actual state-mutating boundary.
+    if (conflictState === null || status === "saving") {
+      return;
+    }
+    const conflict = conflictState.conflicts.find((c) => c.id === id);
+    if (conflict === undefined) {
+      return;
+    }
+
+    if (resolution === "keep-mine") {
+      retryKeepMine(id);
+      return;
+    }
+
+    const nextBaseline =
+      conflict.theirs === null
+        ? baseline.filter((row) => row.id !== id)
+        : [...baseline.filter((row) => row.id !== id), conflict.theirs];
+    setBaseline(nextBaseline);
+    dispatch({ type: "row_reset", id, row: conflict.theirs });
+
+    const remaining = conflictState.conflicts.filter((c) => c.id !== id);
+    setConflictState(
+      remaining.length === 0
+        ? null
+        : { ...conflictState, conflicts: remaining },
+    );
+    if (remaining.length === 0) {
+      setStatus("saved");
+    }
+  }
+
   return (
     <div className="flex flex-col gap-4">
+      <ConflictDialog
+        items={
+          conflictState === null
+            ? []
+            : describeEventConflicts(conflictState.conflicts, rows)
+        }
+        disabled={saving}
+        onResolve={resolveConflict}
+      />
       <ul className="flex flex-col gap-3">
         {rows.map((row) => (
           <EventRow

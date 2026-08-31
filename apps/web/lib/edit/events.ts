@@ -1,5 +1,6 @@
 import { parseGenealogyDate } from "@rootward/shared";
 
+import type { RowConflict } from "@/lib/db/conflict";
 import type {
   EventDeleteInput,
   EventEditRow,
@@ -9,7 +10,9 @@ import type {
 } from "@/lib/db/event-edit";
 import type { GenealogyDateColumns } from "@/lib/db/genealogy-date";
 import type { EventType } from "@/lib/db/types";
+import { eventTypeLabel } from "@/lib/person/labels";
 
+import type { ConflictItem } from "./conflict";
 import { normalizeText } from "./diff";
 
 /**
@@ -66,6 +69,13 @@ export type EventsAction =
        * `additional-names.ts`'s identical action. */
       readonly type: "reconciled";
       readonly rows: readonly EventDraft[];
+    }
+  | {
+      /** Applies a `ConflictDialog` resolution to one row (#31) — see
+       * `notes.ts`'s identical action for the full contract. */
+      readonly type: "row_reset";
+      readonly id: string;
+      readonly row: EventEditRow | null;
     };
 
 export function eventsFromLoaded(
@@ -128,6 +138,20 @@ export function eventsReducer(
 
     case "reconciled":
       return action.rows;
+
+    case "row_reset": {
+      if (action.row === null) {
+        return state.filter((row) => row.id !== action.id);
+      }
+      const restored = eventsFromLoaded([action.row])[0]!;
+      // "Take theirs" on a row this section had locally deleted has no
+      // existing entry to replace — the row must be reinserted, not mapped
+      // over (a `state.map` here would silently no-op and the restore would
+      // never appear).
+      return state.some((row) => row.id === action.id)
+        ? state.map((row) => (row.id === action.id ? restored : row))
+        : [...state, restored];
+    }
 
     default:
       return assertNever(action);
@@ -308,6 +332,77 @@ export function reconcileEventsAfterSave(
   }
 
   return { baseline: nextBaseline, current: [...nextCurrent].sort(bySortKey) };
+}
+
+// --- conflict description -----------------------------------------------
+
+const EVENT_CONFLICT_FIELDS: ReadonlyMap<
+  string,
+  (row: EventEditRow) => string
+> = new Map([
+  ["Type", (row) => eventTypeLabel(row.type, row.typeOther)],
+  ["Date", (row) => row.dateRaw],
+  ["Place", (row) => row.placeName ?? ""],
+  ["Value", (row) => row.value ?? ""],
+  ["Age", (row) => row.ageText ?? ""],
+]);
+
+/** Maps each conflicted event's `theirs`/`yours` values into the shared
+ * `ConflictItem` shape the `ConflictDialog` renders (SPEC §8.3, decision 26).
+ * Only fields that actually differ are shown — an event carries several
+ * columns, and most of a conflict is one or two of them, not the whole row.
+ * `yours` reads from `current`, not the stale `loaded` baseline. */
+export function describeEventConflicts(
+  conflicts: readonly RowConflict<EventEditRow>[],
+  current: readonly EventDraft[],
+): readonly ConflictItem[] {
+  const currentById = new Map(current.map((draft) => [draft.id, draft]));
+
+  return conflicts.map((conflict): ConflictItem => {
+    const mine = currentById.get(conflict.id);
+    const mineRow: EventEditRow | null =
+      mine === undefined ? null : eventDraftAsRow(mine);
+
+    return {
+      id: conflict.id,
+      title:
+        mineRow !== null
+          ? `Event: ${eventTypeLabel(mineRow.type, mineRow.typeOther)}`
+          : conflict.theirs !== null
+            ? `Event: ${eventTypeLabel(conflict.theirs.type, conflict.theirs.typeOther)}`
+            : "Event",
+      changedBy: conflict.changedBy,
+      deleted: conflict.theirs === null,
+      fields:
+        conflict.theirs === null || mineRow === null
+          ? []
+          : [...EVENT_CONFLICT_FIELDS.entries()]
+              .map(([label, read]) => ({
+                label,
+                yours: read(mineRow),
+                theirs: read(conflict.theirs!),
+              }))
+              .filter((field) => field.yours !== field.theirs),
+    };
+  });
+}
+
+/** `EventDraft`'s field set is a strict subset of `EventEditRow`'s — every
+ * `EVENT_CONFLICT_FIELDS` reader only reads fields the draft already has —
+ * so a draft can stand in for a row without a round trip. `sortKey` is
+ * carried through unchanged since no reader touches it. */
+function eventDraftAsRow(draft: EventDraft): EventEditRow {
+  return {
+    id: draft.id,
+    updatedAt: draft.updatedAt ?? "",
+    type: draft.type ?? "other",
+    typeOther: draft.typeOther,
+    value: draft.value,
+    ageText: draft.ageText,
+    sortKey: draft.sortKey,
+    placeName: draft.placeName,
+    dateRaw: draft.dateRaw,
+  };
 }
 
 function assertNever(value: never): never {

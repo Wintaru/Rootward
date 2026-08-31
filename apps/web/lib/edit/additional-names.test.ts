@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 
+import type { RowConflict } from "@/lib/db/conflict";
 import type { PersonNameEditRow } from "@/lib/db/person-edit";
 
 import {
   additionalNamesReducer,
+  describeNameConflicts,
   diffAdditionalNames,
   isAdditionalNamesDiffEmpty,
   namesFromLoaded,
@@ -119,6 +121,49 @@ describe("additionalNamesReducer", () => {
       rows: replacement,
     });
     expect(next).toBe(replacement);
+  });
+
+  it("row_reset replaces a row's fields with the server's current row", () => {
+    const state = additionalNamesReducer(namesFromLoaded([ROW_A]), {
+      type: "field_changed",
+      id: "n1",
+      field: "surname",
+      value: "Edited locally",
+    });
+    const theirs: PersonNameEditRow = { ...ROW_A, surname: "Their edit" };
+    const next = additionalNamesReducer(state, {
+      type: "row_reset",
+      id: "n1",
+      row: theirs,
+    });
+    expect(next[0]!.surname).toBe("Their edit");
+  });
+
+  it("row_reset restores a row this section had already deleted locally", () => {
+    // "Take theirs" on a delete-vs-edit conflict: the row is gone from
+    // `state` (the local "Remove" already ran) but still exists server-side.
+    const state = additionalNamesReducer(namesFromLoaded([ROW_A, ROW_B]), {
+      type: "removed",
+      id: "n1",
+    });
+    const theirs: PersonNameEditRow = { ...ROW_A, surname: "Their edit" };
+    const next = additionalNamesReducer(state, {
+      type: "row_reset",
+      id: "n1",
+      row: theirs,
+    });
+    expect(next.map((row) => row.id)).toEqual(["n2", "n1"]);
+    expect(next.find((row) => row.id === "n1")!.surname).toBe("Their edit");
+  });
+
+  it("row_reset removes the row when it was deleted elsewhere", () => {
+    const state = namesFromLoaded([ROW_A, ROW_B]);
+    const next = additionalNamesReducer(state, {
+      type: "row_reset",
+      id: "n1",
+      row: null,
+    });
+    expect(next.map((row) => row.id)).toEqual(["n2"]);
   });
 });
 
@@ -287,5 +332,41 @@ describe("reconcileAdditionalNamesAfterSave", () => {
 
     expect(reconciled.baseline).toEqual([ROW_A]);
     expect(reconciled.current[0]!.surname).toBe("Lovelace");
+  });
+});
+
+describe("describeNameConflicts", () => {
+  it("shows only the fields that differ between yours and theirs", () => {
+    const current = additionalNamesReducer(namesFromLoaded([ROW_A]), {
+      type: "field_changed",
+      id: "n1",
+      field: "surname",
+      value: "Mine",
+    });
+    const conflict: RowConflict<PersonNameEditRow> = {
+      id: "n1",
+      theirs: { ...ROW_A, surname: "Theirs" },
+      changedBy: null,
+    };
+
+    const [item] = describeNameConflicts([conflict], current);
+    expect(item!.deleted).toBe(false);
+    expect(item!.changedBy).toBeNull();
+    expect(item!.fields).toEqual([
+      { label: "Surname", yours: "Mine", theirs: "Theirs" },
+    ]);
+  });
+
+  it("marks a row deleted elsewhere with no fields", () => {
+    const current = namesFromLoaded([ROW_A]);
+    const conflict: RowConflict<PersonNameEditRow> = {
+      id: "n1",
+      theirs: null,
+      changedBy: null,
+    };
+
+    const [item] = describeNameConflicts([conflict], current);
+    expect(item!.deleted).toBe(true);
+    expect(item!.fields).toEqual([]);
   });
 });

@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 
+import type { RowConflict } from "@/lib/db/conflict";
 import type { PersonEditFields } from "@/lib/db/person-edit";
 
 import {
+  describePersonFieldsConflict,
   isSex,
   nameGenderDraft,
   nameGenderPatch,
@@ -105,5 +107,40 @@ describe("isSex", () => {
   it("rejects an unrecognised value", () => {
     expect(isSex("nonbinary")).toBe(false);
     expect(isSex("")).toBe(false);
+  });
+});
+
+describe("describePersonFieldsConflict", () => {
+  it("shows every patched field against the row's current value", () => {
+    const conflict: RowConflict<PersonEditFields> = {
+      id: "p1",
+      theirs: { ...LOADED, nickname: "Theirs" },
+      changedBy: "Alex",
+    };
+    const item = describePersonFieldsConflict(
+      "p1",
+      { nickname: "Mine" },
+      conflict,
+    );
+    expect(item.changedBy).toBe("Alex");
+    expect(item.deleted).toBe(false);
+    expect(item.fields).toEqual([
+      { label: "Nickname", yours: "Mine", theirs: "Theirs" },
+    ]);
+  });
+
+  it("marks a row deleted elsewhere with no fields", () => {
+    const conflict: RowConflict<PersonEditFields> = {
+      id: "p1",
+      theirs: null,
+      changedBy: null,
+    };
+    const item = describePersonFieldsConflict(
+      "p1",
+      { nickname: "Mine" },
+      conflict,
+    );
+    expect(item.deleted).toBe(true);
+    expect(item.fields).toEqual([]);
   });
 });

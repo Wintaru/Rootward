@@ -1,3 +1,4 @@
+import type { RowConflict } from "@/lib/db/conflict";
 import type {
   PersonNameDeleteInput,
   PersonNameEditRow,
@@ -5,7 +6,9 @@ import type {
   PersonNameUpdateInput,
 } from "@/lib/db/person-edit";
 import type { NameType } from "@/lib/db/types";
+import { nameTypeLabel } from "@/lib/person/labels";
 
+import type { ConflictItem } from "./conflict";
 import { normalizeText } from "./diff";
 
 /**
@@ -57,6 +60,13 @@ export type AdditionalNamesAction =
        * request would be silently dropped by the replace. */
       readonly type: "reconciled";
       readonly rows: readonly AdditionalNameDraft[];
+    }
+  | {
+      /** Applies a `ConflictDialog` resolution to one row (#31) — see
+       * `notes.ts`'s identical action for the full contract. */
+      readonly type: "row_reset";
+      readonly id: string;
+      readonly row: PersonNameEditRow | null;
     };
 
 export function namesFromLoaded(
@@ -116,6 +126,20 @@ export function additionalNamesReducer(
 
     case "reconciled":
       return action.rows;
+
+    case "row_reset": {
+      if (action.row === null) {
+        return state.filter((row) => row.id !== action.id);
+      }
+      const restored = namesFromLoaded([action.row])[0]!;
+      // "Take theirs" on a row this section had locally deleted has no
+      // existing entry to replace — the row must be reinserted, not mapped
+      // over (a `state.map` here would silently no-op and the restore would
+      // never appear).
+      return state.some((row) => row.id === action.id)
+        ? state.map((row) => (row.id === action.id ? restored : row))
+        : [...state, restored];
+    }
 
     default:
       return assertNever(action);
@@ -278,6 +302,85 @@ function fieldValues(draft: AdditionalNameDraft) {
 
 function isBlank(values: ReturnType<typeof fieldValues>): boolean {
   return Object.values(values).every((value) => value === null);
+}
+
+// --- conflict description ---------------------------------------------
+
+const NAME_CONFLICT_FIELDS: ReadonlyMap<
+  string,
+  (row: PersonNameEditRow) => string
+> = new Map([
+  ["Type", (row) => nameTypeLabel(row.type)],
+  ["Given name", (row) => row.givenName ?? ""],
+  ["Surname", (row) => row.surname ?? ""],
+  ["Prefix", (row) => row.prefix ?? ""],
+  ["Suffix", (row) => row.suffix ?? ""],
+  ["Nickname", (row) => row.nickname ?? ""],
+]);
+
+/** Maps each conflicted `person_name` row's `theirs`/`yours` values into the
+ * shared `ConflictItem` shape (SPEC §8.3, decision 26) — see
+ * `describeEventConflicts` for the identical "only differing fields" and
+ * "`yours` reads from `current`" rationale. `person_name` has no
+ * `updated_by`, so `changedBy` is always `null` on the incoming conflict. */
+export function describeNameConflicts(
+  conflicts: readonly RowConflict<PersonNameEditRow>[],
+  current: readonly AdditionalNameDraft[],
+): readonly ConflictItem[] {
+  const currentById = new Map(current.map((draft) => [draft.id, draft]));
+
+  return conflicts.map((conflict): ConflictItem => {
+    const mine = currentById.get(conflict.id);
+    const mineRow: PersonNameEditRow | null =
+      mine === undefined ? null : nameDraftAsRow(mine);
+    const title =
+      mineRow !== null
+        ? nameConflictTitle(mineRow)
+        : conflict.theirs !== null
+          ? nameConflictTitle(conflict.theirs)
+          : "Name";
+
+    return {
+      id: conflict.id,
+      title,
+      changedBy: conflict.changedBy,
+      deleted: conflict.theirs === null,
+      fields:
+        conflict.theirs === null || mineRow === null
+          ? []
+          : [...NAME_CONFLICT_FIELDS.entries()]
+              .map(([label, read]) => ({
+                label,
+                yours: read(mineRow),
+                theirs: read(conflict.theirs!),
+              }))
+              .filter((field) => field.yours !== field.theirs),
+    };
+  });
+}
+
+function nameConflictTitle(row: PersonNameEditRow): string {
+  const name = [row.givenName, row.surname].filter(Boolean).join(" ").trim();
+  return name === "" ? "Name" : `Name: ${name}`;
+}
+
+/** `AdditionalNameDraft`'s field set is a strict subset of
+ * `PersonNameEditRow`'s (see `eventDraftAsRow` in `events.ts` for the
+ * identical stand-in-without-a-round-trip rationale). `sortOrder` is not
+ * read by any `NAME_CONFLICT_FIELDS` entry, so its placeholder value here
+ * never surfaces. */
+function nameDraftAsRow(draft: AdditionalNameDraft): PersonNameEditRow {
+  return {
+    id: draft.id,
+    updatedAt: draft.updatedAt ?? "",
+    type: draft.type,
+    givenName: draft.givenName,
+    surname: draft.surname,
+    prefix: draft.prefix,
+    suffix: draft.suffix,
+    nickname: draft.nickname,
+    sortOrder: null,
+  };
 }
 
 function assertNever(value: never): never {

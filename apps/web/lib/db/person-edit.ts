@@ -1,6 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { getAccountDisplayName } from "./account-lookup";
 import type { Database } from "./database.types";
+import type { RowConflict } from "./conflict";
 import type { NameType, Sex } from "./types";
 import { isUuid } from "./uuid";
 
@@ -17,9 +19,11 @@ type Db = SupabaseClient<Database>;
  * Every write is a version-checked `UPDATE … WHERE id = $1 AND updated_at =
  * $2` (WAYFINDER decision 26, non-negotiable from the first edit-view
  * release). Zero rows back means the row changed (or was deleted) since it
- * was loaded — reported as `{ ok: false }` for the caller to surface as a
- * conflict. The full `ConflictDialog` treatment is #31; this issue only needs
- * the save shape and the conflict signal to already be correct.
+ * was loaded — the caller refetches the current row (`resolvePersonConflict` /
+ * `resolveNameConflict`, #31) so `ConflictDialog` can show "theirs" beside the
+ * rejected local edit; `person` carries `updated_by`, so a person-field
+ * conflict also names who holds it now, while a `person_name` conflict does
+ * not (that table has no `updated_by` column).
  */
 
 // --- Name & Gender / Reference Numbers (one `person` row) ---------------
@@ -164,7 +168,31 @@ export async function getPersonReferenceNumbers(
 
 export type SavePersonFieldsResult =
   | { readonly ok: true; readonly row: PersonEditFields }
-  | { readonly ok: false };
+  | { readonly ok: false; readonly conflict: RowConflict<PersonEditFields> };
+
+/** Refetch `person`'s current state (ignoring `updated_at`) for the
+ * `ConflictDialog` — `null` if the row is gone (deleted, or no longer
+ * RLS-visible). `person.updated_by` resolves to a display name via
+ * `getAccountDisplayName`; see the module doc for why `person_name` cannot. */
+async function resolvePersonFieldsConflict(
+  client: Db,
+  personId: string,
+): Promise<RowConflict<PersonEditFields>> {
+  const { data, error } = await client
+    .from("person")
+    .select(`${PERSON_EDIT_COLUMNS}, updated_by`)
+    .eq("id", personId)
+    .maybeSingle();
+
+  if (error !== null) {
+    throw new Error(`resolvePersonFieldsConflict: ${error.message}`);
+  }
+  if (data === null) {
+    return { id: personId, theirs: null, changedBy: null };
+  }
+  const changedBy = await getAccountDisplayName(client, data.updated_by);
+  return { id: personId, theirs: mapPersonEditFields(data), changedBy };
+}
 
 /**
  * Apply `patch` to `personId`'s row, guarded on it still being at
@@ -190,9 +218,13 @@ export async function updatePersonFields(
   if (error !== null) {
     throw new Error(`updatePersonFields: ${error.message}`);
   }
-  return data === null
-    ? { ok: false }
-    : { ok: true, row: mapPersonEditFields(data) };
+  if (data !== null) {
+    return { ok: true, row: mapPersonEditFields(data) };
+  }
+  return {
+    ok: false,
+    conflict: await resolvePersonFieldsConflict(client, args.personId),
+  };
 }
 
 // --- Additional Names (`person_name`, many rows) -------------------------
@@ -291,9 +323,10 @@ export interface SaveAdditionalNamesResult {
   readonly inserted: readonly PersonNameEditRow[];
   readonly updated: readonly PersonNameEditRow[];
   readonly deletedIds: readonly string[];
-  /** Ids whose update or delete lost the version check — the row changed
-   * elsewhere since this section loaded it. */
-  readonly conflictIds: readonly string[];
+  /** Rows whose update or delete lost the version check — the row changed
+   * elsewhere since this section loaded it. `person_name` has no
+   * `updated_by` column, so `changedBy` is always `null` here. */
+  readonly conflicts: readonly RowConflict<PersonNameEditRow>[];
 }
 
 function toPersonNameInsertRow(
@@ -374,12 +407,12 @@ export async function saveAdditionalNames(
   ]);
 
   const updated: PersonNameEditRow[] = [];
-  const conflictIds: string[] = [];
+  const conflicts: RowConflict<PersonNameEditRow>[] = [];
   for (const result of updateResults) {
     if (result.ok) {
       updated.push(result.row);
     } else {
-      conflictIds.push(result.id);
+      conflicts.push(result.conflict);
     }
   }
 
@@ -388,11 +421,11 @@ export async function saveAdditionalNames(
     if (result.ok) {
       deletedIds.push(result.id);
     } else {
-      conflictIds.push(result.id);
+      conflicts.push(result.conflict);
     }
   }
 
-  return { inserted, updated, deletedIds, conflictIds };
+  return { inserted, updated, deletedIds, conflicts };
 }
 
 async function insertNames(
@@ -414,9 +447,30 @@ async function insertNames(
   return (data ?? []).map(mapPersonNameEditRow);
 }
 
+/** Refetch a `person_name` row's current state (ignoring `updated_at`) for
+ * the `ConflictDialog` — `null` if the row is gone. `person_name` has no
+ * `updated_by` column, so `changedBy` is always `null` (see the module doc). */
+async function resolveNameConflict(
+  client: Db,
+  id: string,
+): Promise<RowConflict<PersonNameEditRow>> {
+  const { data, error } = await client
+    .from("person_name")
+    .select(PERSON_NAME_COLUMNS)
+    .eq("id", id)
+    .maybeSingle();
+
+  if (error !== null) {
+    throw new Error(`resolveNameConflict: ${id}: ${error.message}`);
+  }
+  return data === null
+    ? { id, theirs: null, changedBy: null }
+    : { id, theirs: mapPersonNameEditRow(data), changedBy: null };
+}
+
 type RowResult =
   | { readonly ok: true; readonly id: string; readonly row: PersonNameEditRow }
-  | { readonly ok: false; readonly id: string };
+  | { readonly ok: false; readonly conflict: RowConflict<PersonNameEditRow> };
 
 async function applyNameUpdate(
   client: Db,
@@ -435,15 +489,19 @@ async function applyNameUpdate(
       `saveAdditionalNames: update ${input.id}: ${error.message}`,
     );
   }
-  return data === null
-    ? { ok: false, id: input.id }
-    : { ok: true, id: input.id, row: mapPersonNameEditRow(data) };
+  if (data !== null) {
+    return { ok: true, id: input.id, row: mapPersonNameEditRow(data) };
+  }
+  return { ok: false, conflict: await resolveNameConflict(client, input.id) };
 }
 
 async function applyNameDelete(
   client: Db,
   input: PersonNameDeleteInput,
-): Promise<{ readonly ok: boolean; readonly id: string }> {
+): Promise<
+  | { readonly ok: true; readonly id: string }
+  | { readonly ok: false; readonly conflict: RowConflict<PersonNameEditRow> }
+> {
   const { data, error } = await client
     .from("person_name")
     .delete()
@@ -457,5 +515,8 @@ async function applyNameDelete(
       `saveAdditionalNames: delete ${input.id}: ${error.message}`,
     );
   }
-  return { ok: data !== null, id: input.id };
+  if (data !== null) {
+    return { ok: true, id: input.id };
+  }
+  return { ok: false, conflict: await resolveNameConflict(client, input.id) };
 }

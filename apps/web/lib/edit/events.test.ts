@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 
+import type { RowConflict } from "@/lib/db/conflict";
 import type { EventEditRow } from "@/lib/db/event-edit";
 
 import {
   dateColumnsFromRaw,
+  describeEventConflicts,
   diffEvents,
   eventsFromLoaded,
   eventsReducer,
@@ -126,6 +128,49 @@ describe("eventsReducer", () => {
       rows: replacement,
     });
     expect(next).toBe(replacement);
+  });
+
+  it("row_reset replaces a row's fields with the server's current row", () => {
+    const state = eventsReducer(eventsFromLoaded([ROW_A]), {
+      type: "field_changed",
+      id: "e1",
+      field: "value",
+      value: "Edited locally",
+    });
+    const theirs: EventEditRow = { ...ROW_A, value: "Their edit" };
+    const next = eventsReducer(state, {
+      type: "row_reset",
+      id: "e1",
+      row: theirs,
+    });
+    expect(next[0]!.value).toBe("Their edit");
+  });
+
+  it("row_reset restores a row this section had already deleted locally", () => {
+    // "Take theirs" on a delete-vs-edit conflict: the row is gone from
+    // `state` (the local "Remove" already ran) but still exists server-side.
+    const state = eventsReducer(eventsFromLoaded([ROW_A, ROW_B]), {
+      type: "removed",
+      id: "e1",
+    });
+    const theirs: EventEditRow = { ...ROW_A, value: "Their edit" };
+    const next = eventsReducer(state, {
+      type: "row_reset",
+      id: "e1",
+      row: theirs,
+    });
+    expect(next.map((row) => row.id)).toEqual(["e2", "e1"]);
+    expect(next.find((row) => row.id === "e1")!.value).toBe("Their edit");
+  });
+
+  it("row_reset removes the row when it was deleted elsewhere", () => {
+    const state = eventsFromLoaded([ROW_A, ROW_B]);
+    const next = eventsReducer(state, {
+      type: "row_reset",
+      id: "e1",
+      row: null,
+    });
+    expect(next.map((row) => row.id)).toEqual(["e2"]);
   });
 });
 
@@ -306,5 +351,43 @@ describe("reconcileEventsAfterSave", () => {
 
     expect(reconciled.baseline).toEqual([ROW_A]);
     expect(reconciled.current[0]!.value).toBe("Edited locally");
+  });
+});
+
+describe("describeEventConflicts", () => {
+  it("shows only the fields that differ between yours and theirs", () => {
+    const current = eventsReducer(eventsFromLoaded([ROW_A]), {
+      type: "field_changed",
+      id: "e1",
+      field: "value",
+      value: "Mine",
+    });
+    const conflict: RowConflict<EventEditRow> = {
+      id: "e1",
+      theirs: { ...ROW_A, value: "Theirs" },
+      changedBy: "Alex",
+    };
+
+    const [item] = describeEventConflicts([conflict], current);
+    expect(item!.title).toBe("Event: Birth");
+    expect(item!.changedBy).toBe("Alex");
+    expect(item!.deleted).toBe(false);
+    expect(item!.fields).toEqual([
+      { label: "Value", yours: "Mine", theirs: "Theirs" },
+    ]);
+  });
+
+  it("marks a row deleted elsewhere with no fields", () => {
+    const current = eventsFromLoaded([ROW_A]);
+    const conflict: RowConflict<EventEditRow> = {
+      id: "e1",
+      theirs: null,
+      changedBy: null,
+    };
+
+    const [item] = describeEventConflicts([conflict], current);
+    expect(item!.title).toBe("Event: Birth");
+    expect(item!.deleted).toBe(true);
+    expect(item!.fields).toEqual([]);
   });
 });

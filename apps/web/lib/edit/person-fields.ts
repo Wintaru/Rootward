@@ -1,4 +1,5 @@
 import { Constants } from "@/lib/db";
+import type { RowConflict } from "@/lib/db/conflict";
 import type {
   PersonEditFields,
   PersonFieldPatch,
@@ -6,6 +7,7 @@ import type {
 } from "@/lib/db/person-edit";
 import type { Sex } from "@/lib/db/types";
 
+import type { ConflictItem } from "./conflict";
 import { normalizeText } from "./diff";
 
 /**
@@ -124,4 +126,51 @@ export function referenceNumbersPatch(
  * this never drifts from the Postgres enum it validates against. */
 export function isSex(value: string): value is Sex {
   return (Constants.public.Enums.sex as readonly string[]).includes(value);
+}
+
+// --- conflict description ---------------------------------------------
+
+const PERSON_FIELD_LABELS: Readonly<Record<keyof PersonFieldPatch, string>> = {
+  givenName: "Given name",
+  surname: "Surname",
+  namePrefix: "Prefix",
+  nameSuffix: "Suffix",
+  nickname: "Nickname",
+  sex: "Sex",
+  familysearchId: "FamilySearch ID",
+  ancestralFileNumber: "Ancestral File Number",
+  userReferenceNumber: "User Reference Number",
+};
+
+function fieldToText(value: string | Sex | null | undefined): string {
+  return value ?? "";
+}
+
+/**
+ * Maps a rejected Name & Gender / Reference Numbers save into the shared
+ * `ConflictItem` shape (SPEC §8.3, decision 26) — see `describeEventConflicts`
+ * for the "only fields actually attempted" rationale, which here is simply
+ * `patch`'s own keys (a section only ever patches the columns it touches).
+ * `yours` reads from `patch`, not `draft` — `patch` is already the
+ * normalised value a save would have sent.
+ */
+export function describePersonFieldsConflict(
+  personId: string,
+  patch: PersonFieldPatch,
+  conflict: RowConflict<PersonEditFields>,
+): ConflictItem {
+  return {
+    id: personId,
+    title: "This person",
+    changedBy: conflict.changedBy,
+    deleted: conflict.theirs === null,
+    fields:
+      conflict.theirs === null
+        ? []
+        : (Object.keys(patch) as (keyof PersonFieldPatch)[]).map((key) => ({
+            label: PERSON_FIELD_LABELS[key],
+            yours: fieldToText(patch[key]),
+            theirs: fieldToText(conflict.theirs![key]),
+          })),
+  };
 }

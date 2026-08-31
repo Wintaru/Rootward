@@ -1,5 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { getAccountDisplayName } from "./account-lookup";
+import type { RowConflict } from "./conflict";
 import type { Database } from "./database.types";
 import { findOrCreatePlaceId } from "./place";
 import type { EventType } from "./types";
@@ -21,11 +23,14 @@ type Db = SupabaseClient<Database>;
  *
  * Every write is version-checked the same way as #27's `person`/`person_name`
  * writes (WAYFINDER decision 26): `UPDATE/DELETE … WHERE id = $1 AND
- * updated_at = $2`, zero rows back → that row's `{ ok: false }`. `sort_key` is
- * never sent — it is a trigger-populated plain column (`date_sort_key` plus a
- * per-`type` ordinal, `supabase/migrations/20260830164537_events_facts_places.sql`),
- * so a save's returned row already carries its new position; the caller
- * re-sorts by it (`reconcileEventsAfterSave` in `lib/edit/events.ts`).
+ * updated_at = $2`, zero rows back → the caller refetches the current row
+ * (`resolveEventConflict`, #31) so `ConflictDialog` can show "theirs"; `event`
+ * carries `updated_by`, so a conflict also names who holds it now.
+ * `sort_key` is never sent — it is a trigger-populated plain column
+ * (`date_sort_key` plus a per-`type` ordinal,
+ * `supabase/migrations/20260830164537_events_facts_places.sql`), so a save's
+ * returned row already carries its new position; the caller re-sorts by it
+ * (`reconcileEventsAfterSave` in `lib/edit/events.ts`).
  */
 
 const EVENT_EDIT_COLUMNS =
@@ -127,9 +132,9 @@ export interface SaveEventsResult {
   readonly inserted: readonly EventEditRow[];
   readonly updated: readonly EventEditRow[];
   readonly deletedIds: readonly string[];
-  /** Ids whose update or delete lost the version check — the row changed
+  /** Rows whose update or delete lost the version check — the row changed
    * elsewhere since this section loaded it. */
-  readonly conflictIds: readonly string[];
+  readonly conflicts: readonly RowConflict<EventEditRow>[];
 }
 
 type EventInsertRow = Database["public"]["Tables"]["event"]["Insert"];
@@ -208,12 +213,12 @@ export async function saveEvents(
   ]);
 
   const updated: EventEditRow[] = [];
-  const conflictIds: string[] = [];
+  const conflicts: RowConflict<EventEditRow>[] = [];
   for (const result of updateResults) {
     if (result.ok) {
       updated.push(result.row);
     } else {
-      conflictIds.push(result.id);
+      conflicts.push(result.conflict);
     }
   }
 
@@ -222,11 +227,11 @@ export async function saveEvents(
     if (result.ok) {
       deletedIds.push(result.id);
     } else {
-      conflictIds.push(result.id);
+      conflicts.push(result.conflict);
     }
   }
 
-  return { inserted, updated, deletedIds, conflictIds };
+  return { inserted, updated, deletedIds, conflicts };
 }
 
 async function insertEvents(
@@ -252,9 +257,32 @@ async function insertEvents(
   return (data ?? []).map(mapEventEditRow);
 }
 
+/** Refetch an `event` row's current state (ignoring `updated_at`) for the
+ * `ConflictDialog` — `null` if the row is gone. `event.updated_by` resolves
+ * to a display name via `getAccountDisplayName`. */
+async function resolveEventConflict(
+  client: Db,
+  id: string,
+): Promise<RowConflict<EventEditRow>> {
+  const { data, error } = await client
+    .from("event")
+    .select(`${EVENT_EDIT_COLUMNS}, updated_by`)
+    .eq("id", id)
+    .maybeSingle();
+
+  if (error !== null) {
+    throw new Error(`resolveEventConflict: ${id}: ${error.message}`);
+  }
+  if (data === null) {
+    return { id, theirs: null, changedBy: null };
+  }
+  const changedBy = await getAccountDisplayName(client, data.updated_by);
+  return { id, theirs: mapEventEditRow(data), changedBy };
+}
+
 type RowResult =
   | { readonly ok: true; readonly id: string; readonly row: EventEditRow }
-  | { readonly ok: false; readonly id: string };
+  | { readonly ok: false; readonly conflict: RowConflict<EventEditRow> };
 
 async function applyEventUpdate(
   client: Db,
@@ -272,15 +300,19 @@ async function applyEventUpdate(
   if (error !== null) {
     throw new Error(`saveEvents: update ${input.id}: ${error.message}`);
   }
-  return data === null
-    ? { ok: false, id: input.id }
-    : { ok: true, id: input.id, row: mapEventEditRow(data) };
+  if (data !== null) {
+    return { ok: true, id: input.id, row: mapEventEditRow(data) };
+  }
+  return { ok: false, conflict: await resolveEventConflict(client, input.id) };
 }
 
 async function applyEventDelete(
   client: Db,
   input: EventDeleteInput,
-): Promise<{ readonly ok: boolean; readonly id: string }> {
+): Promise<
+  | { readonly ok: true; readonly id: string }
+  | { readonly ok: false; readonly conflict: RowConflict<EventEditRow> }
+> {
   const { data, error } = await client
     .from("event")
     .delete()
@@ -292,5 +324,8 @@ async function applyEventDelete(
   if (error !== null) {
     throw new Error(`saveEvents: delete ${input.id}: ${error.message}`);
   }
-  return { ok: data !== null, id: input.id };
+  if (data !== null) {
+    return { ok: true, id: input.id };
+  }
+  return { ok: false, conflict: await resolveEventConflict(client, input.id) };
 }

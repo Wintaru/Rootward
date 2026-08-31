@@ -7,40 +7,50 @@ import {
   isUuid,
   searchPlaces as searchPlacesDb,
   saveEvents as persistEvents,
+  saveNotes as persistNotes,
   updatePersonFields,
   saveAdditionalNames as persistAdditionalNames,
   type EventDeleteInput,
   type EventInsertInput,
   type EventUpdateInput,
+  type NoteDeleteInput,
+  type NoteInsertInput,
+  type NoteUpdateInput,
   type PersonEditFields,
   type PersonFieldPatch,
   type PersonNameDeleteInput,
   type PersonNameInsertInput,
   type PersonNameUpdateInput,
   type PlaceOption,
+  type RowConflict,
   type SaveAdditionalNamesResult,
   type SaveEventsResult,
+  type SaveNotesResult,
 } from "@/lib/db";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 /**
  * Server actions for the Name & Gender, Additional Names, Reference Numbers,
- * and Events sections (SPEC §8.3, §10 items 27, 28). Each re-checks moderator
- * access independently — the section components never trust the page-level
- * guard alone, same posture as `inviteToClaim` in `app/moderation/actions.ts`.
- * RLS (`person_update` / `person_name_write` / `event_write` / `place_write`,
- * all `is_moderator()`) is still the real boundary; this is for a clean error
- * message.
+ * Events, and Notes sections (SPEC §8.3, §10 items 27, 28, 31). Each
+ * re-checks moderator access independently — the section components never
+ * trust the page-level guard alone, same posture as `inviteToClaim` in
+ * `app/moderation/actions.ts`. RLS (`person_update` / `person_name_write` /
+ * `event_write` / `note_write` / `place_write`, all `is_moderator()`) is
+ * still the real boundary; this is for a clean error message.
  *
- * Both writes are version-checked (WAYFINDER decision 26): a save that loses
- * the `updated_at` compare comes back as `{ status: "conflict" }` rather than
- * throwing. The full `ConflictDialog` side-by-side treatment is #31 — this
- * issue only has to get the save shape and the conflict signal right.
+ * Every write is version-checked (WAYFINDER decision 26): a save that loses
+ * the `updated_at` compare comes back carrying a `RowConflict` (the row's
+ * current state, refetched — see each `lib/db` module's own doc comment)
+ * rather than throwing, which the section renders via the shared
+ * `ConflictDialog` (#31).
  */
 
 export type SavePersonFieldsResult =
   | { readonly status: "saved"; readonly row: PersonEditFields }
-  | { readonly status: "conflict" }
+  | {
+      readonly status: "conflict";
+      readonly conflict: RowConflict<PersonEditFields>;
+    }
   | { readonly status: "error"; readonly message: string };
 
 /** Shared by Name & Gender and Reference Numbers — both patch the same
@@ -67,7 +77,7 @@ export async function savePersonFields(input: {
   const supabase = await createSupabaseServerClient();
   const result = await updatePersonFields(supabase, input);
   if (!result.ok) {
-    return { status: "conflict" };
+    return { status: "conflict", conflict: result.conflict };
   }
 
   revalidatePath(`/person/${input.personId}/edit`);
@@ -143,6 +153,46 @@ export async function saveEvents(input: {
 
   revalidatePath(`/person/${input.personId}/edit`);
   revalidatePath(`/person/${input.personId}`);
+  return { status: "saved", result };
+}
+
+export type SaveNotesActionResult =
+  | { readonly status: "saved"; readonly result: SaveNotesResult }
+  | { readonly status: "error"; readonly message: string };
+
+/** The Notes section (SPEC §10 item 31) has no single "owning" person the
+ * way the other sections do — a note may be owned by the person or by one
+ * of their events — so this only re-checks moderator access on `personId`
+ * (the page the caller is editing) and does not otherwise scope the write to
+ * it; `note_write` RLS is the real boundary regardless. */
+export async function saveNotes(input: {
+  readonly personId: string;
+  readonly inserts: readonly NoteInsertInput[];
+  readonly updates: readonly NoteUpdateInput[];
+  readonly deletes: readonly NoteDeleteInput[];
+}): Promise<SaveNotesActionResult> {
+  const access = await resolveEditAccess();
+  if (access.kind !== "allowed") {
+    return {
+      status: "error",
+      message: "You do not have permission to edit this person.",
+    };
+  }
+  if (!isUuid(input.personId)) {
+    return { status: "error", message: "Invalid person." };
+  }
+  if (
+    input.inserts.length === 0 &&
+    input.updates.length === 0 &&
+    input.deletes.length === 0
+  ) {
+    return { status: "error", message: "Nothing to save." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const result = await persistNotes(supabase, input);
+
+  revalidatePath(`/person/${input.personId}/edit`);
   return { status: "saved", result };
 }
 
