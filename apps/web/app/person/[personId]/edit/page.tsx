@@ -8,6 +8,7 @@ import { getCurrentAccount } from "@/lib/auth/current-account";
 import type { Database } from "@/lib/db/database.types";
 import {
   getPersonEditShell,
+  getPersonEvents,
   getPersonNames,
   getPersonReferenceNumbers,
 } from "@/lib/db";
@@ -17,6 +18,7 @@ import type { NameGenderFields } from "@/lib/edit/person-fields";
 import { buildEditShellView } from "@/lib/edit/view-model";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { AdditionalNamesSection } from "@/components/person/edit/AdditionalNamesSection";
+import { EventsSection } from "@/components/person/edit/EventsSection";
 import { NameGenderSection } from "@/components/person/edit/NameGenderSection";
 import { ReferenceNumbersSection } from "@/components/person/edit/ReferenceNumbersSection";
 import { EditShell } from "@/components/person/EditShell";
@@ -29,9 +31,9 @@ export const metadata: Metadata = {
 
 /**
  * `/person/[personId]/edit` — the full-screen edit shell (SPEC §8.3, §10 item
- * 26) plus, as of #27, the Name & Gender, Additional Names, and Reference
- * Numbers sections. Moderator+ only; the remaining sections (#28–#32) still
- * fall back to the shell's placeholder.
+ * 26) plus, as of #27/#28, the Name & Gender, Additional Names, Reference
+ * Numbers, and Events sections. Moderator+ only; the remaining sections
+ * (#29–#31) still fall back to the shell's placeholder.
  *
  * Gate mirrors `/person/[personId]`'s (unauthenticated → `/login`, not
  * approved → `/onboarding`) plus a moderator check on top, matching
@@ -119,9 +121,14 @@ async function loadSectionContent(
       return <AdditionalNamesSection personId={personId} loaded={names} />;
     }
 
+    case "events": {
+      const events = await getPersonEvents(supabase, personId);
+      return <EventsSection personId={personId} loaded={events} />;
+    }
+
     default:
-      // Events, Facts, Media, Sources, Notes — not built yet (#28–#31); the
-      // shell's own placeholder covers these.
+      // Facts, Media, Sources, Notes — not built yet (#29–#31); the shell's
+      // own placeholder covers these.
       return undefined;
   }
 }

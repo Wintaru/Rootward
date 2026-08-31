@@ -10,6 +10,8 @@ export * from "./types";
 export * from "./genealogy-date";
 export * from "./person";
 export * from "./person-edit";
+export * from "./event-edit";
+export * from "./place";
 export * from "./import-jobs";
 export * from "./invitations";
 export * from "./onboarding";

@@ -23,7 +23,11 @@ const OVERRIDES: Readonly<Record<string, string>> = {
   bat_mitzvah: "Bat Mitzvah",
 };
 
-function label(token: string): string {
+/** A raw enum token → its display label, respecting the override table above.
+ * Exported (not just used internally by the `*TypeLabel` helpers below) for
+ * an enum picker's option list, where there is no saved record yet to read a
+ * `type_other` off of — see `EventsSection.tsx`'s `Type` `<select>`. */
+export function enumTokenLabel(token: string): string {
   return OVERRIDES[token] ?? humanizeToken(token);
 }
 
@@ -32,11 +36,11 @@ export function sexLabel(sex: Sex | null): string | null {
 }
 
 export function nameTypeLabel(type: NameType | null): string {
-  return type === null ? "Name" : label(type);
+  return type === null ? "Name" : enumTokenLabel(type);
 }
 
 export function unionTypeLabel(type: UnionType | null): string | null {
-  return type === null || type === "unknown" ? null : label(type);
+  return type === null || type === "unknown" ? null : enumTokenLabel(type);
 }
 
 /**
@@ -50,7 +54,7 @@ export function eventTypeLabel(
   if (type === "other") {
     return typeOther?.trim() || "Event";
   }
-  return label(type);
+  return enumTokenLabel(type);
 }
 
 /** A fact's label — same `other` handling as {@link eventTypeLabel}. */
@@ -61,5 +65,5 @@ export function factTypeLabel(
   if (type === "other") {
     return typeOther?.trim() || "Fact";
   }
-  return label(type);
+  return enumTokenLabel(type);
 }
