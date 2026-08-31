@@ -7,12 +7,16 @@ import {
   isUuid,
   searchPlaces as searchPlacesDb,
   saveEvents as persistEvents,
+  saveFacts as persistFacts,
   saveNotes as persistNotes,
   updatePersonFields,
   saveAdditionalNames as persistAdditionalNames,
   type EventDeleteInput,
   type EventInsertInput,
   type EventUpdateInput,
+  type FactDeleteInput,
+  type FactInsertInput,
+  type FactUpdateInput,
   type NoteDeleteInput,
   type NoteInsertInput,
   type NoteUpdateInput,
@@ -25,13 +29,14 @@ import {
   type RowConflict,
   type SaveAdditionalNamesResult,
   type SaveEventsResult,
+  type SaveFactsResult,
   type SaveNotesResult,
 } from "@/lib/db";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 /**
  * Server actions for the Name & Gender, Additional Names, Reference Numbers,
- * Events, and Notes sections (SPEC §8.3, §10 items 27, 28, 31). Each
+ * Events, Facts, and Notes sections (SPEC §8.3, §10 items 27, 28, 29, 31). Each
  * re-checks moderator access independently — the section components never
  * trust the page-level guard alone, same posture as `inviteToClaim` in
  * `app/moderation/actions.ts`. RLS (`person_update` / `person_name_write` /
@@ -150,6 +155,42 @@ export async function saveEvents(input: {
 
   const supabase = await createSupabaseServerClient();
   const result = await persistEvents(supabase, input);
+
+  revalidatePath(`/person/${input.personId}/edit`);
+  revalidatePath(`/person/${input.personId}`);
+  return { status: "saved", result };
+}
+
+export type SaveFactsActionResult =
+  | { readonly status: "saved"; readonly result: SaveFactsResult }
+  | { readonly status: "error"; readonly message: string };
+
+export async function saveFacts(input: {
+  readonly personId: string;
+  readonly inserts: readonly FactInsertInput[];
+  readonly updates: readonly FactUpdateInput[];
+  readonly deletes: readonly FactDeleteInput[];
+}): Promise<SaveFactsActionResult> {
+  const access = await resolveEditAccess();
+  if (access.kind !== "allowed") {
+    return {
+      status: "error",
+      message: "You do not have permission to edit this person.",
+    };
+  }
+  if (!isUuid(input.personId)) {
+    return { status: "error", message: "Invalid person." };
+  }
+  if (
+    input.inserts.length === 0 &&
+    input.updates.length === 0 &&
+    input.deletes.length === 0
+  ) {
+    return { status: "error", message: "Nothing to save." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const result = await persistFacts(supabase, input);
 
   revalidatePath(`/person/${input.personId}/edit`);
   revalidatePath(`/person/${input.personId}`);

@@ -11,6 +11,7 @@ export * from "./genealogy-date";
 export * from "./person";
 export * from "./person-edit";
 export * from "./event-edit";
+export * from "./fact-edit";
 export * from "./note-edit";
 export type { RowConflict } from "./conflict";
 export * from "./place";

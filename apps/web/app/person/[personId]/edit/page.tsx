@@ -10,6 +10,7 @@ import type { Database } from "@/lib/db/database.types";
 import {
   getPersonEditShell,
   getPersonEvents,
+  getPersonFacts,
   getPersonNames,
   getPersonNotes,
   getPersonReferenceNumbers,
@@ -21,6 +22,7 @@ import { buildEditShellView } from "@/lib/edit/view-model";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { AdditionalNamesSection } from "@/components/person/edit/AdditionalNamesSection";
 import { EventsSection } from "@/components/person/edit/EventsSection";
+import { FactsSection } from "@/components/person/edit/FactsSection";
 import { NameGenderSection } from "@/components/person/edit/NameGenderSection";
 import { NotesSection } from "@/components/person/edit/NotesSection";
 import { ReferenceNumbersSection } from "@/components/person/edit/ReferenceNumbersSection";
@@ -34,9 +36,9 @@ export const metadata: Metadata = {
 
 /**
  * `/person/[personId]/edit` — the full-screen edit shell (SPEC §8.3, §10 item
- * 26) plus, as of #27/#28/#31, the Name & Gender, Additional Names, Reference
- * Numbers, Events, and Notes sections. Moderator+ only; Facts, Media, and
- * Sources (#29, #30, #33) still fall back to the shell's placeholder.
+ * 26) plus, as of #27/#28/#29/#31, the Name & Gender, Additional Names,
+ * Reference Numbers, Events, Facts, and Notes sections. Moderator+ only;
+ * Media and Sources (#30, #33) still fall back to the shell's placeholder.
  *
  * Gate mirrors `/person/[personId]`'s (unauthenticated → `/login`, not
  * approved → `/onboarding`) plus a moderator check on top, matching
@@ -144,14 +146,19 @@ async function loadSectionContent(
       return <EventsSection personId={personId} loaded={events} />;
     }
 
+    case "facts": {
+      const facts = await getPersonFacts(supabase, personId);
+      return <FactsSection personId={personId} loaded={facts} />;
+    }
+
     case "notes": {
       const notes = await getPersonNotes(supabase, personId);
       return <NotesSection personId={personId} loaded={notes} />;
     }
 
     default:
-      // Facts, Media, Sources — not built yet (#29, #30, #33); the shell's
-      // own placeholder covers these.
+      // Media, Sources — not built yet (#30, #33); the shell's own
+      // placeholder covers these.
       return undefined;
   }
 }

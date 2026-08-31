@@ -7,10 +7,11 @@ the relevant `docs/SPEC.md` section.
 
 **Phase:** 5 — Phase 0 (#1–#3), Phase 1 (#4–#10), Phase 2 (#11–#16), Phase 3
 (#17, #38, #18, #19, #20), and Phase 4 (#21–#25) all merged. **#26, #27, #28,
-and #31 all merged to `main` (`5c3ef28`, `f43c609`, `dc48652`, `bc046ec`), all
-closed by hand across sessions — same stale-issue-left-open pattern as #17 /
-#20–#23 / #25 before them. #32 done, staged on `feat/edit-presence`** — see
-below. Next: #29 and #30 (`ready`, each depends only on #28, already merged).
+#31, and #32 all merged to `main` (`5c3ef28`, `f43c609`, `dc48652`, `bc046ec`,
+`1948b33`), all closed by hand across sessions — same stale-issue-left-open
+pattern as #17 / #20–#23 / #25 before them. #29 done, staged on
+`feat/edit-facts-section`** — see below. Next: #30 (`ready`, depends only on
+#28, already merged).
 **Planning:** complete. 35 decisions in `docs/WAYFINDER.md`, full build spec in
 `docs/SPEC.md`. No open questions that block starting.
 **Issues:** created. 46 GitHub issues on `Wintaru/Rootward` — items 1–40 from
@@ -1114,8 +1115,8 @@ session).
 - **Not done:** the live signed-in browser pass (joins the same deferred
   integration pass as #21–#28); the deferred hook-extraction cleanup above.
 
-**Issue #32 — Presence indicators on the edit view: done, staged on
-`feat/edit-presence`.** The last WAYFINDER decision-26 piece
+**Issue #32 — Presence indicators on the edit view: done, merged to `main`
+(`1948b33`), issue closed.** The last WAYFINDER decision-26 piece
 (`docs/SPEC.md` §8.3 / §8.5, §10 item 32). New migration
 `20260831230616_edit_presence_authorization.sql`: two `realtime.messages`
 policies (`edit_presence_select` / `edit_presence_insert`) requiring
@@ -1196,32 +1197,74 @@ true, presence: { key: self.userId } }`), tracks on `SUBSCRIBED`, and
   bookkeeping this session found they'd been left unlabelled since #28's
   own session).
 
+**Issue #29 — Facts section: done, staged on `feat/edit-facts-section`.** No
+migration — `fact_write` / `fact_select` RLS already exist from #9. Closed
+stale-open issue #32 as part of this session's bookkeeping (merged `1948b33`,
+left open — same pattern as every prior session).
+
+Structurally the same shell as #28's Events section — `lib/db/fact-edit.ts`
+(`getPersonFacts` / `saveFacts`, version-checked insert/update/delete over
+`fact`, WAYFINDER decision 26) and `lib/edit/facts.ts` (pure reducer / diff /
+`describeFactConflicts`) mirror `event-edit.ts` / `events.ts` closely, with
+the differences `fact`'s own shape forces:
+
+- `fact` has no `age_text` or `sort_key` — nothing to send, nothing to
+  re-sort by after a save. `getPersonFacts` orders by `id` (matches
+  `getPersonProfile`'s read-only fact query); `reconcileFactsAfterSave` is
+  the simpler no-resort shape `additional-names.ts` uses, not `events.ts`'s
+  resort-by-`sortKey` one.
+- `visibility` is a writable enum column on the draft and diff. The MVP UI
+  (`FACT_VISIBILITY_OPTIONS`) restricts the `<select>` to `everyone_approved`
+  / `hidden` only — `close_family` / `moderators_only` stay reachable only by
+  a future admin surface (issue #29 scope, same restriction decisions 7/31
+  apply to `person.visibility`). Code review caught that a fact loaded with
+  one of those two out-of-scope values would silently downgrade to
+  `everyone_approved` on the next save if the moderator so much as touched
+  the control (a plain `<select>` with no matching `<option>` falls back to
+  displaying its first option while the real value stays underneath) — fixed
+  by disabling the control and rendering a non-selectable option for the true
+  value whenever it is out of the MVP's two-value scope, so the display stays
+  honest and the downgrade is unreachable from this view.
+- `is_sensitive` is a generated column (`type in ('ssn', 'national_id',
+'medical')`, SPEC §4.2) — never sent on insert/update.
+  `factIsSensitive(type)` mirrors the same expression client-side so the
+  row's sensitive badge reflects instantly the moment a sensitive type is
+  chosen, before any save round trip (the issue's second "Done when" line).
+
+Wired into `apps/web/lib/db/index.ts`, the edit view's `actions.ts`
+(`saveFacts` server action, same access-recheck + version-check posture as
+`saveEvents`), and `page.tsx`'s `loadSectionContent` switch (`?section=facts`
+now renders `FactsSection`, joining Name & Gender / Additional Names /
+Reference Numbers / Events / Notes; Media and Sources — #30, #33 — still fall
+back to the shell placeholder). 28 vitest added (pnpm **484**) + build green.
+Code review: 1 should-fix applied (the visibility out-of-scope display bug
+above); no must-fix. Labelled #30 `ready` (unaffected — already was).
+
 ## Next action
 
-**Phase 5 continues.** #29 (Facts section) and #30 (Sources section) are both
-`ready` — each depends only on #28, already merged. Facts (#29) is
-lower-numbered; take it next unless this file says otherwise by then.
+**Phase 5 continues.** #30 (Sources section) is `ready` — depends only on
+#28, already merged. Take it next unless this file says otherwise by then.
 
-Nothing depends on #26/#27/#28/#31/#32 being merged specifically — issues get
-labelled `ready` on the strength of the dependency being _done_, ahead of the
-merge itself (same bookkeeping-ahead-of-merge pattern as prior sessions).
+Nothing depends on #26/#27/#28/#29/#31/#32 being merged specifically — issues
+get labelled `ready` on the strength of the dependency being _done_, ahead of
+the merge itself (same bookkeeping-ahead-of-merge pattern as prior sessions).
 
 Still pending across #14–#32: a deployed-function run (`supabase functions
 serve`) plus a real signed-in browser session driving `/login` → `/import` →
 `/onboarding` → `/moderation` → `/tree/<root>` → `/person/<id>` →
 `/person/<id>/edit` (now including the Name & Gender / Additional Names /
-Reference Numbers / Events / Notes sections, a live multi-tab conflict
-walkthrough for the `ConflictDialog`, **and two browser tabs on the same
-person's edit view to see the #32 presence banner update live**) end to end.
-Do this as a dedicated integration pass, and restart the local stack first so
-the `config.toml` Google + redirect-URL change loads.
+Reference Numbers / Events / Facts / Notes sections, a live multi-tab
+conflict walkthrough for the `ConflictDialog`, and two browser tabs on the
+same person's edit view to see the #32 presence banner update live) end to
+end. Do this as a dedicated integration pass, and restart the local stack
+first so the `config.toml` Google + redirect-URL change loads.
 
-**Shared local stack:** migrations through `20260831230616` (this session's
-`edit_presence_authorization`) are applied — this session ran a full
-`supabase db reset` (not just `migration up`) after fixing the `realtime.topic()`
-vs. row-`topic` bug the RLS pgTAP test caught, so the seed and every prior
-migration replayed clean too. `supabase db reset` remains safe going forward
-(every branch through #32 is either merged or additive-safe).
+**Shared local stack:** migrations through `20260831230616` (#32's
+`edit_presence_authorization`) are applied — #32's session ran a full
+`supabase db reset` (not just `migration up`), so the seed and every prior
+migration replayed clean. This session (#29) added no migration, so the
+stack is unaffected. `supabase db reset` remains safe going forward (every
+branch through #29 is either merged or additive-safe).
 
 `gh issue list --label ready` is the queue. Take the lowest-numbered `ready`
 issue unless this file says otherwise. When an issue merges, label the issues it
@@ -1267,6 +1310,7 @@ unblocks `ready`.
 | 2026-08-31 | Closed stale-open issues #26 and #27 (merged `5c3ef28`/`f43c609`, both left open). Issue #28 — `DateInput` component + Events section (no migration, `event_write`/`place_write` RLS from #9): `lib/edit/date-input.ts` (pure `interpretDateInput` — live preview + phrase-flag, `parseGenealogyDate`/`formatGenealogyDate` from `@rootward/shared`) backs the `DateInput` client component; `lib/db/place.ts` (`searchPlaces` with escaped `ilike` wildcards, `findOrCreatePlaceId` with a `23505`-retry race guard) backs `PlaceInput` (debounced autocomplete, no client-tracked `placeId`); `lib/db/event-edit.ts` + `lib/edit/events.ts` mirror #27's `person-edit.ts`/`additional-names.ts` pattern for person-owned `event` rows, with two deliberate deviations — no client reorder (`sort_key` is server-trigger-computed, so `reconcileEventsAfterSave` re-sorts by each saved row's returned key instead) and an added row is skipped only when `type` is unset (not "every field blank", since `event.type` is the one not-null column). `lib/person/labels.ts`'s private `label` helper is now the exported `enumTokenLabel`, for the Type picker's option list (no saved record to read a `type_other` off of, so it cannot reuse the display-only `eventTypeLabel`). 41 vitest added (pnpm 412) + build green. Review: 2 must-fix applied (a switched-away `type_other` silently persisting — the reducer now clears it the moment `type` changes off `"other"`; the picker's mislabeled "Other" option) + 1 should-fix applied (the `ilike` wildcard escape). Labelled #31/#32 `ready` (#26/#27 both merged).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | `feat/edit-events-dateinput`            |
 | 2026-08-31 | Closed stale-open issue #28 (merged `dc48652`, left open). Issue #31 — Notes section + row-level version check + `ConflictDialog` (no migration, `note_write` RLS from #9): `lib/db/conflict.ts` (`RowConflict<Row>`, the `{theirs, changedBy}` shape every write function now returns on a version-check loss instead of a bare `{ok:false}`) + `lib/db/account-lookup.ts`; retrofitted `person-edit.ts`/`event-edit.ts` to refetch the current row on conflict; `lib/db/note-edit.ts` (new — `getPersonNotes`/`saveNotes`, scoped to person + person's own events per WAYFINDER decision 21, narrower than the issue's own wording); `lib/edit/conflict.ts` (shared `ConflictItem` type) + `components/person/edit/ConflictDialog.tsx` (the one dialog every section renders); `lib/edit/notes.ts` (pure CRUD — `moved` swaps with the nearest same-owner row, not the adjacent index) + `NotesSection.tsx`; every multi-row section gained a `describe*Conflicts` mapper, a `row_reset` reducer action, and an identical `performSave`/`retryKeepMine`/`resolveConflict` pattern (a conflicted save keeps its original diff alive so a later "keep mine" can resend that row's patch against the fresh `updated_at`). 34 vitest added (pnpm 446) + build green. Self-review caught and fixed one bug before code review (`row_reset` couldn't restore a row already removed from local state — `state.map` silently no-ops on a missing id). Code review: 1 must-fix applied (`ConflictDialog`'s resolve buttons now disable while a save is in flight — an in-flight "keep mine" retry's stale closure could otherwise silently overwrite a concurrent "take theirs" resolution on a different conflict) + 1 should-fix applied (`NoteOwner` narrowed to a local `SectionNoteOwner = "person" \| "event"` so the section's own types can't represent the 6 owner kinds it doesn't handle). 1 should-fix deferred: the three multi-row sections' conflict-resolution state machine is near-verbatim duplicated (~70 lines each) — a shared hook would remove it, not extracted this session. Labelled #32 `ready` (depends only on #26, already merged). | `feat/edit-notes-conflict-dialog`       |
 | 2026-08-31 | Closed stale-open issue #31 (merged `bc046ec`, left open). Issue #32 — Presence indicators on the edit view (`20260831230616_edit_presence_authorization.sql`): pure `lib/edit/presence.ts` (`describeOtherEditors` parses `presenceState()`, validates `section` against `EDIT_SECTIONS`) + client `PresenceBanner.tsx` (joins `person:{id}` once per identity, re-tracks on a section change without rejoining) + `EditShell`'s `currentUser` prop. Code review (one pass, all fixed before staging): 3 must-fix — an unvalidated `section` crashed `editSectionLabel` for every other viewer; the channel was non-private, so `realtime.messages` RLS was never evaluated at all (fixed with `private: true` + two new `is_moderator()` policies — a first policy draft checked `realtime.topic()` instead of the row's own `topic` column, which a new pgTAP assertion caught as authorizing any topic string); the display-name fallback broadcast the caller's real email over that channel (dropped for a generic label). 2 should-fix applied (re-track effect depended on `self` by reference instead of its primitive fields; a dangling `DECISIONS.md` reference, now written). 10 vitest added (pnpm 456) + build green; `edit_presence_test.sql` (8 pgTAP) + `supabase db lint` + `supabase test db` (**227**) green on a clean `supabase db reset`. Labelled #29/#30 `ready` (both depend only on #28, left unlabelled since #28's own session).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | `feat/edit-presence`                    |
+| 2026-08-31 | Closed stale-open issue #32 (merged `1948b33`, left open). Issue #29 — Facts section (no migration, `fact_write`/`fact_select` RLS from #9): `lib/db/fact-edit.ts` (`getPersonFacts`/`saveFacts`) + `lib/edit/facts.ts` (pure reducer/diff/`describeFactConflicts`) mirror #28's `event-edit.ts`/`events.ts` closely, adapted for `fact`'s own shape — no `age_text`/`sort_key` (orders by `id`, no re-sort after save, the `additional-names.ts` shape not the `events.ts` one), a writable `visibility` enum restricted in the MVP UI to `everyone_approved`/`hidden` (issue scope, decisions 7/31's restriction applied to `fact`), and a generated `is_sensitive` column never sent on write but mirrored client-side (`factIsSensitive`) so the sensitive badge reflects instantly on choosing a sensitive type. `FactsSection.tsx` wired into `page.tsx`'s section switch and a new `saveFacts` server action. 28 vitest added (pnpm 484) + build green. Code review: 1 should-fix applied (a fact loaded with an out-of-MVP-scope visibility value — `close_family`/`moderators_only` — would silently downgrade to `everyone_approved` on the next save if the moderator touched the control, since a plain `<select>` with no matching option falls back to displaying its first one while the real value stays underneath; fixed by disabling the control and rendering a non-selectable option for the true value in that case). Labelled #30 `ready` (unaffected — already was).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | `feat/edit-facts-section`               |
 
 ## Notes for the next session
 
@@ -1275,18 +1319,19 @@ unblocks `ready`.
   `Depends on:` issue numbers and a `### Done when` checklist.
 - Issue numbers match `docs/SPEC.md` §10 item numbers for 1–40. Issues 41–46 are
   the Post-MVP bullets.
-- #1–#28, #31, and #38 are merged to `main`. #32 is on
-  `feat/edit-presence` (issue open until it merges). Later issues get
-  `ready` as their dependencies close — do this when you finish an issue.
-  #17 / #20 / #21 / #22 / #23 / #24 / #25 / #26 / #27 / #28 / #31 / #38 were
-  each closed by hand after their work merged but the issue stayed open
+- #1–#28, #31, #32, and #38 are merged to `main`. Later issues get `ready` as
+  their dependencies close — do this when you finish an issue.
+  #17 / #20 / #21 / #22 / #23 / #24 / #25 / #26 / #27 / #28 / #31 / #32 / #38
+  were each closed by hand after their work merged but the issue stayed open
   (`d6ee22f` / `536c920` / `4c92f5e` / `00da1e6` / `5be36e5` / prior session /
-  `70c2c73` / `31e4bf3` / `f43c609` / `dc48652` / `bc046ec` / prior session) —
-  budget for this pattern every session; it has recurred every time so far.
+  `70c2c73` / `31e4bf3` / `f43c609` / `dc48652` / `bc046ec` / `1948b33` /
+  prior session) — budget for this pattern every session; it has recurred
+  every time so far.
 - Phase 1 complete (#4–#10). Phase 2 (GEDCOM) complete (#11–#16). Phase 3 (auth
   & onboarding) complete (#17, #38, #18, #19, #20). Phase 4 (tree view,
   #21–#25) complete. Phase 5 (edit view, #26–#37) under way — #26–#28/#31/#32
-  done (merged or staged), #29/#30 `ready`, #33–#37 not started.
+  merged, #29 staged (`feat/edit-facts-section`), #30 `ready`, #33–#37 not
+  started.
 - **Seed data (#38).** `supabase/seed.sql` now loads a demo admin
   (`admin@rootward.test` / `rootward-admin`) + the 28-person Ashby tree on every
   `supabase db reset` / first `supabase start`. **After merging `feat/seed-demo-data`,
