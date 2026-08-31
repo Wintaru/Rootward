@@ -40,10 +40,12 @@ insert into auth.users (id) values
   ('a0000000-0000-0000-0000-0000000000f1'),  -- moderator
   ('a0000000-0000-0000-0000-0000000000f2'),  -- approved viewer
   ('a0000000-0000-0000-0000-0000000000f3');  -- suspended moderator
+-- on_auth_user_created (issue #17) already made a pending viewer per user above.
 insert into public.account (id, role, status) values
   ('a0000000-0000-0000-0000-0000000000f1', 'moderator', 'active'),
   ('a0000000-0000-0000-0000-0000000000f2', 'viewer',    'active'),
-  ('a0000000-0000-0000-0000-0000000000f3', 'moderator', 'suspended');
+  ('a0000000-0000-0000-0000-0000000000f3', 'moderator', 'suspended')
+on conflict (id) do update set role = excluded.role, status = excluded.status;
 
 -- A pre-existing object so the SELECT-deny assertions target a real row.
 insert into storage.objects (bucket_id, name) values ('imports', 'seed.ged');

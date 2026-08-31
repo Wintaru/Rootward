@@ -744,10 +744,28 @@ Persons, DNA, Stories, ToDos, Numbering System — decision 21.)
 
 ### 9.1 Sign-in (decision 11)
 
-Supabase Auth, magic link + Google. A Postgres trigger on `auth.users` insert
-creates an `account` row (`role = viewer`, `status = pending`). If the signing-in
-email matches `ADMIN_EMAIL` (env), the trigger sets `role = admin`,
-`status = active` (decision 19).
+Supabase Auth, magic link + Google, no passwords. The browser client uses the
+PKCE flow, so both methods return through one route handler, `/auth/callback`,
+which exchanges the code for a session.
+
+A Postgres trigger on `auth.users` insert (`on_auth_user_created`) creates the
+matching `account` row (`role = viewer`, `status = pending`, `display_name` from
+the auth profile).
+
+The `ADMIN_EMAIL` bootstrap (decision 19) is done by the web tier, not the
+trigger: a Postgres trigger cannot read the deployment environment, and Supabase
+local config has no portable hook for a custom setting. `/auth/callback` calls
+`maybeBootstrapAdmin` — when the signed-in email matches `ADMIN_EMAIL` it
+promotes that account to `role = admin`, `status = active` with the service
+role. Idempotent; a transient failure is re-attempted on the admin's next full
+sign-in (they must sign out first — an established session does not re-enter
+the callback).
+
+Session gating is a Next.js proxy (`proxy.ts`, the Next 16 rename of
+middleware): it refreshes the session on every request and redirects an
+unauthenticated visitor to `/login` for every route except `/login` and
+`/auth/*` (decision 35). `/` is a pure router — approved → `/tree/<root>`,
+signed-in-not-approved → `/onboarding`, no session → `/login` (§8.1).
 
 ### 9.2 Invite path (decision 12)
 

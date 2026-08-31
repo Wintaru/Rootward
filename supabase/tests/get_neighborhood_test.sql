@@ -95,10 +95,17 @@ insert into public.person (id, given_name, surname, visibility) values
   ('10000000-0000-0000-0000-000000000050', 'Gkd', 'Pat',  'everyone_approved'),
   ('10000000-0000-0000-0000-000000000060', 'Ggk', 'Pat',  'everyone_approved');
 
+-- The on_auth_user_created trigger (issue #17) already created a pending viewer
+-- account for each auth.users row above; upsert to the role/status this suite
+-- needs.
 insert into public.account (id, role, status, person_id) values
   ('30000000-0000-0000-0000-000000000001', 'admin',     'active', null),
   ('30000000-0000-0000-0000-000000000002', 'moderator', 'active', null),
-  ('30000000-0000-0000-0000-000000000003', 'viewer',    'active', null);
+  ('30000000-0000-0000-0000-000000000003', 'viewer',    'active', null)
+on conflict (id) do update set
+  role = excluded.role,
+  status = excluded.status,
+  person_id = excluded.person_id;
 
 insert into public.family (id, partner1_id, partner2_id, relationship_type) values
   ('20000000-0000-0000-0000-000000000001',

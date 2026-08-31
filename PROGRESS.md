@@ -5,11 +5,11 @@ the relevant `docs/SPEC.md` section.
 
 ## Current state
 
-**Phase:** 2 — GEDCOM (finishing). Phase 0 complete (#1–#3), Phase 1 complete
-(#4–#10 merged). #11–#14 merged to `main` (#12/#13/#14 landed as commits
-`6a1104f` / `d9fb862` / `a5d6459` — PROGRESS was stale, said "staged"). #15 done,
-staged on `feat/gedcom-export`. #16 done, staged on `feat/import-ui` — Phase 2
-closes when #15 and #16 merge.
+**Phase:** 3 — Auth & onboarding. Phase 0 complete (#1–#3), Phase 1 complete
+(#4–#10 merged), Phase 2 complete (#11–#16 merged). #15 / #16 landed as commits
+`dddefba` / `cfc0388` — PROGRESS was stale (said "staged on a branch"); the
+branches were already merged and deleted, issues now closed. #17 done — see
+below.
 **Planning:** complete. 35 decisions in `docs/WAYFINDER.md`, full build spec in
 `docs/SPEC.md`. No open questions that block starting.
 **Issues:** created. 46 GitHub issues on `Wintaru/Rootward` — items 1–40 from
@@ -312,19 +312,52 @@ scaffolding pulled forward from #17 — no middleware, `/login` still 404s. Full
 pnpm + Deno gates green; `supabase db lint` + `supabase test db` (154) green on
 the shared local stack (`supabase migration up`, additive). See `DECISIONS.md`.
 
+**Issue #17 — Supabase Auth: done, on `feat/auth-supabase`.** Magic link +
+Google sign-in, `/login`, the session proxy, and the `account`-creation trigger
+(`docs/SPEC.md` §9.1 / §8.1, §10 item 17). Migration
+`20260831110459_auth_account_trigger.sql` adds `on_auth_user_created` — a
+`SECURITY DEFINER` `AFTER INSERT` trigger on `auth.users` that mirrors every new
+user into `public.account` (`role = viewer`, `status = pending`, `display_name`
+from `raw_user_meta_data`). ADMIN_EMAIL promotion is **web-tier, not the
+trigger** (a trigger can't read deployment env — see `DECISIONS.md`):
+`/auth/callback` runs `maybeBootstrapAdmin`, a service-role UPDATE to
+`admin`/`active` when `user.email` matches `process.env.ADMIN_EMAIL`
+(`isAdminEmail` pure + unit-tested; the `.env.example` placeholder is ignored).
+Frontend: `proxy.ts` (Next 16 rename of `middleware.ts`, `nodejs` runtime) →
+`lib/supabase/proxy.ts` `updateSession` refreshes the session with
+`getClaims()` and redirects unauth → `/login` for every route but `/login` and
+`/auth/*` (decision 35); pure `decideProxyRedirect` / `resolveHomeDestination`
+hold the decisions (frontend-arch reducer pattern). `app/login` (server guard →
+`LoginForm` client: `signInWithOtp` + `signInWithOAuth('google')`, both through
+the PKCE `/auth/callback`), `app/auth/callback/route.ts`,
+`app/auth/auth-code-error`, and `app/page.tsx` rewritten to the §8.1 router
+(approved → `/tree/<root>`, pending → `/onboarding`, else `/login` — the first
+two 404 until #19 / #21, same deliberate pattern as #16's `/login`).
+`lib/auth/{admin-email,bootstrap-admin,current-account}.ts`,
+`lib/db/tree-settings.ts` (`getDefaultRootPersonId`, decision 10). The 4 pgTAP
+suites that seed `auth.users` + `account` now `on conflict (id) do update` (the
+trigger creates the account row first). `config.toml`:
+`[auth.external.google] enabled = true` (env-substituted secrets,
+`skip_nonce_check = true`) + `additional_redirect_urls` → `/auth/callback` —
+**needs `supabase stop && supabase start` to take effect; not done this session
+(shared stack).** New pgTAP `auth_account_trigger_test.sql` (6 assertions).
+Full pnpm + Deno gates green; `supabase db lint` + `supabase test db` (162)
+green; migration applied additively (`supabase migration up`). 13 new vitest
+tests (184 total).
+
 ## Next action
 
-**Phase 3 — Auth & onboarding.** Issue **#17 — Supabase Auth** (`docs/SPEC.md`
-§9.1, §10 item 17): magic link + Google, `/login`, session middleware, the
-`account`-creation trigger on `auth.users` + `ADMIN_EMAIL` bootstrap. This
-unblocks a real browser test of `/import` (#16) and everything after.
+**Phase 3 continues.** Issue **#18 — `onboarding-match` edge function**
+(`docs/SPEC.md` §7 `onboarding-match`, §9.3, §10 item 18): `pg_trgm` name
+search, challenge question(s), rate limit, link + moderator notify. Needs the
+`pg_trgm` extension enabled in a migration (§2 tech stack). Then #19 (`/onboarding`
+UI) and #20 (invite flow).
 
-Still pending across #14–#16: a deployed-function run (`supabase functions
-serve`) plus a real signed-in browser session driving `/import` end to end —
-needs #17's `/login`. Fold it into #17 or a dedicated integration pass.
-
-Bookkeeping this session: #16 stays open until `feat/import-ui` merges; label
-#17 `ready` (and #18) once #16 lands if not already.
+Still pending across #14–#17: a deployed-function run (`supabase functions
+serve`) plus a real signed-in browser session driving `/login` → `/import` end
+to end. `/login` now exists — do this as a dedicated integration pass, and
+restart the local stack first so the `config.toml` Google + redirect-URL change
+loads.
 
 `gh issue list --label ready` is the queue. Take the lowest-numbered `ready`
 issue unless this file says otherwise. When an issue merges, label the issues it
@@ -332,29 +365,30 @@ unblocks `ready`.
 
 ## Log
 
-| Date       | Session did                                                                                                                                                                                                                                             | Result                                  |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
-| 2026-08-30 | Wayfinder planning — all decisions settled                                                                                                                                                                                                              | `docs/WAYFINDER.md` (1–33)              |
-| 2026-08-30 | Wrote the build spec                                                                                                                                                                                                                                    | `docs/SPEC.md`                          |
-| 2026-08-30 | Repo init, MIT license, project meta, resume protocol                                                                                                                                                                                                   | `chore/scaffold`                        |
-| 2026-08-30 | Spec review + fixes; settled frontend stack and public-access questions                                                                                                                                                                                 | `docs/WAYFINDER.md` (34–35)             |
-| 2026-08-30 | Created the 46-issue set from `docs/SPEC.md` §10 — milestones, labels, dependencies                                                                                                                                                                     | GitHub issues #1–#46                    |
-| 2026-08-30 | Issue #1 — scaffolded the pnpm monorepo; verify gate green                                                                                                                                                                                              | `chore/scaffold-monorepo`               |
-| 2026-08-30 | Issue #2 — local Supabase dev stack, `pnpm dev` / `dev:status`, `.env.example`                                                                                                                                                                          | `chore/local-supabase-dev-stack`        |
-| 2026-08-30 | Issue #3 — GitHub Actions CI (`verify` + `migrations` jobs); build kept out of CI                                                                                                                                                                       | `chore/ci-pipeline`                     |
-| 2026-08-30 | Issue #4 — first migration: 6 enums + `person`/`person_name`/`family`/`family_child`                                                                                                                                                                    | `feat/migration-core-genealogy`         |
-| 2026-08-30 | Issue #5 — migration: `event`/`fact`/`place` + flat `date_*` set + sort-key trigger                                                                                                                                                                     | `feat/migration-events-facts-places`    |
-| 2026-08-30 | Issue #6 — migration: `source`/`repository`/`citation`/`media`/`media_link`/`note`                                                                                                                                                                      | `feat/migration-sources-media-notes`    |
-| 2026-08-30 | Issue #7 — migration: `account`/`tree_settings`/`audit_log` + `updated_at` + audit triggers                                                                                                                                                             | `feat/migration-account-settings-audit` |
-| 2026-08-30 | Issue #8 — migration: `invitation`/`access_request`/`claim_attempt`/`notification`/`notification_read`/`import_job`/`export_job`                                                                                                                        | `feat/migration-onboarding-jobs`        |
-| 2026-08-30 | Issue #9 — RLS: 12 `security definer` helpers, policies on all 23 tables, pgTAP allow/deny harness, `supabase test db` in CI                                                                                                                            | `feat/rls-policies`                     |
-| 2026-08-30 | Issue #10 — `get_neighborhood` SQL function + `pnpm gen:types` + `lib/db` typed layer + `lib/supabase` clients + pgTAP + CI drift check                                                                                                                 | `feat/db-typed-query-layer`             |
-| 2026-08-30 | Issue #11 — `packages/shared` genealogy-date parser + formatter (5.5.1 + 7.0 calendars, dual dating, phrase fallback), 79 vitest tests                                                                                                                  | `feat/genealogy-date-module`            |
-| 2026-08-30 | Issue #12 — `packages/gedcom` reader: `nodes.ts` line grammar + `mapping.ts` tag tables + `readGedcom` (5.5.1 + 7.0, xref links, `raw_gedcom`), 29 vitest tests                                                                                         | `feat/gedcom-reader`                    |
-| 2026-08-30 | Issue #13 — `packages/gedcom` writer: `writeGedcom` + reverse enum tables in `mapping.ts`, header/xref/raw preserved, `version` option, 26 round-trip vitest tests                                                                                      | `feat/gedcom-writer`                    |
-| 2026-08-30 | Issue #14 — `gedcom-import` edge function: Deno-native `supabase/functions/` + `deno.json`/`deno.lock` + CI `functions` job; resumable `initial`-mode importer (deterministic UUIDv5, cursor phases), 11 Deno tests, schema-validated in a rollback txn | `feat/gedcom-import`                    |
-| 2026-08-30 | Issue #15 — `gedcom-export` edge function: private `exports` bucket migration + pgTAP, `exporter.ts` DB→`GedcomReadResult` rebuild (xref reuse/synthesis, synth HEAD), engine/shell split, 6 Deno tests via the real #14 engine, live-stack verified    | `feat/gedcom-export`                    |
-| 2026-08-30 | Issue #16 — `/import` UI: `imports` bucket migration + pgTAP, moderator-guarded route, upload → `gedcom-import` invoke → stall-driven resume poll, pure reducer + first `apps/web` vitest harness, 24 tests                                             | `feat/import-ui`                        |
+| Date       | Session did                                                                                                                                                                                                                                                                                   | Result                                  |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| 2026-08-30 | Wayfinder planning — all decisions settled                                                                                                                                                                                                                                                    | `docs/WAYFINDER.md` (1–33)              |
+| 2026-08-30 | Wrote the build spec                                                                                                                                                                                                                                                                          | `docs/SPEC.md`                          |
+| 2026-08-30 | Repo init, MIT license, project meta, resume protocol                                                                                                                                                                                                                                         | `chore/scaffold`                        |
+| 2026-08-30 | Spec review + fixes; settled frontend stack and public-access questions                                                                                                                                                                                                                       | `docs/WAYFINDER.md` (34–35)             |
+| 2026-08-30 | Created the 46-issue set from `docs/SPEC.md` §10 — milestones, labels, dependencies                                                                                                                                                                                                           | GitHub issues #1–#46                    |
+| 2026-08-30 | Issue #1 — scaffolded the pnpm monorepo; verify gate green                                                                                                                                                                                                                                    | `chore/scaffold-monorepo`               |
+| 2026-08-30 | Issue #2 — local Supabase dev stack, `pnpm dev` / `dev:status`, `.env.example`                                                                                                                                                                                                                | `chore/local-supabase-dev-stack`        |
+| 2026-08-30 | Issue #3 — GitHub Actions CI (`verify` + `migrations` jobs); build kept out of CI                                                                                                                                                                                                             | `chore/ci-pipeline`                     |
+| 2026-08-30 | Issue #4 — first migration: 6 enums + `person`/`person_name`/`family`/`family_child`                                                                                                                                                                                                          | `feat/migration-core-genealogy`         |
+| 2026-08-30 | Issue #5 — migration: `event`/`fact`/`place` + flat `date_*` set + sort-key trigger                                                                                                                                                                                                           | `feat/migration-events-facts-places`    |
+| 2026-08-30 | Issue #6 — migration: `source`/`repository`/`citation`/`media`/`media_link`/`note`                                                                                                                                                                                                            | `feat/migration-sources-media-notes`    |
+| 2026-08-30 | Issue #7 — migration: `account`/`tree_settings`/`audit_log` + `updated_at` + audit triggers                                                                                                                                                                                                   | `feat/migration-account-settings-audit` |
+| 2026-08-30 | Issue #8 — migration: `invitation`/`access_request`/`claim_attempt`/`notification`/`notification_read`/`import_job`/`export_job`                                                                                                                                                              | `feat/migration-onboarding-jobs`        |
+| 2026-08-30 | Issue #9 — RLS: 12 `security definer` helpers, policies on all 23 tables, pgTAP allow/deny harness, `supabase test db` in CI                                                                                                                                                                  | `feat/rls-policies`                     |
+| 2026-08-30 | Issue #10 — `get_neighborhood` SQL function + `pnpm gen:types` + `lib/db` typed layer + `lib/supabase` clients + pgTAP + CI drift check                                                                                                                                                       | `feat/db-typed-query-layer`             |
+| 2026-08-30 | Issue #11 — `packages/shared` genealogy-date parser + formatter (5.5.1 + 7.0 calendars, dual dating, phrase fallback), 79 vitest tests                                                                                                                                                        | `feat/genealogy-date-module`            |
+| 2026-08-30 | Issue #12 — `packages/gedcom` reader: `nodes.ts` line grammar + `mapping.ts` tag tables + `readGedcom` (5.5.1 + 7.0, xref links, `raw_gedcom`), 29 vitest tests                                                                                                                               | `feat/gedcom-reader`                    |
+| 2026-08-30 | Issue #13 — `packages/gedcom` writer: `writeGedcom` + reverse enum tables in `mapping.ts`, header/xref/raw preserved, `version` option, 26 round-trip vitest tests                                                                                                                            | `feat/gedcom-writer`                    |
+| 2026-08-30 | Issue #14 — `gedcom-import` edge function: Deno-native `supabase/functions/` + `deno.json`/`deno.lock` + CI `functions` job; resumable `initial`-mode importer (deterministic UUIDv5, cursor phases), 11 Deno tests, schema-validated in a rollback txn                                       | `feat/gedcom-import`                    |
+| 2026-08-30 | Issue #15 — `gedcom-export` edge function: private `exports` bucket migration + pgTAP, `exporter.ts` DB→`GedcomReadResult` rebuild (xref reuse/synthesis, synth HEAD), engine/shell split, 6 Deno tests via the real #14 engine, live-stack verified                                          | `feat/gedcom-export`                    |
+| 2026-08-30 | Issue #16 — `/import` UI: `imports` bucket migration + pgTAP, moderator-guarded route, upload → `gedcom-import` invoke → stall-driven resume poll, pure reducer + first `apps/web` vitest harness, 24 tests                                                                                   | `feat/import-ui`                        |
+| 2026-08-31 | Reconciled #15/#16 (already merged `dddefba`/`cfc0388`, issues closed). Issue #17 — Supabase Auth: `on_auth_user_created` trigger, `/login` + magic-link/Google, Next 16 `proxy.ts` session gate, `/auth/callback` + web-tier ADMIN_EMAIL bootstrap, §8.1 `/` router, pgTAP + 13 vitest tests | `feat/auth-supabase`                    |
 
 ## Notes for the next session
 
@@ -363,11 +397,25 @@ unblocks `ready`.
   `Depends on:` issue numbers and a `### Done when` checklist.
 - Issue numbers match `docs/SPEC.md` §10 item numbers for 1–40. Issues 41–46 are
   the Post-MVP bullets.
-- #1–#14 are merged to `main`; #15's work is on `feat/gedcom-export` and #16's on
-  `feat/import-ui` (both issues open until they merge). Later issues get `ready`
-  as their dependencies close — do this when you finish an issue.
-- Phase 1 is complete (#4–#10 merged). Phase 2 (GEDCOM): #11–#16 done; the phase
-  closes when #15 and #16 merge. Phase 3 (auth) starts at #17.
+- #1–#16 are merged to `main`. #17's work is on `feat/auth-supabase` (issue open
+  until it merges). Later issues get `ready` as their dependencies close — do
+  this when you finish an issue.
+- Phase 1 complete (#4–#10). Phase 2 (GEDCOM) complete (#11–#16). Phase 3 (auth)
+  in progress: #17 done, #18–#20 next.
+- **Auth (#17).** Sign-in is magic link + Google, PKCE, both returning through
+  `apps/web/app/auth/callback/route.ts`. `on_auth_user_created`
+  (`20260831110459`) creates the `account` row on every `auth.users` insert —
+  any pgTAP or seed that inserts `auth.users` now also gets an `account` row, so
+  insert into `account` with `on conflict (id) do update`. `ADMIN_EMAIL` is a
+  **web env var**, not known to Postgres: `/auth/callback` →
+  `maybeBootstrapAdmin` (service role) promotes the match to `admin`/`active`.
+  Session gating is `apps/web/proxy.ts` (Next 16 renamed `middleware.ts` →
+  `proxy.ts`; both-files is a build error, `middleware.ts` warns). Decisions
+  live in pure `lib/auth/auth-redirect.ts`. `config.toml` gained
+  `[auth.external.google]` + `/auth/callback` redirect URLs — **a running local
+  stack must be restarted (`supabase stop && supabase start`) to pick these
+  up.** `/onboarding` and `/tree/*` are still 404 (issues #19 / #21); `/` and
+  the proxy already route to them.
 - **Frontend (#16 is the first route).** `apps/web` now has tests: the root
   `pnpm test` (`vitest.config.ts`) globs `apps/web/**/*.{test,spec}.ts` with a
   `@/` alias (trailing slash — must not swallow `@rootward/*` / `@supabase/*`);
@@ -378,11 +426,13 @@ unblocks `ready`.
   holds every query (decision 10). `/import` = `app/import/` +
   `lib/import/{orchestrator,useGedcomImport}.ts` + `lib/db/import-jobs.ts` +
   `lib/auth/{access,require-moderator}.ts`.
-- **Auth is not built yet (#17).** `resolveImportAccess()` reads
-  `auth.getUser()` + `account.role`; there is no session middleware and `/login`
-  404s. `/import` redirects there anyway for an unauthenticated visitor
-  (decision 35). #17 adds middleware, `/login`, and the `account`-creation
-  trigger — until then no route can be exercised in a real browser.
+- **Auth is built (#17).** `/login`, the `proxy.ts` session gate, and the
+  `on_auth_user_created` trigger all exist. `resolveImportAccess()` (#16) still
+  uses `auth.getUser()` and is unchanged — the new `getCurrentAccount()` in
+  `lib/auth/current-account.ts` mirrors it with `getClaims()`-parity intent for
+  `/` and `/login`; a future tidy could fold `resolveImportAccess` onto it. No
+  route has been exercised in a real browser yet — needs `supabase functions
+serve` + a stack restart for the `config.toml` change (see "Next action").
 - The `imports` bucket + its `is_moderator()` `storage.objects` policy live in
   migration `20260830235147` (mirror of the #15 `exports` bucket). Both were
   applied to the shared local stack with `supabase migration up` (additive) —

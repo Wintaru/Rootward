@@ -1,11 +1,25 @@
-export default function Home() {
-  return (
-    <main className="mx-auto flex max-w-2xl flex-1 flex-col justify-center gap-4 px-6 py-24">
-      <h1 className="text-3xl font-semibold tracking-tight">Rootward</h1>
-      <p className="text-muted-foreground text-lg">
-        An open-source, self-hostable family tree. The scaffold is in place —
-        the tree and edit views come next.
-      </p>
-    </main>
-  );
+import { redirect } from "next/navigation";
+
+import { resolveHomeDestination } from "@/lib/auth/auth-redirect";
+import { getCurrentAccount } from "@/lib/auth/current-account";
+import { getDefaultRootPersonId } from "@/lib/db";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+
+/**
+ * `/` is a pure router (SPEC §8.1): approved → the tree, signed-in-not-approved
+ * → onboarding, no session → login. It renders nothing.
+ */
+export default async function Home() {
+  const current = await getCurrentAccount();
+
+  if (current === null) {
+    redirect("/login");
+  }
+
+  const approved = current.account?.status === "active";
+  const rootPersonId = approved
+    ? await getDefaultRootPersonId(await createSupabaseServerClient())
+    : null;
+
+  redirect(resolveHomeDestination({ signedIn: true, approved, rootPersonId }));
 }

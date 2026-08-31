@@ -80,12 +80,19 @@ insert into public.person (id, given_name, surname, visibility, is_living) value
   ('b0000000-0000-0000-0000-000000000005', 'Ezra',  'Override', 'everyone_approved', false), -- explicit is_living=false
   ('b0000000-0000-0000-0000-000000000006', 'Fin',   'Nodata',   'everyone_approved', null);  -- no events at all
 
+-- The on_auth_user_created trigger (issue #17) already created a pending viewer
+-- account for each auth.users row above; upsert to the role/status this suite
+-- needs.
 insert into public.account (id, role, status, person_id) values
   ('a0000000-0000-0000-0000-000000000001', 'admin',     'active',  null),
   ('a0000000-0000-0000-0000-000000000002', 'moderator', 'active',  null),
   ('a0000000-0000-0000-0000-000000000003', 'viewer',    'active',  'b0000000-0000-0000-0000-000000000004'),
   ('a0000000-0000-0000-0000-000000000004', 'viewer',    'active',  'b0000000-0000-0000-0000-000000000003'),
-  ('a0000000-0000-0000-0000-000000000005', 'viewer',    'pending', null);
+  ('a0000000-0000-0000-0000-000000000005', 'viewer',    'pending', null)
+on conflict (id) do update set
+  role = excluded.role,
+  status = excluded.status,
+  person_id = excluded.person_id;
 
 insert into public.family (id, partner1_id, partner2_id) values
   ('c0000000-0000-0000-0000-000000000001',

@@ -162,7 +162,11 @@ site_url = "http://127.0.0.1:3000"
 # The public URL that Auth serves on. Defaults to the API external URL with `/auth/v1` appended.
 # external_url = ""
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
-additional_redirect_urls = ["https://127.0.0.1:3000"]
+# The web app sends every sign-in through /auth/callback (issue #17).
+additional_redirect_urls = [
+  "http://127.0.0.1:3000/auth/callback",
+  "http://localhost:3000/auth/callback",
+]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
 # JWT issuer URL. If not set, defaults to auth.external_url.
@@ -335,6 +339,19 @@ url = ""
 skip_nonce_check = false
 # If enabled, it will allow the user to successfully authenticate when the provider does not return an email address.
 email_optional = false
+
+# Google OAuth (decision 11, issue #17). Enabled so the /login "Continue with
+# Google" button works once a deployment supplies its own OAuth app. Leave the
+# two env vars blank in .env for magic-link-only local dev -- the stack still
+# starts, the button just fails until the credentials are set. The CLI reads
+# SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID / _SECRET from the repo-root .env.
+[auth.external.google]
+enabled = true
+client_id = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID)"
+# DO NOT commit your OAuth provider secret to git. Use environment variable substitution instead:
+secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)"
+# Required for local sign in with Google auth (the id_token carries no nonce).
+skip_nonce_check = true
 
 # Allow Solana wallet holders to sign in to your project via the Sign in with Solana (SIWS, EIP-4361) standard.
 # You can configure "web3" rate limit in the [auth.rate_limit] section and set up [auth.captcha] if self-hosting.
