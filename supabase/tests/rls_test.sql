@@ -190,15 +190,19 @@ insert into public.invitation (id, email, person_id, role) values
   ('a1000000-0000-0000-0000-000000000001', 'new@example.com',
    'b0000000-0000-0000-0000-000000000002', 'viewer');
 
+-- Inserted before the access_request below: the notify_access_requested trigger
+-- (migration 20260831162624) dedups against an open access_requested for the
+-- same account, so this pre-seeded row keeps the count at one.
+insert into public.notification (id, type, payload) values
+  ('a4000000-0000-0000-0000-000000000001', 'access_requested',
+   jsonb_build_object('account_id', 'a0000000-0000-0000-0000-000000000003'));
+
 insert into public.access_request (id, account_id, submitted_name) values
   ('a2000000-0000-0000-0000-000000000001',
    'a0000000-0000-0000-0000-000000000003', 'Della Self');
 
 insert into public.claim_attempt (id, account_id, succeeded) values
   ('a3000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000003', false);
-
-insert into public.notification (id, type, payload) values
-  ('a4000000-0000-0000-0000-000000000001', 'access_requested', '{}'::jsonb);
 
 insert into public.notification_read (notification_id, account_id) values
   ('a4000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000003');
