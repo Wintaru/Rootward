@@ -3,18 +3,38 @@
 import { createChart } from "family-chart";
 import { useEffect, useRef } from "react";
 
+import {
+  computeGenerationBands,
+  readLaidOutTree,
+} from "@/lib/tree/generation-bands";
 import { personCardHtml } from "@/lib/tree/person-card";
 import type {
   CardSex,
   FamilyChartPersonData,
   FamilyChartTree,
 } from "@/lib/tree/to-family-chart";
+import {
+  removeGenerationBands,
+  renderGenerationBands,
+} from "./generation-bands-overlay";
 
 import "family-chart/styles/family-chart.css";
 import "./family-tree.css";
 
 /** Milliseconds for the re-centre / layout animation (WAYFINDER decision 23). */
 const TRANSITION_MS = 800;
+
+/**
+ * Card box, shared between `setCardDim` and the generation-band geometry
+ * (SPEC §8.2). `CARD_WIDTH` / `CARD_HEIGHT` must match `.rw-card` in
+ * `family-tree.css`.
+ */
+const CARD_WIDTH = 190;
+const CARD_HEIGHT = 80;
+const CARD_X_SPACING = 260;
+const CARD_Y_SPACING = 150;
+/** Layout gap between a band's left label and the leftmost card on its row. */
+const LABEL_GUTTER = 24;
 
 interface FamilyTreeProps {
   readonly tree: FamilyChartTree;
@@ -44,8 +64,8 @@ export function FamilyTree({ tree }: FamilyTreeProps) {
 
     const chart = createChart(container, [...tree.data])
       .setTransitionTime(TRANSITION_MS)
-      .setCardXSpacing(260)
-      .setCardYSpacing(150)
+      .setCardXSpacing(CARD_X_SPACING)
+      .setCardYSpacing(CARD_Y_SPACING)
       .setOrientationVertical()
       // A missing partner means "outside the fetched neighbourhood", not
       // "unknown" — so no "add spouse" placeholder cards.
@@ -53,11 +73,17 @@ export function FamilyTree({ tree }: FamilyTreeProps) {
 
     chart
       .setCardHtml()
-      .setCardDim({ w: 190, h: 80 })
+      .setCardDim({ w: CARD_WIDTH, h: CARD_HEIGHT })
       .setMiniTree(false)
       .setCardInnerHtmlCreator((node) =>
         personCardHtml(cardDataOf(node), duplicateCountOf(node)),
       );
+
+    // Redraw the generation bands after every layout — the initial render and
+    // each click re-centre — so they stay aligned with the animated rows.
+    chart.setAfterUpdate((props?: AfterUpdateProps) => {
+      drawGenerationBands(container, chart, props);
+    });
 
     chart.updateMainId(tree.mainId);
     chart.updateTree({ initial: true, tree_position: "main_to_middle" });
@@ -71,6 +97,53 @@ export function FamilyTree({ tree }: FamilyTreeProps) {
   }, [tree]);
 
   return <div ref={containerRef} className="f3 rw-tree" />;
+}
+
+/**
+ * The subset of `family-chart`'s post-update payload the band overlay reads.
+ * Keys are snake_case to mirror the library payload verbatim.
+ */
+interface AfterUpdateProps {
+  readonly initial?: boolean;
+  readonly transition_time?: number;
+}
+
+/**
+ * Recompute the generation bands from the freshly laid-out tree and repaint the
+ * SVG overlay. Runs on `afterUpdate`, so `chart.store.getTree()` holds the final
+ * positions the cards are animating towards; the overlay transitions to match.
+ */
+function drawGenerationBands(
+  container: HTMLElement,
+  chart: ReturnType<typeof createChart>,
+  props: AfterUpdateProps | undefined,
+): void {
+  const view = container.querySelector<SVGGElement>("svg .view");
+  if (view === null) {
+    return;
+  }
+
+  const { nodes, focusY, leftmostX } = readLaidOutTree(
+    chart.store.getTree()?.data,
+    chart.store.getMainId(),
+  );
+
+  if (nodes.length === 0) {
+    removeGenerationBands(view);
+    return;
+  }
+
+  const bands = computeGenerationBands(nodes, {
+    focusY,
+    cardHeight: CARD_HEIGHT,
+    rowSpacing: CARD_Y_SPACING,
+  });
+
+  renderGenerationBands(view, bands, {
+    transitionMs:
+      props?.initial === true ? 0 : (props?.transition_time ?? TRANSITION_MS),
+    labelX: (leftmostX ?? 0) - CARD_WIDTH / 2 - LABEL_GUTTER,
+  });
 }
 
 const CARD_SEXES: readonly CardSex[] = ["male", "female", "neutral"];

@@ -6,10 +6,11 @@ the relevant `docs/SPEC.md` section.
 ## Current state
 
 **Phase:** 4 — Tree view is **in progress**. Phase 0 (#1–#3), Phase 1
-(#4–#10), Phase 2 (#11–#16), Phase 3 (#17, #38, #18, #19, #20) all merged. #20
-merged (`536c920`) — issue was still open on GitHub, closed it this session
-(same as #17 before it). **#21 done, staged on `feat/tree-family-chart`** — see
-below. Next is #22 (generation bands) then #23–#25.
+(#4–#10), Phase 2 (#11–#16), Phase 3 (#17, #38, #18, #19, #20) all merged. #21
+merged (`4c92f5e`) — issue was still open on GitHub, closed it this session
+(same as #17 / #20 before it); labelled #22 and #23 `ready`.
+**#22 done, staged on `feat/tree-generation-bands`** — see below. Next is #23
+(getNeighborhood wiring + re-center + deep links) then #24–#25.
 **Planning:** complete. 35 decisions in `docs/WAYFINDER.md`, full build spec in
 `docs/SPEC.md`. No open questions that block starting.
 **Issues:** created. 46 GitHub issues on `Wintaru/Rootward` — items 1–40 from
@@ -551,18 +552,60 @@ item 21, WAYFINDER decisions 23 / 28). No migration — read-only over
   `router.push` re-centre, URL-as-focus history, in-session depth override. Card
   clicks keep `family-chart`'s built-in in-window re-centre.
 
+**Issue #22 — Generation bands overlay: done, staged on
+`feat/tree-generation-bands`.** The band layer behind the hourglass chart
+(`docs/SPEC.md` §8.2, §10 item 22). No migration — pure client work over the
+#21 render.
+
+- **`apps/web/lib/tree/generation-bands.ts`** — pure. `computeGenerationBands`
+  clusters the laid-out `family-chart` node `y` values (card _centres_ —
+  `translate(-50%, -50%)`) into generation rows within a 1px tolerance, indexes
+  each row against the focus row (`focusRowIndex - rowIndex`: up positive =
+  ancestors, down negative), and returns `{ generation, label, yearRange, top,
+bottom }` per band. Labels are `Root Generation` / `Generation N` /
+  `Generation −N` (U+2212); year range is the birth-year span of the row
+  (U+2013 en dash). Bands tile — adjacent edges are the midpoint of the two card
+  centres, outer edges half a row gap past the card. `readLaidOutTree` is the
+  defensive parse of `chart.store.getTree().data` (extracted from `FamilyTree`
+  on review): non-array / `exiting` / non-numeric-`y` nodes dropped.
+- **`apps/web/components/tree/generation-bands-overlay.ts`** — imperative. Owns
+  an SVG `<g class="rw-gen-bands">` inserted as the **first child** of
+  `family-chart`'s `svg .view` (the zoom-transformed group) so it paints behind
+  the links/cards and tracks pan/zoom with no sync code. One `<g>` per band,
+  `transform: translate(0, top)` + a full-bleed `<rect>` + label/range `<text>`.
+  CSS transitions on the `<g>` transform and rect height (duration set inline =
+  `transition_time`) carry the bands alongside the card animation on a
+  re-centre. `pointer-events: none`; the HTML cards sit in the separate
+  `#htmlSvg` layer above, so clicks are unaffected.
+- **`apps/web/components/tree/FamilyTree.tsx`** — `chart.setAfterUpdate(...)`
+  (set before the first `updateTree`) recomputes + repaints the bands every
+  layout. `CARD_WIDTH` / `CARD_HEIGHT` / `CARD_*_SPACING` are now shared
+  constants feeding both `setCardDim` / `setCard*Spacing` and the band geometry.
+- **`family-tree.css`** — `.rw-gen-band__fill` (3% white, 7% on `--alt`, parity
+  keyed on the generation so a row keeps its shade across a re-centre), label
+  (13px/700) and range (11px) text, right-aligned in the left gutter.
+- Tests: `generation-bands.test.ts` (15 vitest — row indexing, minus/en-dash
+  glyphs, tiling geometry, year ranges, spouse-cluster tolerance, and
+  `readLaidOutTree` shape guards). No jsdom render project (same defer as #21).
+- **Browser-verified** against the seed via a scratch harness reproducing the
+  exact `createChart` calls: six bands `Generation 3` … `Generation −2` centred
+  on the Ashby rows, correct per-row birth-year ranges, the pedigree-collapse
+  row (Cornelius + Temperance ×2) folded into one band, and a click re-centre
+  re-indexed and re-aligned every band. Full pnpm gate (**267**) + `pnpm build`
+  green. Deno gate not run (no `supabase/functions/` change).
+
 ## Next action
 
-**Phase 4, issue #22 — generation bands overlay** (`docs/SPEC.md` §8.2, §10 item
-22): an overlay layer behind the chart, one band per depth relative to focus,
-labelled with the relative name (`Root Generation`, `Generation 1` up,
-`Generation −1` down) + the band's birth-year range, staying aligned as the
-chart animates. Then #23 (`getNeighborhood` wiring + re-centre + `/tree/[personId]`
-deep links), #24 (expand-in-place), #25 (read-only `/person/[personId]`).
-`#38`'s seed tree (Ashby family, pedigree collapse) is the fixture.
+**Phase 4, issue #23 — `getNeighborhood` wiring + re-center + `/tree/[personId]`
+deep links** (`docs/SPEC.md` §8.2, §10 item 23): the `tree_settings` depth read,
+click a card → `router.push('/tree/<id>')` (URL-as-focus, back button works),
+in-session depth override. #21 deferred all of this — card clicks currently use
+`family-chart`'s built-in in-window re-centre. Then #24 (expand-in-place), #25
+(read-only `/person/[personId]`). `#38`'s seed tree (Ashby family, pedigree
+collapse) is the fixture.
 
-**When `feat/tree-family-chart` merges:** label #22 and #23 `ready` (both
-`Depends on: #21`).
+**When `feat/tree-generation-bands` merges:** nothing new to label — #23 is
+already `ready`, #24 waits on #23, #25 waits on #23.
 
 Still pending across #14–#21: a deployed-function run (`supabase functions
 serve`) plus a real signed-in browser session driving `/login` → `/import` →
@@ -609,6 +652,7 @@ unblocks `ready`.
 | 2026-08-31 | Issue #18 — `onboarding-match` edge function: `20260831154954` migration (`pg_trgm` + trigram GIN indexes + `onboarding_match_search` `security definer` SQL fn, threshold 0.3 tuned vs seed); Deno engine/gateway/shell (`search` → candidates + challenge keys, `verify` → link/no_match/already_claimed/already_linked/rate_limited); 18 engine tests + 13 pgTAP + drift guard. pnpm 184 / deno 36 / `supabase test db` 187 green.                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | `feat/onboarding-match`                 |
 | 2026-08-31 | Issue #19 — `/onboarding` UI: `20260831162624` migration (`notify_access_requested` `security definer` AFTER INSERT trigger on `access_request` → deduped `access_requested` notification); server-guard page → `OnboardingWorkspace` → pure `orchestrator.ts` reducer → `useOnboarding` hook → `lib/db/onboarding.ts` (`search`/`verify`/`submitAccessRequest`); challenges top candidate only; 9 pgTAP + 23 vitest + parity guard; `rls_test.sql` fixture reordered. pnpm 212 / deno 38 / `supabase test db` 196 green. 4 review fixes applied.                                                                                                                                                                                                                                                                                                                                                     | `feat/onboarding-ui`                    |
 | 2026-08-31 | Issue #20 — Invite flow + `/moderation` stub (no migration): `inviteToClaim` server action (write `invitation` row → `auth.admin.inviteUserByEmail` → roll back on send failure); `maybeAcceptInvitation` in `/auth/callback` links a pending/unlinked account to `invitation.person_id`/`role`/`active` (`WHERE status='pending' AND person_id IS NULL` + `23505` → `conflict`); `lib/db/invitations.ts` typed layer; `resolveModerationAccess` shares `loadSessionAccount`; `AccountRole`/`AccountStatus` moved to `lib/db/types.ts`. 11 vitest (pnpm 223) + deno 38 + build green. Closed stale-open issue #17. 1 must-fix + 4 should-fix review fixes applied.                                                                                                                                                                                                                                    | `feat/invite-flow`                      |
+| 2026-08-31 | Issue #22 — generation bands overlay (no migration): pure `computeGenerationBands` (cluster laid-out `family-chart` node `y` centres into rows, index vs focus row, `Root Generation` / `Generation ±N` labels + birth-year span, tiling edges) + `readLaidOutTree` defensive parse; imperative `generation-bands-overlay.ts` owns an SVG `<g>` first-child of `svg .view` (zoom layer) — per-band `<g>` translate + full-bleed rect + gutter labels, CSS transitions match the card animation; `FamilyTree` `setAfterUpdate` repaint; shared card-box constants. 20 vitest added (pnpm 267) + build green. Browser-verified vs. seed: 6 bands centred on rows, pedigree-collapse row folded, re-centre re-aligns. Closed stale-open issue #21; labelled #22/#23 `ready`.                                                                                                                             | `feat/tree-generation-bands`            |
 | 2026-08-31 | Issue #21 — `family-chart` hourglass tree view (no migration, adds `family-chart@0.9.0`): `/tree/[personId]` server route (`isApproved` gate, `getNeighborhood` at default depths, `notFound` on non-UUID / empty); pure `toFamilyChartData` (family edges → rel sets, dedup, self-loop guard, sex→gender-for-layout) + `personCardHtml` (escaped string, silhouette/photo, lifespan, `×N` dup badge); `FamilyTree` client shell (`createChart` + `setCardInnerHtmlCreator`, `setSingleParentEmptyCard(false)`, no `setDuplicateBranchToggle` — throws on custom card); scoped CSS (blue/orange tint, `.card-main` focus ring); `isUuid` extracted to `lib/db/uuid.ts`. 29 vitest added (pnpm 252) + build green. Browser-verified vs. the seed: hourglass on Samuel, pedigree collapse renders `×2` no crash. Closed stale-open issue #20. Deferred to #23: depth read, click-recentre, URL history. | `feat/tree-family-chart`                |
 
 ## Notes for the next session
@@ -618,13 +662,14 @@ unblocks `ready`.
   `Depends on:` issue numbers and a `### Done when` checklist.
 - Issue numbers match `docs/SPEC.md` §10 item numbers for 1–40. Issues 41–46 are
   the Post-MVP bullets.
-- #1–#20 and #38 are merged to `main`. #21 is on `feat/tree-family-chart` (issue
-  open until it merges). Later issues get `ready` as their dependencies close —
-  do this when you finish an issue. #17 and #20 were each closed by hand after
-  their work merged but the issue stayed open (`d6ee22f` / `536c920`).
+- #1–#21 and #38 are merged to `main`. #22 is on `feat/tree-generation-bands`
+  (issue open until it merges). Later issues get `ready` as their dependencies
+  close — do this when you finish an issue. #17 / #20 / #21 were each closed by
+  hand after their work merged but the issue stayed open (`d6ee22f` / `536c920`
+  / `4c92f5e`).
 - Phase 1 complete (#4–#10). Phase 2 (GEDCOM) complete (#11–#16). Phase 3 (auth
   & onboarding) complete (#17, #38, #18, #19, #20). Phase 4 (tree view, #21–#25)
-  in progress — #21 staged.
+  in progress — #21 merged, #22 staged.
 - **Seed data (#38).** `supabase/seed.sql` now loads a demo admin
   (`admin@rootward.test` / `rootward-admin`) + the 28-person Ashby tree on every
   `supabase db reset` / first `supabase start`. **After merging `feat/seed-demo-data`,
@@ -686,6 +731,16 @@ serve` + a stack restart for the `config.toml` change (see "Next action").
   fully custom card (`DECISIONS.md`); `setSingleParentEmptyCard(false)` because a
   missing partner means "outside the neighbourhood window", not "unknown".
   Component-render tests still need a jsdom vitest project (not added).
+- **Generation bands (#22).** `lib/tree/generation-bands.ts` (pure —
+  `computeGenerationBands` + `readLaidOutTree`) and
+  `components/tree/generation-bands-overlay.ts` (imperative SVG `<g>` first-child
+  of `svg .view`, the zoom layer). `FamilyTree` calls `chart.setAfterUpdate` to
+  repaint. Bands are derived from rendered geometry (row `y` clusters vs. the
+  focus row), **not** `NeighborhoodPerson.generation` — the band must line up
+  with the pixels `family-chart` produced. `family-chart` positions a card by its
+  centre, so `LaidOutNode.y` is the card centre. Card-box dimensions are now
+  shared TS constants in `FamilyTree.tsx` and must match `.rw-card` in the CSS.
+  No jsdom render test (same defer as #21).
 - The `imports` bucket + its `is_moderator()` `storage.objects` policy live in
   migration `20260830235147` (mirror of the #15 `exports` bucket). Both were
   applied to the shared local stack with `supabase migration up` (additive) —

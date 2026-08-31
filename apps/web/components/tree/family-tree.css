@@ -26,6 +26,44 @@
   cursor: pointer;
 }
 
+/*
+ * Generation bands (SPEC §8.2, issue #22). An SVG overlay inside `family-chart`'s
+ * zoom layer — one `<g class="rw-gen-band">` per generation row, translated to
+ * the band's top edge. The `transform` / `height` transitions are set inline by
+ * the overlay code so the duration can match the card animation; this file only
+ * owns the fill and label appearance.
+ */
+.rw-gen-bands {
+  pointer-events: none;
+}
+
+.rw-gen-band__fill {
+  fill: #fff;
+  opacity: 0.03;
+}
+
+.rw-gen-band--alt .rw-gen-band__fill {
+  opacity: 0.07;
+}
+
+.rw-gen-band__label,
+.rw-gen-band__range {
+  fill: #fff;
+  text-anchor: end;
+  font-family: inherit;
+}
+
+.rw-gen-band__label {
+  font-size: 13px;
+  font-weight: 700;
+  opacity: 0.7;
+}
+
+.rw-gen-band__range {
+  font-size: 11px;
+  opacity: 0.45;
+}
+
 .rw-card {
   position: relative;
   display: flex;
