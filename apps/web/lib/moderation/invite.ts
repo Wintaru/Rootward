@@ -6,9 +6,7 @@
  */
 
 import type { AccountRole } from "@/lib/db";
-
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+import { isUuid } from "@/lib/db/uuid";
 
 // A deliberately loose check — GoTrue does the authoritative validation when
 // the invite is sent. This only catches obvious typos before a round trip.
@@ -55,7 +53,7 @@ export function validateInviteInput(
   }
 
   const personId = raw.personId.trim().toLowerCase();
-  if (!UUID_RE.test(personId)) {
+  if (!isUuid(personId)) {
     return {
       ok: false,
       error: "Enter the person's ID (a UUID from their page).",

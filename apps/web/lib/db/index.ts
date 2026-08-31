@@ -16,3 +16,4 @@ export {
   DEFAULT_GENERATIONS_UP,
   getNeighborhood,
 } from "./neighborhood";
+export { isUuid } from "./uuid";

@@ -37,6 +37,16 @@ export function isActiveModerator(account: AccountAccess | null): boolean {
   );
 }
 
+/**
+ * Approved-member gate for the read views (`/tree`, `/person`). Any `active`
+ * account qualifies, regardless of role — matching `is_approved()` in the RLS
+ * helpers (SPEC §5). A `pending` or `suspended` account belongs on
+ * `/onboarding`. A frontend check is convenience, never the boundary.
+ */
+export function isApproved(account: AccountAccess | null): boolean {
+  return account !== null && account.status === "active";
+}
+
 /** Outcome of resolving `/import` access, so the page can branch on it. */
 export type ImportAccess =
   | { readonly kind: "unauthenticated" }

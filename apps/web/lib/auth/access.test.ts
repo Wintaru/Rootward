@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   type AccountAccess,
   isActiveModerator,
+  isApproved,
   resolveOnboardingStage,
 } from "./access";
 
@@ -43,6 +44,42 @@ describe("isActiveModerator", () => {
   for (const { account, expected, why } of cases) {
     it(`${expected ? "allows" : "denies"} ${why}`, () => {
       expect(isActiveModerator(account)).toBe(expected);
+    });
+  }
+});
+
+describe("isApproved", () => {
+  const cases: ReadonlyArray<{
+    account: AccountAccess | null;
+    expected: boolean;
+    why: string;
+  }> = [
+    { account: null, expected: false, why: "no account row" },
+    {
+      account: { role: "viewer", status: "active" },
+      expected: true,
+      why: "active viewer",
+    },
+    {
+      account: { role: "admin", status: "active" },
+      expected: true,
+      why: "active admin",
+    },
+    {
+      account: { role: "viewer", status: "pending" },
+      expected: false,
+      why: "pending viewer",
+    },
+    {
+      account: { role: "moderator", status: "suspended" },
+      expected: false,
+      why: "suspended moderator",
+    },
+  ];
+
+  for (const { account, expected, why } of cases) {
+    it(`${expected ? "allows" : "denies"} ${why}`, () => {
+      expect(isApproved(account)).toBe(expected);
     });
   }
 });

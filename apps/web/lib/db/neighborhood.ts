@@ -6,6 +6,7 @@ import type {
   NeighborhoodFamily,
   NeighborhoodPerson,
 } from "./types";
+import { isUuid } from "./uuid";
 
 /**
  * Default generations shown each way, before `tree_settings` / session
@@ -15,9 +16,6 @@ import type {
  */
 export const DEFAULT_GENERATIONS_UP = 2;
 export const DEFAULT_GENERATIONS_DOWN = 2;
-
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * The tree view's single fetch: the focus person, ancestors `up` generations,
@@ -40,7 +38,7 @@ export async function getNeighborhood(
   up: number = DEFAULT_GENERATIONS_UP,
   down: number = DEFAULT_GENERATIONS_DOWN,
 ): Promise<Neighborhood> {
-  if (!UUID_RE.test(focusId)) {
+  if (!isUuid(focusId)) {
     throw new Error(`getNeighborhood: focusId is not a UUID: ${focusId}`);
   }
 
