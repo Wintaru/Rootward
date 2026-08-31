@@ -12,6 +12,8 @@ export type FactRow = Database["public"]["Tables"]["fact"]["Row"];
 export type Sex = Database["public"]["Enums"]["sex"];
 export type PartnerRole = Database["public"]["Enums"]["partner_role"];
 export type UnionType = Database["public"]["Enums"]["union_type"];
+export type AccountRole = Database["public"]["Enums"]["account_role"];
+export type AccountStatus = Database["public"]["Enums"]["account_status"];
 
 /**
  * One person in a {@link Neighborhood}. Carries only the fields the tree card

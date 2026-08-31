@@ -10,10 +10,11 @@
  * route, decision 35) even though that page does not exist yet.
  */
 
-import type { Database } from "@/lib/db";
+// Canonical aliases live in `lib/db/types.ts` (beside the other enum aliases);
+// re-exported here so the many `@/lib/auth/access` importers are unaffected.
+import type { AccountRole, AccountStatus } from "@/lib/db";
 
-export type AccountRole = Database["public"]["Enums"]["account_role"];
-export type AccountStatus = Database["public"]["Enums"]["account_status"];
+export type { AccountRole, AccountStatus };
 
 /** The two `account` columns every access decision needs. */
 export interface AccountAccess {
