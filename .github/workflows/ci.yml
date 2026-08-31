@@ -71,7 +71,7 @@ jobs:
       - name: Lint
         run: deno lint
       - name: Typecheck
-        run: deno check gedcom-import/ gedcom-export/
+        run: deno check gedcom-import/ gedcom-export/ onboarding-match/
       - name: Test
         run: deno test --allow-read
 

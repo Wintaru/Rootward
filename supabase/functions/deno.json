@@ -7,11 +7,11 @@
   },
   "unstable": ["sloppy-imports"],
   "lint": {
-    "include": ["gedcom-import/", "gedcom-export/"],
+    "include": ["gedcom-import/", "gedcom-export/", "onboarding-match/"],
     "rules": { "tags": ["recommended"] }
   },
   "tasks": {
-    "check": "deno check gedcom-import/ gedcom-export/",
-    "test": "deno test --allow-read gedcom-import/ gedcom-export/"
+    "check": "deno check gedcom-import/ gedcom-export/ onboarding-match/",
+    "test": "deno test --allow-read gedcom-import/ gedcom-export/ onboarding-match/"
   }
 }

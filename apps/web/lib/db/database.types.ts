@@ -1414,6 +1414,19 @@ export type Database = {
         Returns: boolean
       }
       note_is_visible: { Args: { p_note_id: string }; Returns: boolean }
+      onboarding_match_search: {
+        Args: {
+          p_birth_month?: number
+          p_birth_year: number
+          p_given_name: string
+          p_surname: string
+          p_threshold?: number
+        }
+        Returns: {
+          person_id: string
+          score: number
+        }[]
+      }
       person_is_living: { Args: { p_person_id: string }; Returns: boolean }
       person_is_visible: { Args: { p_person_id: string }; Returns: boolean }
     }

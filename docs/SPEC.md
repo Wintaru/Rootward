@@ -641,19 +641,38 @@ media folder / zip, or media is added later).
 
 ### `onboarding-match` — decision 24
 
-- `security definer` (runs before the caller is an approved member, so it
-  bypasses RLS deliberately and returns only the non-identifying challenge
-  metadata described below — decision 24).
-- Input: given name, surname, birth month, birth year.
-- `pg_trgm` similarity search over `person` + `person_name`; birth year exact,
-  month ±1.
-- Returns, per candidate, only which **challenge facts** are answerable (parent
-  first name, spouse first name, birth place, birth day) — never identifying
-  data.
-- Second call: challenge answers. On match → set `account.person_id`,
-  `account.status = 'active'`; insert `claim_attempt(succeeded=true)`; emit
-  `notification` (`self_claim_linked`).
-- Over the 24h cap → `access_request` + `notification` (`claim_attempt_cap`).
+- Deno edge function, not a bare RPC: a thin `Deno.serve` shell (any signed-in
+  caller — the account is still `pending`) over a portable engine. One SQL
+  function, `onboarding_match_search` (`security definer`, `search_path = ''`),
+  does the trigram query — the caller cannot yet read `person` under RLS. The
+  engine reads challenge facts and writes `claim_attempt` / `account` /
+  `notification` / `access_request` through a service-role gateway.
+- `POST { action: "search", givenName, surname, birthYear, birthMonth? }` →
+  `{ candidates: [{ personId, challenges }] }`. `pg_trgm` similarity over
+  `person` + every `person_name` variant; birth year exact, month ±1; combined
+  score ≥ `0.3` (`pg_trgm`'s default — the challenge is the real discriminator).
+  `challenges` is the **answerable** subset of `spouse_first_name`,
+  `parent_first_name`, `birth_place`, `birth_day`, priority order, capped at two
+  (WAYFINDER 24 "one or two"). A candidate already linked to an account, or with
+  no answerable fact, is dropped. `personId` is an opaque uuid; no name, date,
+  or place is ever returned.
+- `POST { action: "verify", personId, <identity>, answers }` →
+  `{ status }` where `status` is:
+  - `linked` — one posed challenge answered correctly (DECISIONS 2026-08-31).
+    Sets `account.person_id` + `status = 'active'`; `claim_attempt(succeeded =
+    true)`; `notification` (`self_claim_linked`).
+  - `no_match` — `personId` not in the search set for the identity, or no posed
+    challenge answered. `claim_attempt(succeeded = false)`. The `/onboarding` UI
+    (#19) offers the request-access form from here.
+  - `already_claimed` — the node was linked between the two calls (or lost the
+    write race). `claim_attempt(succeeded = false)`.
+  - `already_linked` — the account is already active / linked. No attempt row.
+  - `rate_limited` — 6th verify within a rolling 24h. No attempt row (the
+    refusal must not roll the window forward); instead one `access_request` +
+    `notification` (`claim_attempt_cap`), deduped against an open request.
+- The plain no-match `access_request` + `access_requested` notification (§9.3)
+  is #19's request-access form plus an insert trigger on `access_request`, not
+  this function — only the attempt-cap path here writes one automatically.
 
 ---
 
@@ -776,10 +795,13 @@ invitation.role`.
 
 ### 9.3 Self-claim path (decisions 12, 13, 24)
 
-`/onboarding` → name + birth month/year → `onboarding-match` → challenge
-question(s) → on success, account linked + active + moderator notification. No
-match → `access_request` + notification; user sees "request sent". Self-signup
-hidden entirely when `allow_self_signup = false`.
+`/onboarding` → name + birth month/year → `onboarding-match` (`search`) →
+challenge question(s) → `onboarding-match` (`verify`) → on success, account
+linked + active + moderator notification. No match, or the attempt cap, sends
+the user to the request-access form → `access_request` + notification; user
+sees "request sent" (the form and its notify trigger are #19; the cap writes an
+`access_request` on its own — §7). Self-signup hidden entirely when
+`allow_self_signup = false`.
 
 ### 9.4 Roles (decision 18)
 
