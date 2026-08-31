@@ -2,18 +2,25 @@
 
 import { createChart } from "family-chart";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 
+import type { ExpandRelation, Neighborhood } from "@/lib/db";
+import { expandRelatives } from "@/lib/db";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { isUuid } from "@/lib/db/uuid";
+import {
+  expandedGeneration,
+  mergeNeighborhoodFragment,
+} from "@/lib/tree/expand-tree";
 import {
   computeGenerationBands,
   readLaidOutTree,
 } from "@/lib/tree/generation-bands";
 import { personCardHtml } from "@/lib/tree/person-card";
-import type {
-  CardSex,
-  FamilyChartPersonData,
-  FamilyChartTree,
+import {
+  toFamilyChartData,
+  type CardSex,
+  type FamilyChartPersonData,
 } from "@/lib/tree/to-family-chart";
 import {
   MAX_GENERATIONS,
@@ -47,7 +54,7 @@ const LABEL_GUTTER = 24;
 type Chart = ReturnType<typeof createChart>;
 
 interface FamilyTreeProps {
-  readonly tree: FamilyChartTree;
+  readonly neighborhood: Neighborhood;
   /** Generations requested for this render (route defaults + `?up` / `?down`). */
   readonly depth: TreeDepth;
   /** The `tree_settings` defaults — an override links back to a clean URL. */
@@ -57,26 +64,68 @@ interface FamilyTreeProps {
 /**
  * The `family-chart` hourglass view (SPEC §8.2). `family-chart` is a d3
  * renderer, not a React one — it owns a DOM subtree — so this component is a
- * thin shell: it builds the chart once, then feeds each new `tree` prop through
+ * thin shell: it builds the chart once, then feeds each derived `tree` through
  * `updateData` / `updateTree` so the library animates between neighbourhoods
  * instead of the chart being torn down and rebuilt.
  *
  * Clicking a card navigates to `/tree/<id>` (issue #23, decision 28). The page
  * refetches that person's neighbourhood server-side — one query per navigation —
- * and the new payload arrives here as the next `tree` prop, which the sync
- * effect animates to. The focus person is the URL, so the back button walks the
- * history. The depth control does the same with `?up` / `?down`.
+ * and the new payload arrives as the next `neighborhood` prop, which resets the
+ * local state below and the sync effect animates to. The focus person is the
+ * URL, so the back button walks the history. The depth control does the same
+ * with `?up` / `?down`.
+ *
+ * Expand-in-place (issue #24) is layered on the same mechanism: clicking an
+ * affordance fetches one branch via `expandRelatives` and merges it into local
+ * state, which flows through the very same derive-then-sync path as a real
+ * navigation — the chart never has to know the difference.
  *
  * A repeated ancestor (pedigree collapse) is drawn once per path, each copy
  * carrying a `×N` badge. `family-chart`'s `setDuplicateBranchToggle` would add a
  * collapse control but it reaches into a `.card-inner` element that a fully
  * custom card does not have and throws — so it is left off here.
  */
-export function FamilyTree({ tree, depth, depthDefaults }: FamilyTreeProps) {
+export function FamilyTree({
+  neighborhood: initialNeighborhood,
+  depth,
+  depthDefaults,
+}: FamilyTreeProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<Chart | null>(null);
   const router = useRouter();
   const [isNavigating, startNavigation] = useTransition();
+  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
+
+  // The server-fetched neighbourhood plus any expand-in-place additions. A
+  // real navigation (new `initialNeighborhood`) resets this — an expanded
+  // branch belongs to the current view, not carried across a re-centre. This
+  // follows React's "adjusting state when a prop changes" pattern (a render-time
+  // comparison, not an effect) rather than an effect that would need a second
+  // render to take effect: https://react.dev/learn/you-might-not-need-an-effect
+  const [neighborhood, setNeighborhood] = useState(initialNeighborhood);
+  const [syncedNeighborhood, setSyncedNeighborhood] =
+    useState(initialNeighborhood);
+  if (initialNeighborhood !== syncedNeighborhood) {
+    setSyncedNeighborhood(initialNeighborhood);
+    setNeighborhood(initialNeighborhood);
+  }
+
+  // Bumped every time a real navigation resets `neighborhood` above (an
+  // effect, not the render body above — a ref may not be written during
+  // render). An in-flight expand fetch (below) captures the token it started
+  // with and checks it again before merging — if a navigation or depth change
+  // landed in the meantime, the fetched fragment belongs to a neighbourhood
+  // that no longer exists and must be discarded, not grafted onto the new
+  // one. The effect always runs well before any pending fetch's response can
+  // arrive, so there is no window where a stale fragment reads a token that
+  // has not been bumped yet.
+  const navigationTokenRef = useRef(0);
+  useEffect(() => {
+    navigationTokenRef.current += 1;
+  }, [initialNeighborhood]);
+  const [isExpanding, setIsExpanding] = useState(false);
+
+  const tree = useMemo(() => toFamilyChartData(neighborhood), [neighborhood]);
 
   // Kept fresh after every render so the card-click handler (bound once, in the
   // build effect) always navigates with the current focus / depth / router
@@ -84,13 +133,62 @@ export function FamilyTree({ tree, depth, depthDefaults }: FamilyTreeProps) {
   const navigateRef = useRef<(personId: string) => void>(() => {});
   useEffect(() => {
     navigateRef.current = (personId: string) => {
-      // Clicking the focus card is a no-op re-centre.
+      // Clicking the focus card is a no-op re-centre. A navigation while an
+      // expand fetch is in flight is otherwise allowed (its result is simply
+      // discarded when it lands, via `navigationTokenRef`) rather than
+      // blocked — `family-chart` sets its own cards' `pointer-events: auto`
+      // inline, which wins over the dimming CSS, so clicks reach here
+      // regardless; the token check is what actually keeps the merge correct.
       if (personId === tree.mainId) {
         return;
       }
       startNavigation(() => {
         router.push(treeHref(personId, depth, depthDefaults));
       });
+    };
+  });
+
+  // Same "bound once, kept fresh via a ref" shape as navigateRef — the
+  // click-delegation listener that catches an expand-affordance click (in the
+  // build effect below) needs somewhere live to read the current neighbourhood
+  // from and merge the fetched fragment into. `isExpandingRef` (as opposed to
+  // the `isExpanding` state, which only drives the dim/disabled styling) blocks
+  // a second expand while one is in flight without waiting on a re-render.
+  const expandRef = useRef<
+    (target: string, anchor: string, relation: ExpandRelation) => void
+  >(() => {});
+  const isExpandingRef = useRef(false);
+  useEffect(() => {
+    expandRef.current = (target, anchor, relation) => {
+      if (isExpandingRef.current) {
+        return;
+      }
+      const anchorPerson = neighborhood.persons.find((p) => p.id === anchor);
+      if (anchorPerson === undefined) {
+        return;
+      }
+      const generation = expandedGeneration(anchorPerson.generation, relation);
+      const tokenAtStart = navigationTokenRef.current;
+      isExpandingRef.current = true;
+      setIsExpanding(true);
+      expandRelatives(supabase, target, relation)
+        .then((fragment) => {
+          // A navigation or depth change landed while this was in flight —
+          // `fragment` is relative to a neighbourhood that no longer exists.
+          if (navigationTokenRef.current !== tokenAtStart) {
+            return;
+          }
+          setNeighborhood((prev) =>
+            mergeNeighborhoodFragment(prev, fragment, generation),
+          );
+        })
+        .catch((error: unknown) => {
+          console.error("expand-in-place failed:", error);
+        })
+        .finally(() => {
+          isExpandingRef.current = false;
+          setIsExpanding(false);
+        });
     };
   });
 
@@ -124,7 +222,11 @@ export function FamilyTree({ tree, depth, depthDefaults }: FamilyTreeProps) {
       .setCardDim({ w: CARD_WIDTH, h: CARD_HEIGHT })
       .setMiniTree(false)
       .setCardInnerHtmlCreator((node) =>
-        personCardHtml(cardDataOf(node), duplicateCountOf(node)),
+        personCardHtml(
+          readNodeId(node) ?? "",
+          cardDataOf(node),
+          duplicateCountOf(node),
+        ),
       );
 
     // Replace the library's in-window re-centre with a real navigation. The
@@ -135,6 +237,40 @@ export function FamilyTree({ tree, depth, depthDefaults }: FamilyTreeProps) {
         navigateRef.current(personId);
       }
     });
+
+    // Intercept an expand-in-place click (issue #24) before `setOnCardClick`'s
+    // handler — bound above, directly on the card element — can fire and
+    // navigate instead. That handler runs in the bubble phase during the
+    // click's target phase, which happens *before* a capture-phase listener on
+    // an ancestor would otherwise see the bubble; running this one in the
+    // capture phase is what gets it there first. `signal` ties the listener's
+    // lifetime to this effect so a StrictMode remount does not double-bind it.
+    const expandClickController = new AbortController();
+    container.addEventListener(
+      "click",
+      (event) => {
+        const target = event.target;
+        if (!(target instanceof Element)) {
+          return;
+        }
+        const button = target.closest<HTMLElement>("[data-expand-relation]");
+        if (button === null) {
+          return;
+        }
+        event.stopPropagation();
+        event.preventDefault();
+        const { expandRelation, expandTarget, expandAnchor } = button.dataset;
+        if (
+          expandTarget === undefined ||
+          expandAnchor === undefined ||
+          !isExpandRelation(expandRelation)
+        ) {
+          return;
+        }
+        expandRef.current(expandTarget, expandAnchor, expandRelation);
+      },
+      { capture: true, signal: expandClickController.signal },
+    );
 
     // Redraw the generation bands after every layout — the initial render and
     // each re-centre — so they stay aligned with the animated rows.
@@ -150,6 +286,7 @@ export function FamilyTree({ tree, depth, depthDefaults }: FamilyTreeProps) {
     // and its d3 zoom behaviour; the library attaches no window-level listeners
     // that would outlive it.
     return () => {
+      expandClickController.abort();
       container.innerHTML = "";
       chartRef.current = null;
     };
@@ -175,14 +312,15 @@ export function FamilyTree({ tree, depth, depthDefaults }: FamilyTreeProps) {
   return (
     <div
       className="rw-tree-viewport"
-      aria-busy={isNavigating}
+      aria-busy={isNavigating || isExpanding}
       data-navigating={isNavigating}
+      data-expanding={isExpanding}
     >
       <div ref={containerRef} className="f3 rw-tree" />
       <TreeDepthControls
         depth={depth}
         depthDefaults={depthDefaults}
-        disabled={isNavigating}
+        disabled={isNavigating || isExpanding}
         onChange={(next) => {
           startNavigation(() => {
             router.replace(treeHref(tree.mainId, next, depthDefaults));
@@ -343,6 +481,12 @@ function cardDataOf(node: unknown): FamilyChartPersonData {
     deathYear: typeof raw.deathYear === "number" ? raw.deathYear : null,
     isLiving: typeof raw.isLiving === "boolean" ? raw.isLiving : null,
     avatarUrl: typeof raw.avatarUrl === "string" ? raw.avatarUrl : null,
+    // A library-synthesised node never carries these — no expand affordance
+    // on a placeholder that is not backed by a real fetched person.
+    canExpandUp: raw.canExpandUp === true,
+    canExpandDown: raw.canExpandDown === true,
+    hiddenPartnerId:
+      typeof raw.hiddenPartnerId === "string" ? raw.hiddenPartnerId : null,
   };
 }
 
@@ -359,4 +503,19 @@ function duplicateCountOf(node: unknown): number {
 function readNodeId(node: unknown): string | null {
   const id = (node as { data?: { id?: unknown } }).data?.id;
   return typeof id === "string" && isUuid(id) ? id : null;
+}
+
+// `satisfies Record<ExpandRelation, true>` forces this object to name every
+// `ExpandRelation` member — add a fourth relation to that type and this line
+// fails to compile until it is added here too, so `isExpandRelation` can't
+// silently fall behind and start dropping clicks for it.
+const EXPAND_RELATIONS = {
+  parents: true,
+  children: true,
+  self: true,
+} satisfies Record<ExpandRelation, true>;
+
+/** Type guard for an expand-affordance button's `data-expand-relation`. */
+function isExpandRelation(value: string | undefined): value is ExpandRelation {
+  return value !== undefined && value in EXPAND_RELATIONS;
 }

@@ -1396,6 +1396,10 @@ export type Database = {
         Args: { p_type: Database["public"]["Enums"]["event_type"] }
         Returns: number
       }
+      expand_relatives: {
+        Args: { p_person: string; p_relation: string }
+        Returns: Json
+      }
       fact_is_visible: { Args: { p_fact_id: string }; Returns: boolean }
       family_is_visible: { Args: { p_family_id: string }; Returns: boolean }
       genealogy_date_sort_key: {

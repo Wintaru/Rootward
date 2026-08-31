@@ -24,6 +24,11 @@ export type AccountStatus = Database["public"]["Enums"]["account_status"];
  * needs (name parts, sex, living flag, birth/death year) plus `generation`
  * relative to the focus: 0 for the focus, its siblings, and its partners;
  * positive upward (ancestors); negative downward (descendants).
+ *
+ * `can_expand_up` / `can_expand_down` (issue #24) are true only for a person at
+ * the edge of the fetched window with a recorded relative just past it — the
+ * expand-in-place affordance shows only then, per `get_neighborhood`'s and
+ * `expand_relatives`' own docs.
  */
 export interface NeighborhoodPerson {
   id: string;
@@ -37,6 +42,8 @@ export interface NeighborhoodPerson {
   generation: number;
   birth_year: number | null;
   death_year: number | null;
+  can_expand_up: boolean;
+  can_expand_down: boolean;
 }
 
 /**
@@ -58,6 +65,27 @@ export interface NeighborhoodFamily {
 /** The payload returned by {@link getNeighborhood} / the `get_neighborhood` RPC. */
 export interface Neighborhood {
   focus_id: string;
+  persons: NeighborhoodPerson[];
+  families: NeighborhoodFamily[];
+}
+
+/**
+ * Which relative to fetch for one expand-in-place step (issue #24), mirroring
+ * the `expand_relatives` SQL function's `p_relation` argument: the family a
+ * person is a child in, every family they partner in, or just that one person
+ * (resolving a partner a family already named but the window did not fetch).
+ */
+export type ExpandRelation = "parents" | "children" | "self";
+
+/**
+ * The payload returned by {@link expandRelatives} / the `expand_relatives` RPC
+ * — one branch, one level, no `focus_id` (there is no new focus). `generation`
+ * on each person is a placeholder (`0`) — the SQL function does not compute
+ * one, because it does not know the branch's position; the merge that folds a
+ * fragment into a {@link Neighborhood} (`lib/tree/expand-tree.ts`) overwrites
+ * it from the person already on screen that the expansion started from.
+ */
+export interface NeighborhoodFragment {
   persons: NeighborhoodPerson[];
   families: NeighborhoodFamily[];
 }

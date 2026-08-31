@@ -19,8 +19,10 @@
   min-height: 32rem;
 }
 
-/* Dim the chart and block clicks while the next neighbourhood is loading. */
-.rw-tree-viewport[data-navigating="true"] .rw-tree {
+/* Dim the chart and block clicks while the next neighbourhood is loading, or
+ * while an expand-in-place fetch (issue #24) is in flight. */
+.rw-tree-viewport[data-navigating="true"] .rw-tree,
+.rw-tree-viewport[data-expanding="true"] .rw-tree {
   pointer-events: none;
   opacity: 0.6;
   transition: opacity 150ms ease;
@@ -230,6 +232,53 @@
   background-color: rgb(0 0 0 / 30%);
   font-size: 10px;
   font-weight: 700;
+}
+
+/*
+ * Expand-in-place affordances (issue #24, SPEC §8.2). `.rw-card__expand--up` /
+ * `--down` sit centred on the card's top / bottom edge and continue the
+ * ancestor / descendant chain; `--partner` sits at the top-left corner (the
+ * duplicate badge already owns top-right) and resolves an off-window spouse.
+ * Real `<button>` elements — `FamilyTree`'s capture-phase click listener
+ * intercepts them before `family-chart`'s own card-click handler can treat the
+ * click as a re-centre.
+ */
+.rw-card__expand {
+  position: absolute;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid rgb(255 255 255 / 40%);
+  border-radius: 999px;
+  background-color: rgb(0 0 0 / 45%);
+  color: #fff;
+  font-size: 10px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.rw-card__expand:hover {
+  background-color: rgb(0 0 0 / 65%);
+}
+
+.rw-card__expand--up {
+  top: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.rw-card__expand--down {
+  bottom: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.rw-card__expand--partner {
+  top: 4px;
+  left: 4px;
 }
 
 /* Focus ring — keyed on the class `family-chart` puts on the centred card. */

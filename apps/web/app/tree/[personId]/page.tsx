@@ -6,7 +6,6 @@ import { getCurrentAccount } from "@/lib/auth/current-account";
 import { getDefaultGenerations, getNeighborhood, isUuid } from "@/lib/db";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { FamilyTree } from "@/components/tree/FamilyTree";
-import { toFamilyChartData } from "@/lib/tree/to-family-chart";
 import { resolveTreeDepth } from "@/lib/tree/tree-view-params";
 
 export const metadata: Metadata = {
@@ -63,11 +62,13 @@ export default async function TreePage({
     notFound();
   }
 
-  const tree = toFamilyChartData(neighborhood);
-
   return (
     <main className="flex flex-1 flex-col">
-      <FamilyTree tree={tree} depth={depth} depthDefaults={defaults} />
+      <FamilyTree
+        neighborhood={neighborhood}
+        depth={depth}
+        depthDefaults={defaults}
+      />
     </main>
   );
 }

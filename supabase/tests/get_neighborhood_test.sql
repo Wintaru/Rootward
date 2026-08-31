@@ -8,7 +8,7 @@
 -- fixture row that genuinely exists so a deny never passes vacuously.
 
 begin;
-select plan(18);
+select plan(23);
 
 create function pg_temp.act_as(p_uid uuid)
 returns void
@@ -93,7 +93,12 @@ insert into public.person (id, given_name, surname, visibility) values
   ('10000000-0000-0000-0000-000000000040', 'Kid', 'Pat',  'everyone_approved'),
   ('10000000-0000-0000-0000-000000000041', 'KSp', 'InLaw', 'everyone_approved'),
   ('10000000-0000-0000-0000-000000000050', 'Gkd', 'Pat',  'everyone_approved'),
-  ('10000000-0000-0000-0000-000000000060', 'Ggk', 'Pat',  'everyone_approved');
+  ('10000000-0000-0000-0000-000000000060', 'Ggk', 'Pat',  'everyone_approved'),
+  -- Great-grandparents of Focus, past the default up=2 window -- the one
+  -- boundary person in this fixture set with a recorded relative the window
+  -- does not fetch (issue #24's can_expand_up).
+  ('10000000-0000-0000-0000-000000000070', 'GGp1', 'Pat', 'everyone_approved'),
+  ('10000000-0000-0000-0000-000000000071', 'GGp2', 'Pat', 'everyone_approved');
 
 -- The on_auth_user_created trigger (issue #17) already created a pending viewer
 -- account for each auth.users row above; upsert to the role/status this suite
@@ -119,7 +124,9 @@ insert into public.family (id, partner1_id, partner2_id, relationship_type) valu
   ('20000000-0000-0000-0000-000000000030',
    '10000000-0000-0000-0000-000000000040', '10000000-0000-0000-0000-000000000041', 'married'),
   ('20000000-0000-0000-0000-000000000040',
-   '10000000-0000-0000-0000-000000000050', null, null);
+   '10000000-0000-0000-0000-000000000050', null, null),
+  ('20000000-0000-0000-0000-000000000070',
+   '10000000-0000-0000-0000-000000000070', '10000000-0000-0000-0000-000000000071', 'married');
 
 insert into public.family_child (family_id, person_id, sort_order) values
   ('20000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000010', 0),
@@ -128,7 +135,8 @@ insert into public.family_child (family_id, person_id, sort_order) values
   ('20000000-0000-0000-0000-000000000010', '10000000-0000-0000-0000-000000000021', 1),
   ('20000000-0000-0000-0000-000000000020', '10000000-0000-0000-0000-000000000040', 0),
   ('20000000-0000-0000-0000-000000000030', '10000000-0000-0000-0000-000000000050', 0),
-  ('20000000-0000-0000-0000-000000000040', '10000000-0000-0000-0000-000000000060', 0);
+  ('20000000-0000-0000-0000-000000000040', '10000000-0000-0000-0000-000000000060', 0),
+  ('20000000-0000-0000-0000-000000000070', '10000000-0000-0000-0000-000000000001', 0);
 
 insert into public.event (id, owner_type, person_id, type, date_year1) values
   ('40000000-0000-0000-0000-000000000001', 'person', '10000000-0000-0000-0000-000000000020', 'birth', 1985),
@@ -177,8 +185,9 @@ select is(
    from jsonb_object_keys(
      (public.get_neighborhood('10000000-0000-0000-0000-000000000020', 2, 2) -> 'persons') -> 0
    ) as k),
-  array['birth_year', 'death_year', 'generation', 'given_name', 'id', 'is_living',
-        'name_prefix', 'name_suffix', 'nickname', 'sex', 'surname']::text[],
+  array['birth_year', 'can_expand_down', 'can_expand_up', 'death_year',
+        'generation', 'given_name', 'id', 'is_living', 'name_prefix',
+        'name_suffix', 'nickname', 'sex', 'surname']::text[],
   'persons[] element carries exactly the documented keys'
 );
 select is(
@@ -213,6 +222,29 @@ select is(pg_temp.gen_of(
 select is(pg_temp.gen_of(
   public.get_neighborhood('10000000-0000-0000-0000-000000000020', 2, 2),
   '10000000-0000-0000-0000-000000000050'), -2, 'generation: grandchild is -2');
+
+-- Boundary flags (issue #24): true only for a frontier person with a recorded
+-- relative the window did not fetch.
+select is(pg_temp.field(
+  public.get_neighborhood('10000000-0000-0000-0000-000000000020', 2, 2),
+  '10000000-0000-0000-0000-000000000001', 'can_expand_up'), 'true',
+  'can_expand_up: Gp1 is at the up=2 frontier and has recorded parents');
+select is(pg_temp.field(
+  public.get_neighborhood('10000000-0000-0000-0000-000000000020', 2, 2),
+  '10000000-0000-0000-0000-000000000002', 'can_expand_up'), 'false',
+  'can_expand_up: Gp2 is at the frontier but has no recorded parents');
+select is(pg_temp.field(
+  public.get_neighborhood('10000000-0000-0000-0000-000000000020', 2, 2),
+  '10000000-0000-0000-0000-000000000010', 'can_expand_up'), 'false',
+  'can_expand_up: Dad is not at the frontier -- his parents are already in view');
+select is(pg_temp.field(
+  public.get_neighborhood('10000000-0000-0000-0000-000000000020', 2, 2),
+  '10000000-0000-0000-0000-000000000050', 'can_expand_down'), 'true',
+  'can_expand_down: Gkd is at the down=2 frontier and has a recorded child');
+select is(pg_temp.field(
+  public.get_neighborhood('10000000-0000-0000-0000-000000000020', 2, 2),
+  '10000000-0000-0000-0000-000000000040', 'can_expand_down'), 'false',
+  'can_expand_down: Kid is not at the frontier -- his child is already in view');
 
 -- Birth / death year come from the person's birth / death events.
 select is(pg_temp.field(

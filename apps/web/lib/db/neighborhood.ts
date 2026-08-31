@@ -2,8 +2,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { Constants, type Database } from "./database.types";
 import type {
+  ExpandRelation,
   Neighborhood,
   NeighborhoodFamily,
+  NeighborhoodFragment,
   NeighborhoodPerson,
 } from "./types";
 import { isUuid } from "./uuid";
@@ -72,6 +74,44 @@ export function clampGenerations(value: number): number {
   return Math.min(MAX_GENERATIONS, Math.max(0, Math.trunc(value)));
 }
 
+/**
+ * The tree view's expand-in-place fetch (issue #24) — one branch, one level,
+ * never a re-run of the whole `getNeighborhood` recursion. `relation`:
+ *
+ * - `"parents"` — the family `personId` is a child in, plus its partners.
+ * - `"children"` — every family `personId` partners in, plus their children.
+ * - `"self"` — just `personId`, no relations. Resolves a partner id a family
+ *   in the current view already names but the fetched window did not include
+ *   (a descendant's spouse, say — see `Neighborhood["families"]`'s doc).
+ *
+ * RLS decides what comes back, same as `getNeighborhood`. Merge the result
+ * into the current `Neighborhood` with `mergeNeighborhoodFragment`
+ * (`lib/tree/expand-tree.ts`), which also fixes up `generation` — this
+ * function's persons carry only a `0` placeholder for it.
+ */
+export async function expandRelatives(
+  client: SupabaseClient<Database>,
+  personId: string,
+  relation: ExpandRelation,
+): Promise<NeighborhoodFragment> {
+  if (!isUuid(personId)) {
+    throw new Error(`expandRelatives: personId is not a UUID: ${personId}`);
+  }
+
+  const { data, error } = await client.rpc("expand_relatives", {
+    p_person: personId,
+    p_relation: relation,
+  });
+
+  if (error) {
+    throw new Error(
+      `expandRelatives(${personId}, ${relation}): ${error.message}`,
+    );
+  }
+
+  return parseNeighborhoodFragment(data);
+}
+
 // --- boundary validation ---------------------------------------------------
 // `get_neighborhood` returns `jsonb`, typed only as `Json`. Parse it once here
 // so the rest of the app works with a real `Neighborhood`.
@@ -80,12 +120,26 @@ function parseNeighborhood(raw: unknown): Neighborhood {
   const root = asObject(raw, "payload");
   return {
     focus_id: asString(root.focus_id, "focus_id"),
-    persons: asArray(root.persons, "persons").map(parsePerson),
+    persons: asArray(root.persons, "persons").map((p, i) => parsePerson(p, i)),
     families: asArray(root.families, "families").map(parseFamily),
   };
 }
 
-function parsePerson(raw: unknown, index: number): NeighborhoodPerson {
+function parseNeighborhoodFragment(raw: unknown): NeighborhoodFragment {
+  const root = asObject(raw, "payload");
+  return {
+    persons: asArray(root.persons, "persons").map((p, i) =>
+      parsePerson(p, i, 0),
+    ),
+    families: asArray(root.families, "families").map(parseFamily),
+  };
+}
+
+function parsePerson(
+  raw: unknown,
+  index: number,
+  generation: number | null = null,
+): NeighborhoodPerson {
   const p = asObject(raw, `persons[${index}]`);
   return {
     id: asString(p.id, `persons[${index}].id`),
@@ -96,9 +150,18 @@ function parsePerson(raw: unknown, index: number): NeighborhoodPerson {
     nickname: asNullableString(p.nickname),
     sex: asNullableEnum(p.sex, Constants.public.Enums.sex),
     is_living: asNullableBoolean(p.is_living),
-    generation: asNumber(p.generation, `persons[${index}].generation`),
+    generation:
+      generation ?? asNumber(p.generation, `persons[${index}].generation`),
     birth_year: asNullableNumber(p.birth_year),
     death_year: asNullableNumber(p.death_year),
+    can_expand_up: asBoolean(
+      p.can_expand_up,
+      `persons[${index}].can_expand_up`,
+    ),
+    can_expand_down: asBoolean(
+      p.can_expand_down,
+      `persons[${index}].can_expand_down`,
+    ),
   };
 }
 
@@ -160,6 +223,13 @@ function asNullableString(v: unknown): string | null {
 
 function asNullableNumber(v: unknown): number | null {
   return v == null ? null : asNumber(v, "nullable number");
+}
+
+function asBoolean(v: unknown, where: string): boolean {
+  if (typeof v !== "boolean") {
+    throw new Error(`get_neighborhood: expected a boolean at ${where}`);
+  }
+  return v;
 }
 
 function asNullableBoolean(v: unknown): boolean | null {

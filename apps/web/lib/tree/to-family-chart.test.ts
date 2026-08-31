@@ -24,6 +24,8 @@ function person(
     generation: 0,
     birth_year: null,
     death_year: null,
+    can_expand_up: false,
+    can_expand_down: false,
     ...overrides,
   };
 }
@@ -178,7 +180,47 @@ describe("toFamilyChartData", () => {
       deathYear: 1901,
       isLiving: false,
       avatarUrl: null,
+      canExpandUp: false,
+      canExpandDown: false,
+      hiddenPartnerId: null,
     });
+  });
+
+  it("carries can_expand_up / can_expand_down through as canExpandUp / canExpandDown", () => {
+    const tree = toFamilyChartData(
+      neighborhood(
+        "a",
+        [person("a", { can_expand_up: true, can_expand_down: true })],
+        [],
+      ),
+    );
+    expect(datumById(tree, "a").data).toMatchObject({
+      canExpandUp: true,
+      canExpandDown: true,
+    });
+  });
+
+  it("flags the known partner's card when a family names an off-window partner", () => {
+    const tree = toFamilyChartData(
+      neighborhood(
+        "in",
+        [person("in")],
+        [family("f1", { partner1_id: "in", partner2_id: "gone" })],
+      ),
+    );
+    expect(datumById(tree, "in").data.hiddenPartnerId).toBe("gone");
+  });
+
+  it("leaves hiddenPartnerId null when both partners are in the neighborhood", () => {
+    const tree = toFamilyChartData(
+      neighborhood(
+        "a",
+        [person("a"), person("b")],
+        [family("f1", { partner1_id: "a", partner2_id: "b" })],
+      ),
+    );
+    expect(datumById(tree, "a").data.hiddenPartnerId).toBeNull();
+    expect(datumById(tree, "b").data.hiddenPartnerId).toBeNull();
   });
 
   it("handles a repeated ancestor (pedigree collapse) without duplicating ids", () => {

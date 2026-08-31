@@ -1,3 +1,5 @@
+import type { ExpandRelation } from "@/lib/db";
+
 import type { FamilyChartPersonData } from "./to-family-chart";
 
 /**
@@ -13,11 +15,16 @@ import type { FamilyChartPersonData } from "./to-family-chart";
  * the library's own `card-male` / `card-female` classes, so an unknown-sex
  * person gets a neutral card rather than a wrong one.
  *
+ * @param personId the person's id — carried on every expand-affordance button
+ *   ({@link expandButtonHtml}) as `data-expand-anchor`, the person already on
+ *   screen the click's `expandRelatives` call and generation math are relative
+ *   to (issue #24, `lib/tree/expand-tree.ts`).
  * @param duplicateCount how many times this person appears in the current
  *   layout — non-zero for a repeated ancestor (pedigree collapse). `family-chart`
  *   sets it on every copy; the card shows a small `×N` badge.
  */
 export function personCardHtml(
+  personId: string,
   person: FamilyChartPersonData,
   duplicateCount = 0,
 ): string {
@@ -30,17 +37,79 @@ export function personCardHtml(
     duplicateCount > 1
       ? `<span class="rw-card__dup" title="Appears ${duplicateCount} times in this view">×${duplicateCount}</span>`
       : "";
+  const partnerBadge = person.hiddenPartnerId
+    ? expandButtonHtml({
+        modifier: "partner",
+        label: "Show partner",
+        target: person.hiddenPartnerId,
+        anchor: personId,
+        relation: "self",
+      })
+    : "";
 
   return [
     `<div class="rw-card rw-card--${person.sex}">`,
+    person.canExpandUp
+      ? expandButtonHtml({
+          modifier: "up",
+          label: "Show more ancestors",
+          target: personId,
+          anchor: personId,
+          relation: "parents",
+        })
+      : "",
     photo,
     `<span class="rw-card__body">`,
     `<span class="rw-card__name">${name}</span>`,
     lifespan ? `<span class="rw-card__years">${lifespan}</span>` : "",
     `</span>`,
     dupBadge,
+    partnerBadge,
+    person.canExpandDown
+      ? expandButtonHtml({
+          modifier: "down",
+          label: "Show more descendants",
+          target: personId,
+          anchor: personId,
+          relation: "children",
+        })
+      : "",
     `</div>`,
   ].join("");
+}
+
+interface ExpandButtonSpec {
+  /** `rw-card__expand--<modifier>`, and the glyph the button shows. */
+  readonly modifier: "up" | "down" | "partner";
+  readonly label: string;
+  /** The person `expandRelatives` should fetch — see {@link personCardHtml}. */
+  readonly target: string;
+  /** The person already on screen to compute the fetched result's generation
+   * from. */
+  readonly anchor: string;
+  readonly relation: ExpandRelation;
+}
+
+const EXPAND_GLYPH: Readonly<Record<ExpandButtonSpec["modifier"], string>> = {
+  up: "▲",
+  down: "▼",
+  partner: "+",
+};
+
+/**
+ * One expand-in-place affordance (issue #24). `family-chart` binds its own
+ * card-click handler on the card element itself, so this is a real `<button>`
+ * — the click-delegation listener in `FamilyTree` intercepts it in the capture
+ * phase (before that handler runs) and stops it from also firing a re-centre.
+ */
+function expandButtonHtml(spec: ExpandButtonSpec): string {
+  return (
+    `<button type="button" class="rw-card__expand rw-card__expand--${spec.modifier}" ` +
+    `aria-label="${escapeHtml(spec.label)}" ` +
+    `data-expand-target="${escapeHtml(spec.target)}" ` +
+    `data-expand-anchor="${escapeHtml(spec.anchor)}" ` +
+    `data-expand-relation="${spec.relation}">${EXPAND_GLYPH[spec.modifier]}</button>`
+  );
 }
 
 /** Given + surname, falling back to the nickname, then a placeholder. */

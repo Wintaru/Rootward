@@ -23,6 +23,7 @@ export {
   DEFAULT_GENERATIONS_UP,
   MAX_GENERATIONS,
   clampGenerations,
+  expandRelatives,
   getNeighborhood,
 } from "./neighborhood";
 export { isUuid } from "./uuid";

@@ -1,4 +1,5 @@
 import type { Neighborhood, NeighborhoodPerson, Sex } from "@/lib/db";
+import { findUnresolvedPartners } from "./expand-tree";
 
 /**
  * The `family-chart` datum shape (SPEC §8.2, WAYFINDER decision 23). Kept as our
@@ -41,6 +42,15 @@ export interface FamilyChartPersonData {
   readonly isLiving: boolean | null;
   /** A profile photo when one exists (issue #34); silhouette until then. */
   readonly avatarUrl: string | null;
+  /**
+   * Expand-in-place (issue #24, SPEC §8.2): true when this person sits at the
+   * edge of the fetched window and has a recorded parent / child the window
+   * did not fetch. `hiddenPartnerId` is set instead when a family already in
+   * view names a partner the window never resolved to a full person.
+   */
+  readonly canExpandUp: boolean;
+  readonly canExpandDown: boolean;
+  readonly hiddenPartnerId: string | null;
 }
 
 export interface FamilyChartTree {
@@ -60,12 +70,13 @@ export interface FamilyChartTree {
  */
 export function toFamilyChartData(neighborhood: Neighborhood): FamilyChartTree {
   const rels = buildRels(neighborhood);
+  const unresolvedPartners = findUnresolvedPartners(neighborhood);
 
   const data: FamilyChartDatum[] = neighborhood.persons.map((person) => {
     const entry = rels.get(person.id);
     return {
       id: person.id,
-      data: toPersonData(person),
+      data: toPersonData(person, unresolvedPartners.get(person.id) ?? null),
       rels: {
         parents: sortedIds(entry?.parents),
         spouses: sortedIds(entry?.spouses),
@@ -128,7 +139,10 @@ function buildRels(neighborhood: Neighborhood): Map<string, RelSets> {
   return rels;
 }
 
-function toPersonData(person: NeighborhoodPerson): FamilyChartPersonData {
+function toPersonData(
+  person: NeighborhoodPerson,
+  hiddenPartnerId: string | null,
+): FamilyChartPersonData {
   return {
     gender: person.sex === "male" ? "M" : "F",
     sex: cardSex(person.sex),
@@ -139,6 +153,9 @@ function toPersonData(person: NeighborhoodPerson): FamilyChartPersonData {
     deathYear: person.death_year,
     isLiving: person.is_living,
     avatarUrl: null,
+    canExpandUp: person.can_expand_up,
+    canExpandDown: person.can_expand_down,
+    hiddenPartnerId,
   };
 }
 
