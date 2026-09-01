@@ -5,6 +5,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
   type AccountAccess,
   type ImportAccess,
+  isActiveAdmin,
   isActiveModerator,
 } from "./access";
 
@@ -127,4 +128,25 @@ export async function resolveModerationAccess(): Promise<ModerationAccess> {
         isAdmin: gate.account?.role === "admin",
       }
     : gate;
+}
+
+/** Outcome of resolving `/settings` access — admin-only (SPEC §8.1, §9.4). */
+export type SettingsAccess =
+  | { readonly kind: "unauthenticated" }
+  | { readonly kind: "forbidden" }
+  | { readonly kind: "allowed"; readonly userId: string };
+
+/** Resolve whether the current request may use `/settings`. Admin, not just
+ * moderator+ — role management and tree settings are the top of the role
+ * ladder (decision 18), so this checks `isActiveAdmin` directly rather than
+ * building on {@link resolveModeratorGate}. */
+export async function resolveSettingsAccess(): Promise<SettingsAccess> {
+  const session = await loadSessionAccount("resolveSettingsAccess");
+  if (session.kind === "unauthenticated") {
+    return { kind: "unauthenticated" };
+  }
+  if (!isActiveAdmin(session.account)) {
+    return { kind: "forbidden" };
+  }
+  return { kind: "allowed", userId: session.userId };
 }

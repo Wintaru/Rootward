@@ -5,14 +5,12 @@
  * in `app/moderation/actions.ts`.
  */
 
-import type { AccountRole } from "@/lib/db";
+import { type AccountRole, isAccountRole } from "@/lib/db";
 import { isUuid } from "@/lib/db/uuid";
 
 // A deliberately loose check — GoTrue does the authoritative validation when
 // the invite is sent. This only catches obvious typos before a round trip.
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-const ROLES: readonly AccountRole[] = ["viewer", "moderator", "admin"];
 
 /** The raw form fields. `role` is a free string until validated. */
 export interface RawInviteInput {
@@ -71,8 +69,4 @@ export function validateInviteInput(
   }
 
   return { ok: true, value: { email, personId, role: raw.role } };
-}
-
-function isAccountRole(value: string): value is AccountRole {
-  return (ROLES as readonly string[]).includes(value);
 }

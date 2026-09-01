@@ -38,6 +38,19 @@ export function isActiveModerator(account: AccountAccess | null): boolean {
 }
 
 /**
+ * Admin gate for `/settings` — role management and the settings page (SPEC
+ * §5, §9.4, decision 18). Matches the `is_admin()` SQL helper (also
+ * `status = 'active'`, so a suspended admin loses the settings page the same
+ * way they lose write access everywhere else). A frontend check is
+ * convenience, never the boundary.
+ */
+export function isActiveAdmin(account: AccountAccess | null): boolean {
+  return (
+    account !== null && account.status === "active" && account.role === "admin"
+  );
+}
+
+/**
  * Approved-member gate for the read views (`/tree`, `/person`). Any `active`
  * account qualifies, regardless of role — matching `is_approved()` in the RLS
  * helpers (SPEC §5). A `pending` or `suspended` account belongs on

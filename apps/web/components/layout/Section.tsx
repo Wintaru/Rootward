@@ -1,4 +1,5 @@
-/** A titled card, the layout every `/moderation` queue panel shares. */
+/** A titled card, the layout every `/moderation` and `/settings` panel
+ * shares. */
 export function Section({
   title,
   description,

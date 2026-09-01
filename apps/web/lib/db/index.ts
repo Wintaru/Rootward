@@ -21,12 +21,19 @@ export * from "./invitations";
 export * from "./moderation";
 export * from "./onboarding";
 export * from "./notifications";
+export * from "./accounts";
 export {
   getAllowSelfSignup,
   getDefaultGenerations,
   getDefaultRootPersonId,
+  getTreeSettings,
+  updateTreeSettings,
 } from "./tree-settings";
-export type { DefaultGenerations } from "./tree-settings";
+export type {
+  DefaultGenerations,
+  TreeSettings,
+  TreeSettingsPatch,
+} from "./tree-settings";
 export {
   DEFAULT_GENERATIONS_DOWN,
   DEFAULT_GENERATIONS_UP,

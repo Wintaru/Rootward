@@ -1,6 +1,5 @@
+import { Section } from "@/components/layout/Section";
 import type { PendingInvitation } from "@/lib/db";
-
-import { Section } from "./Section";
 
 /** Pending invitations from the #20 invite flow, newest first. */
 export function PendingInvitations({

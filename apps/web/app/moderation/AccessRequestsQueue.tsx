@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { Section } from "@/components/layout/Section";
 import type { PendingAccessRequest, PersonSearchOption } from "@/lib/db";
 import { formatSubmittedBirth } from "@/lib/moderation/access-requests";
 
@@ -10,7 +11,6 @@ import {
   rejectAccessRequestAction,
 } from "./actions";
 import { PersonPicker } from "./PersonPicker";
-import { Section } from "./Section";
 
 type RowState =
   | { readonly status: "idle" }

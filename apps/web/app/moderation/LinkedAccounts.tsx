@@ -3,12 +3,12 @@
 import Link from "next/link";
 import { useState } from "react";
 
+import { Section } from "@/components/layout/Section";
 import type { LinkedAccount, PersonSearchOption } from "@/lib/db";
 import { enumTokenLabel } from "@/lib/person/labels";
 
 import { reassignAccountAction, unlinkAccountAction } from "./actions";
 import { PersonPicker } from "./PersonPicker";
-import { Section } from "./Section";
 
 type RowState =
   | { readonly status: "idle" }

@@ -5,22 +5,26 @@ the relevant `docs/SPEC.md` section.
 
 ## Current state
 
-**Phase:** 7 — Phase 0 (#1–#3), Phase 1 (#4–#10), Phase 2 (#11–#16), Phase 3
+**Phase:** 8 — Phase 0 (#1–#3), Phase 1 (#4–#10), Phase 2 (#11–#16), Phase 3
 (#17, #38, #18, #19, #20), Phase 4 (#21–#25), Phase 5 (#26–#32, all eight
-issues), and Phase 6 (#33, #34) are all merged to `main`. #30 (Sources
-section) and #33 (`media-process`) were each merged by a prior session but
-left open on GitHub — same stale-issue-left-open pattern as #17 / #20–#23 /
-#25 / #29 before them — closed by hand in earlier sessions. **#34 (Media
-section) and #35 (Notification center) were each merged to `main` (`f247664`,
-`8da8649`) but left open — both closed by hand this session (#34 by the prior
-session's notes, #35 this session; PROGRESS still said #35 was "staged" when
-it was actually already on `main`).** Phase 6 is now complete. **#36
-(Moderation queue) was also already merged to `main` (`b51069e`) but left
-open — closed by hand this session, same pattern.** Phase 7 has begun: next
-is #37 (`ready`, no other dependency).
+issues), Phase 6 (#33, #34), and Phase 7 (#36, #37) are all merged to `main`.
+#30 (Sources section) and #33 (`media-process`) were each merged by a prior
+session but left open on GitHub — same stale-issue-left-open pattern as #17 /
+#20–#23 / #25 / #29 before them — closed by hand in earlier sessions. **#34
+(Media section) and #35 (Notification center) were each merged to `main`
+(`f247664`, `8da8649`) but left open — both closed by hand this session (#34
+by the prior session's notes, #35 this session; PROGRESS still said #35 was
+"staged" when it was actually already on `main`).** **#36 (Moderation queue)
+and #48 (seed.sql GoTrue token fix, see below) were also already merged to
+`main` (`b51069e`, `f0d144d`) but left open — both closed by hand this
+session, same pattern.** Phase 6 and (as of this session's #37) Phase 7 are
+now complete. Phase 8 (Ship) is next: #39 (deploy docs) and #40
+(README/self-host guide), neither `ready`-labelled yet. #47 (tooling-parity
+follow-up) and #49 (`notify_access_requested` dedup edge case) are open,
+non-blocking, not part of the SPEC §10 numbered sequence.
 
 **#48 (seed.sql: NULL `confirmation_token` breaks GoTrue sign-in for the demo
-admin) — fixed on `fix/seed-gotrue-tokens`, staged.** Not a SPEC issue — a bug
+admin) — fixed, merged to `main` (`f0d144d`).** Not a SPEC issue — a bug
 surfaced during #35's browser review. `supabase/seed.sql`'s demo-admin
 `insert into auth.users` left six GoTrue token columns unset; three
 (`confirmation_token` / `recovery_token` / `email_change_token_new`) have no
@@ -31,9 +35,73 @@ always writes. Verified live against the shared stack (already patched by a
 concurrent session by the time this one checked — `updated_at` was minutes
 old — `POST /auth/v1/token?grant_type=password` returned a real token); a
 fresh `supabase db reset` replay is the real test, left for whoever next
-resets the shared stack or for CI. See `DECISIONS.md`. **#49** (a related but
-separate `notify_access_requested` dedup edge case) is still open, not
-blocking, deferred.
+resets the shared stack or for CI. See `DECISIONS.md`.
+
+**Issue #37 — `/settings`: tree settings + role management: done, staged on
+`feat/settings-tree-roles`.** Admin-only settings route (SPEC §8.1, §9.4, §10
+item 37, WAYFINDER decision 18). No migration — every column and RLS policy
+this needed already existed (`account_update` / `tree_settings_update` are
+both `is_admin()`, from #9).
+
+- **`lib/auth/access.ts`** — new `isActiveAdmin` predicate (mirrors
+  `isActiveModerator`); **`lib/auth/require-moderator.ts`** — new
+  `resolveSettingsAccess()`, checking `isActiveAdmin` directly rather than
+  layering on the moderator gate (admin is the top of decision 18's ladder,
+  not "moderator plus something").
+- **`lib/db/tree-settings.ts`** — `TreeSettings` (full-row read type) /
+  `TreeSettingsPatch` (validated write type) / `getTreeSettings` (`.single()`,
+  throws on a missing row — the singleton is guaranteed by #7's seed, so a
+  missing row is a broken deployment, not "nothing set yet" like the
+  narrower getters already in this file) / `updateTreeSettings` (plain
+  `UPDATE … WHERE id = 1`, **no** optimistic-concurrency version check —
+  decision 26's concurrency-token list is the genealogy edit-view rows only
+  and does not name `tree_settings`).
+- **`lib/settings/tree-settings-form.ts`** (new, pure, tested) —
+  `validateTreeSettingsForm`: integer-range checks for the living threshold /
+  generations / media size (using the real column bounds, e.g. `smallint`
+  max, not guessed product limits), a MIME-type-list parser (comma or
+  newline separated, de-duped, at least one required — media-process's
+  `mediaAllowedMime.includes()` check is exact-match, so an empty list would
+  brick every upload), a UUID check for the root person.
+- **`lib/db/accounts.ts`** (new) — `listAllAccounts` / `changeAccountRole` /
+  `setAccountStatus` (typed to `"active" | "suspended"` only — `pending` is
+  the onboarding-only state `unlinkAccount` in `lib/db/moderation.ts` already
+  owns). Also exports `ACCOUNT_ROLES` / `isAccountRole`, the single source of
+  truth for the `account_role` value list — see the review note below.
+- **`app/settings/actions.ts`** — `saveTreeSettingsAction` /
+  `changeAccountRoleAction` / `setAccountStatusAction`. The latter two
+  refuse `accountId === access.userId`: since `account` UPDATE RLS is
+  `is_admin()`-only with no recovery path but raw SQL, an admin demoting or
+  suspending themselves with no other admin signed in would permanently lock
+  the tree out of `/settings`. App-tier only, not enforced at RLS — SPEC §5
+  does not ask for it there.
+- **`app/settings/{page,TreeSettingsForm,RoleManagement,SettingsForbidden}.tsx`**
+  — follows the established `/moderation` shape (server page resolves
+  access → redirect/forbidden/render; client components with local
+  optimistic state calling server actions).
+- **Refactor:** `Section` (the "titled card" layout) moved from
+  `app/moderation/Section.tsx` to `components/layout/Section.tsx` — `/settings`
+  is a second consumer, so it no longer belongs inside the `/moderation`
+  route folder. Import-path change only.
+- **Code review (foreground) — two fixes applied:** (1) `TreeSettingsForm`
+  never resynced its local form state after a successful save, so the
+  trimmed/normalised values `validateTreeSettingsForm` writes would not show
+  even though the DB now held them — fixed by keying `<TreeSettingsForm>` on
+  `settings.updatedAt` in `page.tsx`, so a post-save `revalidatePath` remount
+  re-derives the form from the fresh row. (2) this change had introduced a
+  _third_ independent copy of the `account_role` value list (alongside
+  `lib/moderation/invite.ts`'s pre-existing one) — consolidated into the
+  `ACCOUNT_ROLES` / `isAccountRole` pair above and pointed all three call
+  sites (`invite.ts`, `app/settings/actions.ts`, `RoleManagement.tsx`) at it.
+- Full pnpm gate green (**592** tests, including the new 12
+  `validateTreeSettingsForm` cases and 5 new `isActiveAdmin` cases). **Not
+  done:** a live browser click-through — the shared Playwright MCP browser
+  instance was held by
+  another one of the ~26 concurrent Trillian sessions on this machine for
+  the whole session; relied on the full gate plus new unit coverage plus
+  #9's existing RLS pgTAP coverage of `is_admin()` instead. See
+  `DECISIONS.md`.
+
 **Planning:** complete. 35 decisions in `docs/WAYFINDER.md`, full build spec in
 `docs/SPEC.md`. No open questions that block starting.
 **Issues:** created. 46 GitHub issues on `Wintaru/Rootward` — items 1–40 from
