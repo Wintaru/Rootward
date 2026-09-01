@@ -6,11 +6,17 @@ import { resolveEditAccess } from "@/lib/auth/require-moderator";
 import {
   isUuid,
   searchPlaces as searchPlacesDb,
+  saveCitations as persistCitations,
   saveEvents as persistEvents,
   saveFacts as persistFacts,
   saveNotes as persistNotes,
+  saveRepositories as persistRepositories,
+  saveSources as persistSources,
   updatePersonFields,
   saveAdditionalNames as persistAdditionalNames,
+  type CitationDeleteInput,
+  type CitationInsertInput,
+  type CitationUpdateInput,
   type EventDeleteInput,
   type EventInsertInput,
   type EventUpdateInput,
@@ -26,11 +32,20 @@ import {
   type PersonNameInsertInput,
   type PersonNameUpdateInput,
   type PlaceOption,
+  type RepositoryDeleteInput,
+  type RepositoryInsertInput,
+  type RepositoryUpdateInput,
   type RowConflict,
   type SaveAdditionalNamesResult,
+  type SaveCitationsResult,
   type SaveEventsResult,
   type SaveFactsResult,
   type SaveNotesResult,
+  type SaveRepositoriesResult,
+  type SaveSourcesResult,
+  type SourceDeleteInput,
+  type SourceInsertInput,
+  type SourceUpdateInput,
 } from "@/lib/db";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -232,6 +247,125 @@ export async function saveNotes(input: {
 
   const supabase = await createSupabaseServerClient();
   const result = await persistNotes(supabase, input);
+
+  revalidatePath(`/person/${input.personId}/edit`);
+  return { status: "saved", result };
+}
+
+export type SaveRepositoriesActionResult =
+  | { readonly status: "saved"; readonly result: SaveRepositoriesResult }
+  | { readonly status: "error"; readonly message: string };
+
+/** `repository` (SPEC §10 item 30) is global reference data, not owned by any
+ * one person — same as `source` below — so `personId` is only used to
+ * re-validate the page the caller is editing, not to scope the write;
+ * `repository_write` RLS (`is_moderator()`) is the real boundary. */
+export async function saveRepositories(input: {
+  readonly personId: string;
+  readonly inserts: readonly RepositoryInsertInput[];
+  readonly updates: readonly RepositoryUpdateInput[];
+  readonly deletes: readonly RepositoryDeleteInput[];
+}): Promise<SaveRepositoriesActionResult> {
+  const access = await resolveEditAccess();
+  if (access.kind !== "allowed") {
+    return {
+      status: "error",
+      message: "You do not have permission to edit this person.",
+    };
+  }
+  if (!isUuid(input.personId)) {
+    return { status: "error", message: "Invalid person." };
+  }
+  if (
+    input.inserts.length === 0 &&
+    input.updates.length === 0 &&
+    input.deletes.length === 0
+  ) {
+    return { status: "error", message: "Nothing to save." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const result = await persistRepositories(supabase, input);
+
+  revalidatePath(`/person/${input.personId}/edit`);
+  return { status: "saved", result };
+}
+
+export type SaveSourcesActionResult =
+  | { readonly status: "saved"; readonly result: SaveSourcesResult }
+  | { readonly status: "error"; readonly message: string };
+
+/** `source` (SPEC §10 item 30) is global reference data — same scope note as
+ * `saveRepositories` above. A `repositoryId` in the diff may name a
+ * repository inserted in the same page load's Repositories save (already
+ * committed by the time this runs, since the caller awaits that save first —
+ * see `source-edit.ts`'s module doc). */
+export async function saveSources(input: {
+  readonly personId: string;
+  readonly inserts: readonly SourceInsertInput[];
+  readonly updates: readonly SourceUpdateInput[];
+  readonly deletes: readonly SourceDeleteInput[];
+}): Promise<SaveSourcesActionResult> {
+  const access = await resolveEditAccess();
+  if (access.kind !== "allowed") {
+    return {
+      status: "error",
+      message: "You do not have permission to edit this person.",
+    };
+  }
+  if (!isUuid(input.personId)) {
+    return { status: "error", message: "Invalid person." };
+  }
+  if (
+    input.inserts.length === 0 &&
+    input.updates.length === 0 &&
+    input.deletes.length === 0
+  ) {
+    return { status: "error", message: "Nothing to save." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const result = await persistSources(supabase, input);
+
+  revalidatePath(`/person/${input.personId}/edit`);
+  return { status: "saved", result };
+}
+
+export type SaveCitationsActionResult =
+  | { readonly status: "saved"; readonly result: SaveCitationsResult }
+  | { readonly status: "error"; readonly message: string };
+
+/** The Citations list (SPEC §10 item 30) has no single "owning" person the
+ * way most sections do — a citation may be owned by the person or by one of
+ * their events or facts — so this only re-checks moderator access on
+ * `personId` (the page the caller is editing), same posture as `saveNotes`;
+ * `citation_write` RLS is the real boundary regardless. */
+export async function saveCitations(input: {
+  readonly personId: string;
+  readonly inserts: readonly CitationInsertInput[];
+  readonly updates: readonly CitationUpdateInput[];
+  readonly deletes: readonly CitationDeleteInput[];
+}): Promise<SaveCitationsActionResult> {
+  const access = await resolveEditAccess();
+  if (access.kind !== "allowed") {
+    return {
+      status: "error",
+      message: "You do not have permission to edit this person.",
+    };
+  }
+  if (!isUuid(input.personId)) {
+    return { status: "error", message: "Invalid person." };
+  }
+  if (
+    input.inserts.length === 0 &&
+    input.updates.length === 0 &&
+    input.deletes.length === 0
+  ) {
+    return { status: "error", message: "Nothing to save." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const result = await persistCitations(supabase, input);
 
   revalidatePath(`/person/${input.personId}/edit`);
   return { status: "saved", result };

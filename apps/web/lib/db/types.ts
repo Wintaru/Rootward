@@ -17,6 +17,7 @@ export type FactType = Database["public"]["Enums"]["fact_type"];
 export type NameType = Database["public"]["Enums"]["name_type"];
 export type FactVisibility = Database["public"]["Enums"]["fact_visibility"];
 export type NoteOwner = Database["public"]["Enums"]["note_owner"];
+export type CitationOwner = Database["public"]["Enums"]["citation_owner"];
 export type AccountRole = Database["public"]["Enums"]["account_role"];
 export type AccountStatus = Database["public"]["Enums"]["account_status"];
 

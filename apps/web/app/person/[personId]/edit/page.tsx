@@ -14,6 +14,7 @@ import {
   getPersonNames,
   getPersonNotes,
   getPersonReferenceNumbers,
+  getSourcesSectionData,
 } from "@/lib/db";
 import type { PersonEditShellData } from "@/lib/db/person";
 import { resolveEditSection, type EditSectionSlug } from "@/lib/edit/sections";
@@ -26,6 +27,7 @@ import { FactsSection } from "@/components/person/edit/FactsSection";
 import { NameGenderSection } from "@/components/person/edit/NameGenderSection";
 import { NotesSection } from "@/components/person/edit/NotesSection";
 import { ReferenceNumbersSection } from "@/components/person/edit/ReferenceNumbersSection";
+import { SourcesSection } from "@/components/person/edit/SourcesSection";
 import { EditShell } from "@/components/person/EditShell";
 
 import { EditForbidden } from "./EditForbidden";
@@ -36,9 +38,9 @@ export const metadata: Metadata = {
 
 /**
  * `/person/[personId]/edit` — the full-screen edit shell (SPEC §8.3, §10 item
- * 26) plus, as of #27/#28/#29/#31, the Name & Gender, Additional Names,
- * Reference Numbers, Events, Facts, and Notes sections. Moderator+ only;
- * Media and Sources (#30, #33) still fall back to the shell's placeholder.
+ * 26) plus, as of #27/#28/#29/#30/#31, the Name & Gender, Additional Names,
+ * Reference Numbers, Events, Facts, Sources, and Notes sections. Moderator+
+ * only; Media (#33) still falls back to the shell's placeholder.
  *
  * Gate mirrors `/person/[personId]`'s (unauthenticated → `/login`, not
  * approved → `/onboarding`) plus a moderator check on top, matching
@@ -156,9 +158,13 @@ async function loadSectionContent(
       return <NotesSection personId={personId} loaded={notes} />;
     }
 
+    case "sources": {
+      const data = await getSourcesSectionData(supabase, personId);
+      return <SourcesSection personId={personId} loaded={data} />;
+    }
+
     default:
-      // Media, Sources — not built yet (#30, #33); the shell's own
-      // placeholder covers these.
+      // Media — not built yet (#33); the shell's own placeholder covers it.
       return undefined;
   }
 }
