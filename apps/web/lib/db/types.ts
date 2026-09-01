@@ -21,6 +21,7 @@ export type CitationOwner = Database["public"]["Enums"]["citation_owner"];
 export type MediaOwner = Database["public"]["Enums"]["media_owner"];
 export type AccountRole = Database["public"]["Enums"]["account_role"];
 export type AccountStatus = Database["public"]["Enums"]["account_status"];
+export type NotificationType = Database["public"]["Enums"]["notification_type"];
 
 /**
  * One person in a {@link Neighborhood}. Carries only the fields the tree card

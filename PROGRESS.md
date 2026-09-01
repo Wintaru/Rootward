@@ -5,17 +5,17 @@ the relevant `docs/SPEC.md` section.
 
 ## Current state
 
-**Phase:** 6 — Phase 0 (#1–#3), Phase 1 (#4–#10), Phase 2 (#11–#16), Phase 3
-(#17, #38, #18, #19, #20), Phase 4 (#21–#25), and Phase 5 (#26–#32, all eight
-issues) are all merged to `main`. #30 (Sources section) was itself merged
-(`0d5613e`) but left open on GitHub by the session that shipped it — same
-stale-issue-left-open pattern as #17 / #20–#23 / #25 / #29 before it — closed
-by hand this session. **#33 (`media-process` edge function) was merged to
-`main` (`2a1c37e`) by a prior session but left open on GitHub — same stale
-pattern, closed by hand this session. #34 (Media section) is done, staged on
-`feat/media-section`** — see below. Phase 6 is now complete. Next: #35 or #37
-(both `ready`, both Phase 7, no dependency between them — pick either;
-#36 stays `blocked` until #35 lands).
+**Phase:** 7 — Phase 0 (#1–#3), Phase 1 (#4–#10), Phase 2 (#11–#16), Phase 3
+(#17, #38, #18, #19, #20), Phase 4 (#21–#25), Phase 5 (#26–#32, all eight
+issues), and Phase 6 (#33, #34) are all merged to `main`. #30 (Sources
+section) and #33 (`media-process`) were each merged by a prior session but
+left open on GitHub — same stale-issue-left-open pattern as #17 / #20–#23 /
+#25 / #29 before them — closed by hand in earlier sessions. **#34 (Media
+section) was merged to `main` (`f247664`) but also left open — closed by hand
+this session.** Phase 6 is now complete. **#35 (Notification center) is done,
+staged on `feat/notification-center`** — see below. Next: #37 (`ready`, Phase
+7, no dependency on #35) or #36 (was `blocked` on #35 — now unblocked, but
+still depends on #20 too, already merged).
 **Planning:** complete. 35 decisions in `docs/WAYFINDER.md`, full build spec in
 `docs/SPEC.md`. No open questions that block starting.
 **Issues:** created. 46 GitHub issues on `Wintaru/Rootward` — items 1–40 from
@@ -1385,7 +1385,9 @@ concern, not data loss — no sweep job exists yet for it). Labelled #34
 `ready` (depends only on #33, staged this session).
 
 **Issue #34 — Media upload + gallery + primary photo + `/media/[id]` viewer +
-Media section: done, staged on `feat/media-section`.** The last Phase 6 issue
+Media section: done, merged to `main` (`f247664`), issue closed (was left open
+by the session that shipped it — reconciled the next session, see #35's
+entry).** The last Phase 6 issue
 (`docs/SPEC.md` §8.3, §4.4, §10 item 34). Reconciled #33 as stale-open first
 (merged `2a1c37e`, left open — same pattern as every session before it). No
 migration — `media`/`media_link` (RLS from #9), the `media` bucket (#33), and
@@ -1462,33 +1464,127 @@ migration — `media`/`media_link` (RLS from #9), the `media` bucket (#33), and
   `ready` (both depend only on already-merged issues; #36 stays `blocked`
   on #35).
 
+**Issue #35 — Notification center + bell + Realtime + auto-resolve triggers:
+done, staged on `feat/notification-center`.** Phase 7 (`docs/SPEC.md` §8.5,
+§4.7, §10 item 35, WAYFINDER decision 27). Reconciled #34 as stale-open first
+(merged `f247664`, left open — same pattern as every session before it).
+
+- **Migration `20260901205718_notification_center.sql`** — `alter publication
+supabase_realtime add table public.notification` (default REPLICA IDENTITY;
+  every DML event, not just INSERT — Postgres's `publish` option is
+  whole-publication, not per-table, confirmed against the local server when a
+  narrower `with (publish = 'insert')` turned out to be a syntax error; see
+  `DECISIONS.md`) so the bell subscribes with plain `postgres_changes` —
+  `notification`'s own `notification_select` RLS (`is_moderator()`) is what
+  Realtime enforces for an `authenticated` subscriber, unlike the #32 presence
+  channel, which needed its own `realtime.messages` policies because presence
+  has no backing table/RLS. Two `security definer` auto-resolve triggers,
+  built ahead of #36 (the moderator UI that will actually perform the
+  UPDATEs — they only watch for the state transition, verified in pgTAP by
+  performing #36's future UPDATE directly): `resolve_access_request_notifications`
+  (AFTER UPDATE on `access_request`, `status` leaves `'pending'` — resolves the
+  linked `access_requested` notification by `access_request_id` _and_ any open
+  `claim_attempt_cap` notification for the same account, since #18's rate-limit
+  path raises that one with no `access_request_id` in its payload) and
+  `resolve_self_claim_notification` (AFTER UPDATE on `account`, `person_id` was
+  already set and changes — a reassign or unlink, never the first link;
+  `resolved_by` is `(select auth.uid())` since `account` has no "changed by"
+  column and `account_update` RLS is admin-only, so the acting admin is always
+  the caller). New pgTAP `notification_center_test.sql` (17 assertions).
+  Fixed a pre-existing `access_request_notify_test.sql` assertion that assumed
+  exactly one trigger on `access_request` (now two) — narrowed from `is(select
+tgname...)` to an `exists(...)` filtered by trigger name.
+- **`lib/db/notifications.ts`** — the typed layer. `getUnreadNotificationCount`
+  is `total notification rows - this account's notification_read rows` (two
+  plain counts, no bespoke SQL function — correct only because
+  `notification_select` RLS has no per-row filtering, so visibility is uniform
+  across all rows for any given account). `listNotifications` (filter:
+  unresolved/resolved/all), `markNotificationsRead` (bulk upsert,
+  `ignoreDuplicates`), `resolveNotification` (the manual-resolve path for
+  `import_finished`/`import_failed`/`hide_request`, which have no further
+  triggering action per decision 27 — goes straight through `notification_update`
+  RLS, no service role).
+- **`lib/notifications/format.ts`** — pure `describeNotification` (per-type
+  label, preferring the payload's own `message`/`submitted_name` when present)
+  - `notificationPersonId` (links `self_claim_linked` through to `/person/<id>`).
+    8 vitest tests.
+- **`components/notifications/NotificationBell.tsx`** — the bell: badge count,
+  a `postgres_changes` INSERT listener (+1 live), a dropdown panel with
+  Unresolved/Resolved/All tabs that fetches on open and marks every unread row
+  in the fetched page read in the same round trip (decision 27 draws no
+  distinction between "seen the list" and "read"), and a per-row manual
+  resolve button. `app/layout.tsx` renders it for a moderator+ account only —
+  the app's first piece of persistent chrome, a plain `<header>` wrapping it,
+  everything else unchanged (a viewer or signed-out visitor gets no header at
+  all). `getCurrentAccount` (`lib/auth/current-account.ts`) wrapped in React's
+  `cache()` so the layout and any page that also calls it (`app/page.tsx`)
+  share one lookup per request.
+- **Code review: 2 must-fix applied.** `load()` had no guard against an
+  out-of-order response — a quick tab switch could let a stale fetch's rows
+  overwrite what the newly-selected tab should show; fixed with a monotonic
+  request-id ref that drops any response that isn't the most recently
+  requested. `load()`/`handleResolve()` had no error handling at all — a
+  thrown Supabase error became a silent unhandled rejection with the panel
+  just showing "No notifications here.", indistinguishable from a genuinely
+  empty queue; fixed with try/catch + a visible error state, matching every
+  edit-view section's pattern. Also applied (should-fix): a best-effort
+  unread-count resync on Realtime reconnect and `visibilitychange`, since the
+  local +1/-N deltas alone would permanently desync the badge after a dropped
+  Realtime event. One should-fix filed as issue #49, not fixed here (a
+  pre-existing #19 dedup gap, not introduced by this diff — see
+  `DECISIONS.md`).
+- **Found and fixed, as its own separate commit ahead of #35's:** browser
+  verification turned up a real, previously-undiscovered bug in
+  `lib/supabase/env.ts` — `supabaseUrl()`/`supabaseAnonKey()` read
+  `process.env[name]` (a dynamic property access Next.js/Turbopack cannot
+  statically inline into the client bundle), so every client-side Supabase
+  call in the whole app — login, onboarding, import polling, presence, and
+  now this bell — has been silently throwing "missing environment variable"
+  in a real browser this entire time, invisible to vitest (Node has the real
+  dynamic `process.env`) and never caught because every prior session's "live
+  browser pass" was deferred. Fixed with a literal `process.env.NEXT_PUBLIC_*`
+  access at each of the two call sites. Full writeup, plus a second
+  pre-existing bug found and worked around but not fixed (#48 — seeded admin's
+  `auth.users` row has `NULL` GoTrue token columns, crashing every sign-in
+  path for that account), in `DECISIONS.md`.
+- Full pnpm gate (**577** — 569 + 8 new) + `supabase db lint` + `supabase test
+db` (**252**) green. Browser-verified end to end against the shared local
+  stack once the env.ts fix and a throwaway session-injection workaround
+  unblocked sign-in (no working magic-link path exists yet on this stack —
+  #48): live bell badge count, panel open/mark-read, all three filter tabs,
+  manual resolve, all confirmed working. Labelled #36 `ready` (was `blocked`
+  on #35; also depends on #20, already merged).
+
 ## Next action
 
-**Phase 6 is complete.** #33 and #34 are both done — see above. Phase 7 has
-two independently-`ready` issues: **#35** (Notification center + bell +
-Realtime + auto-resolve triggers) and **#37** (`/settings` — tree settings +
-role management), neither depending on the other. **#36** (Moderation queue)
-stays `blocked` until #35 lands (it depends on #35 for the notification
-plumbing). Take #35 or #37 next unless this file says otherwise by then.
+**Phase 7 is under way.** #35 is done — see above. **#37** (`/settings` —
+tree settings + role management) is `ready` and independent of #35/#36.
+**#36** (Moderation queue) is now `ready` too (#35 and #20 both merged). Take
+#36 or #37 next unless this file says otherwise by then.
 
-Still pending across #14–#34: a deployed-function run (`supabase functions
-serve`) plus a real signed-in browser session driving `/login` → `/import` →
-`/onboarding` → `/moderation` → `/tree/<root>` → `/person/<id>` →
-`/person/<id>/edit` (every v1 section, including Media — an actual photo
-upload through `media-process`) → `/media/<id>`, a live multi-tab conflict
-walkthrough for the `ConflictDialog`, and two browser tabs on the same
-person's edit view to see the #32 presence banner update live. Do this as a
-dedicated integration pass, and restart the local stack first so the
-`config.toml` Google + redirect-URL change loads.
+Still pending across #14–#35: a deployed-function run (`supabase functions
+serve`) plus a real signed-in browser session driving the full flow with a
+_working_ magic-link sign-in — blocked until #48 (seed.sql NULL token
+columns) is fixed; #35's own verification used a throwaway workaround, not
+this. Once #48 is fixed: `/login` → `/import` → `/onboarding` → `/moderation`
+→ `/tree/<root>` → `/person/<id>` → `/person/<id>/edit` (every v1 section,
+including Media — an actual photo upload through `media-process`) →
+`/media/<id>`, a live multi-tab conflict walkthrough for the `ConflictDialog`,
+two browser tabs on the same person's edit view for the #32 presence banner,
+and two tabs on `/tree` or `/moderation` for the #35 bell's live badge update
+across sessions (this session verified the Realtime wiring works, but only
+within one browser context — a genuine second-viewer check is still open).
 
-**Shared local stack:** migrations through `20260901111850` (#33's
-`media_bucket`) are applied via `supabase migration up` (additive — the stack
-is shared with other concurrent sessions on this machine, so this session
-did not run `supabase db reset`); #34 added no migration, so this is
-unchanged from #33. `supabase db lint` and `supabase test db` both green
-against that state as of #33 (235 tests) — not re-run this session. A full
+**Shared local stack:** migrations through `20260901205718` (#35's
+`notification_center`) are applied via `supabase migration up` (additive —
+the stack is shared with other concurrent sessions on this machine, so this
+session did not run `supabase db reset`). `supabase db lint` and `supabase
+test db` both green against that state as of #35 (252 tests). A full
 `supabase db reset` remains safe whenever it's next convenient (every
-migration through #33 is either merged or additive-safe).
+migration through #35 is either merged or additive-safe). This session also
+directly patched the _live_ seeded admin's `auth.users` row (NULL GoTrue
+token columns → `''`) to unblock its own browser verification — that patch is
+data-only, not schema, and does not survive a `db reset`; #48 is the real fix.
 
 `gh issue list --label ready` is the queue. Take the lowest-numbered `ready`
 issue unless this file says otherwise. When an issue merges, label the issues it
@@ -1535,7 +1631,8 @@ unblocks `ready`.
 | 2026-08-31 | Closed stale-open issue #28 (merged `dc48652`, left open). Issue #31 — Notes section + row-level version check + `ConflictDialog` (no migration, `note_write` RLS from #9): `lib/db/conflict.ts` (`RowConflict<Row>`, the `{theirs, changedBy}` shape every write function now returns on a version-check loss instead of a bare `{ok:false}`) + `lib/db/account-lookup.ts`; retrofitted `person-edit.ts`/`event-edit.ts` to refetch the current row on conflict; `lib/db/note-edit.ts` (new — `getPersonNotes`/`saveNotes`, scoped to person + person's own events per WAYFINDER decision 21, narrower than the issue's own wording); `lib/edit/conflict.ts` (shared `ConflictItem` type) + `components/person/edit/ConflictDialog.tsx` (the one dialog every section renders); `lib/edit/notes.ts` (pure CRUD — `moved` swaps with the nearest same-owner row, not the adjacent index) + `NotesSection.tsx`; every multi-row section gained a `describe*Conflicts` mapper, a `row_reset` reducer action, and an identical `performSave`/`retryKeepMine`/`resolveConflict` pattern (a conflicted save keeps its original diff alive so a later "keep mine" can resend that row's patch against the fresh `updated_at`). 34 vitest added (pnpm 446) + build green. Self-review caught and fixed one bug before code review (`row_reset` couldn't restore a row already removed from local state — `state.map` silently no-ops on a missing id). Code review: 1 must-fix applied (`ConflictDialog`'s resolve buttons now disable while a save is in flight — an in-flight "keep mine" retry's stale closure could otherwise silently overwrite a concurrent "take theirs" resolution on a different conflict) + 1 should-fix applied (`NoteOwner` narrowed to a local `SectionNoteOwner = "person" \| "event"` so the section's own types can't represent the 6 owner kinds it doesn't handle). 1 should-fix deferred: the three multi-row sections' conflict-resolution state machine is near-verbatim duplicated (~70 lines each) — a shared hook would remove it, not extracted this session. Labelled #32 `ready` (depends only on #26, already merged). | `feat/edit-notes-conflict-dialog`       |
 | 2026-08-31 | Closed stale-open issue #31 (merged `bc046ec`, left open). Issue #32 — Presence indicators on the edit view (`20260831230616_edit_presence_authorization.sql`): pure `lib/edit/presence.ts` (`describeOtherEditors` parses `presenceState()`, validates `section` against `EDIT_SECTIONS`) + client `PresenceBanner.tsx` (joins `person:{id}` once per identity, re-tracks on a section change without rejoining) + `EditShell`'s `currentUser` prop. Code review (one pass, all fixed before staging): 3 must-fix — an unvalidated `section` crashed `editSectionLabel` for every other viewer; the channel was non-private, so `realtime.messages` RLS was never evaluated at all (fixed with `private: true` + two new `is_moderator()` policies — a first policy draft checked `realtime.topic()` instead of the row's own `topic` column, which a new pgTAP assertion caught as authorizing any topic string); the display-name fallback broadcast the caller's real email over that channel (dropped for a generic label). 2 should-fix applied (re-track effect depended on `self` by reference instead of its primitive fields; a dangling `DECISIONS.md` reference, now written). 10 vitest added (pnpm 456) + build green; `edit_presence_test.sql` (8 pgTAP) + `supabase db lint` + `supabase test db` (**227**) green on a clean `supabase db reset`. Labelled #29/#30 `ready` (both depend only on #28, left unlabelled since #28's own session).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | `feat/edit-presence`                    |
 | 2026-08-31 | Closed stale-open issue #32 (merged `1948b33`, left open). Issue #29 — Facts section (no migration, `fact_write`/`fact_select` RLS from #9): `lib/db/fact-edit.ts` (`getPersonFacts`/`saveFacts`) + `lib/edit/facts.ts` (pure reducer/diff/`describeFactConflicts`) mirror #28's `event-edit.ts`/`events.ts` closely, adapted for `fact`'s own shape — no `age_text`/`sort_key` (orders by `id`, no re-sort after save, the `additional-names.ts` shape not the `events.ts` one), a writable `visibility` enum restricted in the MVP UI to `everyone_approved`/`hidden` (issue scope, decisions 7/31's restriction applied to `fact`), and a generated `is_sensitive` column never sent on write but mirrored client-side (`factIsSensitive`) so the sensitive badge reflects instantly on choosing a sensitive type. `FactsSection.tsx` wired into `page.tsx`'s section switch and a new `saveFacts` server action. 28 vitest added (pnpm 484) + build green. Code review: 1 should-fix applied (a fact loaded with an out-of-MVP-scope visibility value — `close_family`/`moderators_only` — would silently downgrade to `everyone_approved` on the next save if the moderator touched the control, since a plain `<select>` with no matching option falls back to displaying its first one while the real value stays underneath; fixed by disabling the control and rendering a non-selectable option for the true value in that case). Labelled #30 `ready` (unaffected — already was).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | `feat/edit-facts-section`               |
-| 2026-08-31 | Reconciled #29 (already merged `347ea5c`, left open — closed it). Issue #30 — Sources section (no migration, `repository_write`/`source_write`/`citation_write` RLS from #9): three independently-saved lists — Repositories, then Sources (may link a repository), then Citations (link a source; owned by the person or one of their events/facts) — `lib/db/source-edit.ts` (`getRepositories`/`saveRepositories`, `getSources`/`saveSources`, `getPersonCitations`/`saveCitations`, `getSourcesSectionData`) + `lib/edit/repositories.ts`/`sources.ts`/`citations.ts` (pure, one per table) mirror `fact-edit.ts`/`facts.ts` and `note-edit.ts`/`notes.ts`; `repository`/`source` read as full unfiltered lists (global reference data, `place`'s same RLS boundary); citations scoped to `owner_type in ('person','event','fact')` (`note_owner`'s narrowing precedent); each list's picker only offers already-_saved_ rows from the list above it, so a citation can never reference an unsaved source id. `SourcesSection.tsx` wired into `page.tsx`'s section switch and three new server actions. 47 vitest added (pnpm 531→533) + build green. Code review: 1 must-fix applied (deleting a `source` cascades to every citation referencing it tree-wide, not just this person's — the generic "Remove" button gave no warning; added source-specific copy) + 1 nit applied (missing conflict-preserving reconcile test cases). Labelled #33 `ready` (depends only on #6, already merged). Phase 5 complete.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | `feat/edit-sources-section`             |
+| 2026-08-31 | Reconciled #29 (already merged `347ea5c`, left open — closed it). Issue #30 — Sources section (no migration, `repository_write`/`source_write`/`citation_write` RLS from #9): three independently-saved lists — Repositories, then Sources (may link a repository), then Citations (link a source; owned by the person or one of their events/facts) — `lib/db/source-edit.ts` (`getRepositories`/`saveRepositories`, `getSources`/`saveSources`, `getPersonCitations`/`saveCitations`, `getSourcesSectionData`) + `lib/edit/repositories.ts`/`sources.ts`/`citations.ts` (pure, one per table) mirror `fact-edit.ts`/`facts.ts` and `note-edit.ts`/`notes.ts`; `repository`/`source` read as full unfiltered lists (global reference data, `place`'s same RLS boundary); citations scoped to `owner_type in ('person','event','fact')` (`note_owner`'s narrowing precedent); each list's picker only offers already-_saved_ rows from the list above it, so a citation can never reference an unsaved source id. `SourcesSection.tsx` wired into `page.tsx`'s section switch and three new server actions. 47 vitest added (pnpm 531→533) + build green. Code review: 1 must-fix applied (deleting a `source` cascades to every citation referencing it tree-wide, not just this person's — the generic "Remove" button gave no warning; added source-specific copy) + 1 nit applied (missing conflict-preserving reconcile test cases). Labelled #33 `ready` (depends only on #6, already merged). Phase 5 complete.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |                                         | `feat/edit-sources-section` |
+| 2026-09-01 | Reconciled #34 (already merged `f247664`, left open — closed it). Issue #35 — Notification center: `20260901205718` migration (Realtime publication on `notification` + two `security definer` auto-resolve triggers built ahead of #36); `lib/db/notifications.ts` (unread count via subtraction, list/mark-read/resolve) + `lib/notifications/format.ts` + `NotificationBell.tsx` (Realtime badge, filter tabs, mark-read-on-open, manual resolve) rendered from `app/layout.tsx` for moderator+ only. 17 pgTAP + 8 vitest added (pnpm 577, `supabase test db` 252) + build green. Code review: 2 must-fix applied (a stale-response race in the panel's fetch; unhandled promise rejections with no error UI) + 1 should-fix applied (Realtime reconnect/visibility resync) + 1 filed as #49 (pre-existing #19 dedup gap). Also found and fixed as a separate first commit: `lib/supabase/env.ts` was silently breaking every client-side Supabase call in the browser (dynamic `process.env[name]` lookup Next.js cannot inline) — see `DECISIONS.md`. Found, not fixed: #48 (seeded admin's `auth.users` row has NULL GoTrue token columns, breaking all sign-in for that account). Browser-verified end to end via a throwaway session-injection workaround. Labelled #36 `ready` (was `blocked` on #35).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | `feat/notification-center`              |
 
 ## Notes for the next session
 
@@ -1544,19 +1641,19 @@ unblocks `ready`.
   `Depends on:` issue numbers and a `### Done when` checklist.
 - Issue numbers match `docs/SPEC.md` §10 item numbers for 1–40. Issues 41–46 are
   the Post-MVP bullets.
-- #1–#29, #31, #32, and #38 are merged to `main`. Later issues get `ready` as
-  their dependencies close — do this when you finish an issue.
+- #1–#35 (and #38) are merged to `main` except #35 itself, staged this session
+  on `feat/notification-center`. Later issues get `ready` as their
+  dependencies close — do this when you finish an issue.
   #17 / #20 / #21 / #22 / #23 / #24 / #25 / #26 / #27 / #28 / #29 / #31 / #32 /
-  #38 were each closed by hand after their work merged but the issue stayed
-  open (`d6ee22f` / `536c920` / `4c92f5e` / `00da1e6` / `5be36e5` / prior
-  session / `70c2c73` / `31e4bf3` / `f43c609` / `dc48652` / `347ea5c` /
-  `bc046ec` / `1948b33` / prior session) — budget for this pattern every
-  session; it has recurred every time so far.
+  #34 / #38 were each closed by hand after their work merged but the issue
+  stayed open — **this pattern has recurred in every single session so far**;
+  always check `gh issue list --state open` against what's actually on `main`
+  before picking the next issue.
 - Phase 1 complete (#4–#10). Phase 2 (GEDCOM) complete (#11–#16). Phase 3 (auth
   & onboarding) complete (#17, #38, #18, #19, #20). Phase 4 (tree view,
-  #21–#25) complete. Phase 5 (edit view, #26–#32) complete — #30 staged
-  (`feat/edit-sources-section`), the rest merged. Phase 6+ (#33–#37) not
-  started.
+  #21–#25) complete. Phase 5 (edit view, #26–#32) complete. Phase 6 (media,
+  #33–#34) complete. Phase 7 (moderation & settings, #35–#37): #35 staged
+  (`feat/notification-center`), #36/#37 `ready`, neither started.
 - **Seed data (#38).** `supabase/seed.sql` now loads a demo admin
   (`admin@rootward.test` / `rootward-admin`) + the 28-person Ashby tree on every
   `supabase db reset` / first `supabase start`. **After merging `feat/seed-demo-data`,

@@ -42,12 +42,14 @@ select is(
   true,
   'notify_access_requested is SECURITY DEFINER');
 
-select is(
-  (select tgname
-   from pg_trigger
-   where tgrelid = 'public.access_request'::regclass
-     and not tgisinternal),
-  'notify_on_access_request',
+select ok(
+  exists (
+    select 1
+    from pg_trigger
+    where tgrelid = 'public.access_request'::regclass
+      and not tgisinternal
+      and tgname = 'notify_on_access_request'
+  ),
   'the trigger is wired on access_request');
 
 -- --- the happy path: a pending caller submits their own request ---------

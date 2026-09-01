@@ -19,6 +19,7 @@ export * from "./place";
 export * from "./import-jobs";
 export * from "./invitations";
 export * from "./onboarding";
+export * from "./notifications";
 export {
   getAllowSelfSignup,
   getDefaultGenerations,
