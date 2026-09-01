@@ -1,0 +1,22 @@
+# Keeps the Docker build context small — see apps/web/Dockerfile. Mirrors
+# .gitignore; node_modules and build output are rebuilt inside the image.
+node_modules/
+**/node_modules/
+.next/
+**/.next/
+dist/
+**/dist/
+.env
+.env.*
+!.env.example
+
+.git/
+supabase/.branches/
+supabase/.temp/
+
+.DS_Store
+*.log
+coverage/
+
+DECISIONS.md
+*-HANDOFF.md

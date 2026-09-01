@@ -74,9 +74,12 @@ The full set is in [`supabase/config.toml`](supabase/config.toml).
 
 ## Self-hosting
 
-Deployment docs land in Phase 8. The short version will be: a Supabase project
-(cloud or local via Docker Compose), a Vercel deploy of `apps/web`, and a handful
-of environment variables.
+Two deploy paths, both in [`docs/deploy/`](docs/deploy):
+
+- [Vercel + Supabase Cloud](docs/deploy/vercel-supabase-cloud.md) — the
+  fastest start, no server to maintain.
+- [Docker Compose self-host](docs/deploy/docker-compose-self-host.md) — run
+  it on your own server.
 
 ## License
 

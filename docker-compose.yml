@@ -1,0 +1,24 @@
+# Runs the Rootward web app as a container, for the Docker Compose self-host
+# path (docs/deploy/docker-compose-self-host.md). The Supabase stack itself
+# runs separately, through `supabase start` (see that guide) — this file
+# only covers the Next.js app, which talks to Supabase over the network the
+# same way it would talk to Supabase Cloud.
+services:
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      # These two are baked into the browser bundle at build time (see the
+      # comment in apps/web/Dockerfile) — Compose reads them from the
+      # adjacent .env file the same way env_file does below.
+      args:
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+    ports:
+      # Loopback only. docs/deploy/docker-compose-self-host.md puts a
+      # TLS-terminating reverse proxy in front — the app must not also be
+      # reachable directly, in plain HTTP, on the public interface.
+      - "127.0.0.1:3000:3000"
+    env_file:
+      - .env
+    restart: unless-stopped

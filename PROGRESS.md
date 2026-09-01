@@ -17,11 +17,85 @@ by the prior session's notes, #35 this session; PROGRESS still said #35 was
 "staged" when it was actually already on `main`).** **#36 (Moderation queue)
 and #48 (seed.sql GoTrue token fix, see below) were also already merged to
 `main` (`b51069e`, `f0d144d`) but left open — both closed by hand this
-session, same pattern.** Phase 6 and (as of this session's #37) Phase 7 are
-now complete. Phase 8 (Ship) is next: #39 (deploy docs) and #40
-(README/self-host guide), neither `ready`-labelled yet. #47 (tooling-parity
-follow-up) and #49 (`notify_access_requested` dedup edge case) are open,
-non-blocking, not part of the SPEC §10 numbered sequence.
+session, same pattern.** **#37 (`/settings`) was also already merged to
+`main` (`df07d3b`) but left open — closed by hand this session, same
+pattern again.** Phase 6 and Phase 7 are now complete. **Issue #39 (deploy
+docs) is done this session, staged on `docs/deploy-guide` — see below.**
+#40 (README/self-host guide, screenshots) is the last Phase 8 item, not yet
+`ready`-labelled. #47 (tooling-parity follow-up) and #49
+(`notify_access_requested` dedup edge case) are open, non-blocking, not
+part of the SPEC §10 numbered sequence.
+
+**Issue #39 — Deploy docs: Vercel + Supabase Cloud, and Docker Compose
+self-host: done, staged on `docs/deploy-guide`.** SPEC §10 item 39,
+WAYFINDER decision 32. Mostly documentation, plus the supporting Docker
+infra a self-host guide needs to be more than a promise:
+
+- **`docs/deploy/README.md`** — the shared reference both path guides point
+  back to: the environment-variable table, the migration/bucket/edge
+  function story (and where Cloud and self-host genuinely diverge — see
+  below), Google OAuth, SMTP, and the `ADMIN_EMAIL` bootstrap (reads
+  `lib/auth/bootstrap-admin.ts` — idempotent, re-checked on every sign-in,
+  not a one-time step).
+- **`docs/deploy/vercel-supabase-cloud.md`** — `supabase link` +
+  `supabase db push` + `supabase functions deploy <name>` per function,
+  then a Vercel import with **Root Directory** = `apps/web`.
+- **`docs/deploy/docker-compose-self-host.md`** — `supabase start` as the
+  production backend (the same CLI stack `pnpm dev` already uses, pointed
+  at a real domain instead of `127.0.0.1`), our own `docker-compose.yml` +
+  `apps/web/Dockerfile` for the web app, and a Caddy reverse proxy for TLS.
+  Three `config.toml` defaults are local-dev-only and must be turned off
+  before the first `supabase start` in production, called out as a
+  WARNING: `[db.seed]` (loads the demo Ashby family), `[local_smtp]`
+  (Mailpit — captures mail locally, never delivers it), and the Auth
+  URLs. `supabase functions deploy` only targets a _linked_ Supabase Cloud
+  project — self-host has none, and needs none: `supabase start`'s edge
+  runtime already serves the four functions straight from
+  `supabase/functions/` on disk, the same way local dev does.
+- **`apps/web/Dockerfile`** + **`docker-compose.yml`** (root) +
+  **`.dockerignore`** (root) — a multi-stage build producing a Next.js
+  standalone server, so the self-host image ships without the whole
+  `node_modules` tree. `apps/web/next.config.ts` gained
+  `output: "standalone"` and `outputFileTracingRoot` pointed at the pnpm
+  workspace root (not `apps/web`) — `@rootward/shared` is consumed via
+  `transpilePackages` from source, and the default per-project tracing
+  root would miss it. Inert on Vercel (its own build pipeline ignores
+  `output`), noted in the Vercel guide so a reader moving between the two
+  guides does not wonder if it matters there too.
+- Verified live, not just read: `docker build` succeeds, a container built
+  from the image serves `GET /login` with `200`, and the anon key passed
+  as a build arg is confirmed present (`grep`) in the compiled client
+  bundle — the thing the code review below caught was _not_ reaching the
+  bundle at all before the fix.
+- Code review (foreground) caught three real deploy-breakers before they
+  shipped, all fixed: (1) `NEXT_PUBLIC_SUPABASE_URL` /
+  `NEXT_PUBLIC_SUPABASE_ANON_KEY` never reached the Docker build (only
+  `env_file`, which is a runtime mechanism — Next.js bakes `NEXT_PUBLIC_*`
+  into the browser bundle at `next build` time, per the literal-inlining
+  pattern from `b1f4f0a`), so every self-hosted deploy would have shipped
+  a browser client that throws on load. Fixed with `ARG`/`ENV` in the
+  Dockerfile and `build.args` in `docker-compose.yml`. (2)
+  `docker-compose.yml` published the web app on the public interface
+  (`3000:3000`), undermining the reverse-proxy architecture the self-host
+  guide itself sets up two steps later — fixed to `127.0.0.1:3000:3000`,
+  plus a firewall instruction in the guide since the Supabase CLI's own
+  container port bindings are not something this repo controls. (3) the
+  self-host guide's `supabase functions deploy` / bare `supabase db push`
+  commands target a _linked_ project, which a self-host-only stack never
+  has — verified against `supabase db push --help` / `functions deploy
+--help` directly rather than trusting the finding, then rewrote both the
+  self-host guide and the shared README section to split Cloud (`link` +
+  plain `db push` + `functions deploy`) from self-host (`db push --local`,
+  no function deploy step at all).
+- Full pnpm gate green (592 tests, unchanged — this issue added no new
+  logic to unit-test; the Docker/compose verification above is the
+  equivalent check for config-as-infra).
+- Also ran the local dev stack this session (Supabase already up, shared
+  with concurrent sessions; started `next dev` on top of it) so Josh could
+  see the running app — confirmed `/login` renders. Did not touch the
+  shared Playwright browser: another concurrent session held it for the
+  whole session (same contention PROGRESS has flagged before), so the app
+  was left for Josh to view directly rather than screenshotted.
 
 **#48 (seed.sql: NULL `confirmation_token` breaks GoTrue sign-in for the demo
 admin) — fixed, merged to `main` (`f0d144d`).** Not a SPEC issue — a bug
