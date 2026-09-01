@@ -5,12 +5,14 @@ the relevant `docs/SPEC.md` section.
 
 ## Current state
 
-**Phase:** 5 — Phase 0 (#1–#3), Phase 1 (#4–#10), Phase 2 (#11–#16), Phase 3
-(#17, #38, #18, #19, #20), and Phase 4 (#21–#25) all merged. **#26, #27, #28,
-#29, #31, and #32 all merged to `main` (`5c3ef28`, `f43c609`, `dc48652`,
-`347ea5c`, `bc046ec`, `1948b33`), all closed by hand across sessions — same
-stale-issue-left-open pattern as #17 / #20–#23 / #25 before them** — see
-below. Next: #30 (`ready`, depends only on #28, already merged).
+**Phase:** 6 — Phase 0 (#1–#3), Phase 1 (#4–#10), Phase 2 (#11–#16), Phase 3
+(#17, #38, #18, #19, #20), Phase 4 (#21–#25), and Phase 5 (#26–#32, all eight
+issues) are all merged to `main`. #30 (Sources section) was itself merged
+(`0d5613e`) but left open on GitHub by the session that shipped it — same
+stale-issue-left-open pattern as #17 / #20–#23 / #25 / #29 before it — closed
+by hand this session. **#33 (`media-process` edge function) is done, staged
+on `feat/media-process-function`** — see below. Next: #34 (`ready`, depends
+only on #33, staged this session).
 **Planning:** complete. 35 decisions in `docs/WAYFINDER.md`, full build spec in
 `docs/SPEC.md`. No open questions that block starting.
 **Issues:** created. 46 GitHub issues on `Wintaru/Rootward` — items 1–40 from
@@ -1302,29 +1304,111 @@ had). Closed stale-open issue #29 as part of this session's bookkeeping
 (merged `347ea5c`, left open — same pattern as every prior session). Labelled
 #33 `ready` (depends only on #6, already merged).
 
+**Issue #33 — `media-process` edge function: done, staged on
+`feat/media-process-function`.** The first Phase 6 issue (`docs/SPEC.md` §7,
+§4.4, §10 item 33, decision 25). Reconciled #30 as stale-open first (merged
+`0d5613e`, left open — same pattern as every session before it; also fixed
+this file's own "Next: #30" pointer, which #30's own session had left stale
+after merging it). New migration
+(`supabase/migrations/20260901111850_media_bucket.sql`): private `media`
+storage bucket + an `is_moderator()` `storage.objects` policy, same shape as
+the #14/#15 imports/exports buckets; pgTAP `supabase/tests/media_bucket_test.sql`
+(8 allow/deny assertions).
+
+`supabase/functions/media-process/` mirrors the #14/#15/#18 engine/gateway/shell
+split: `processor.ts` (portable engine, three injected interfaces —
+`MediaProcessGateway`, `ImageCodec`, `ExifTools`), `gateway.ts` (service-role
+supabase-js storage + `media`/`media_link` writes), `codec.ts` (real
+`@jsquash/jpeg`+`@jsquash/png`+`@jsquash/webp`+`@jsquash/resize` for
+JPEG/PNG/WebP, `heic-decode`/`libheif-js` for HEIC — all WASM, no native
+bindings, since Supabase Edge Functions only support WASM image libraries),
+`exif.ts` (`exifr` reads tags, `piexifjs` edits the JPEG EXIF segment in place
+to blank GPS while keeping "date taken"), `mime.ts` (pure magic-byte sniff —
+the client-declared MIME is never trusted for the allowlist check),
+`image-geometry.ts` (pure resize-target math), `date.ts` (pure EXIF-date →
+the flat `date_*` columns), `index.ts` (`Deno.serve` shell, same
+moderator-JWT-or-service-role auth as `gedcom-export`).
+
+Contract: the caller uploads the original to a staging key
+(`media/staging/<token>.<ext>`, moderator's own session) and calls this
+function with `{ ownerType, ownerId, stagingPath, originalFilename }`; the
+function validates MIME (sniffed) + size against `tree_settings`, generates
+`thumb` (~240px) / `display` (~1200px) WebP for JPEG/PNG/WebP/HEIC (GIF/PDF
+store the original only — not in the issue's "done when" list, no WASM codec
+available for either), strips GPS EXIF for JPEG when
+`tree_settings.strip_exif_gps` is on; HEIC/other formats are a documented
+no-op passthrough — `hasGps` is still reported and `exif.gpsStripped` on the
+`media` row reflects what actually happened (see the code-review fix below),
+not just what was requested — writes `media/<media id>/{original,thumb,display}`,
+inserts `media` + `media_link`, removes the staging object. A codec failure
+degrades to original-only-with-a-warning rather than failing the whole
+upload. No frontend consumes this yet (#34 is the upload UI) — the staging
+contract is documented in `DECISIONS.md` because #34 has to match it.
+
+`deno.json` gained the new npm deps + `media-process/` in `lint.include` and
+both tasks; `ci.yml`'s Typecheck step gained the directory. Every real-codec
+choice was verified by actually running the code against the live npm
+packages before it landed, not just from docs — see `DECISIONS.md` for the
+`@jsquash/png` version trap (the originally-picked `2.1.0` is unusable under
+Deno's npm resolution; `3.1.1` isn't) and why `magick-wasm` (Supabase's own
+documented recommendation) was tried and rejected (its default WASM load
+fails outright under Deno, and its `.wasm` is ~14 MB). 40 Deno tests:
+`processor.test.ts` (10, fakes — every branch including the codec-failure
+degrade path and the GPS-strip-honesty fix below), `mime.test.ts` (8),
+`image-geometry.test.ts` (6), `date.test.ts` (5), `schema_parity.test.ts`
+(1, `MEDIA_OWNERS` vs `media_owner`), plus **real-WASM** smoke tests against
+a hand-built 2x2 PNG/JPEG fixture built at test time (no committed binary) —
+`codec.test.ts` (5: PNG decode + WebP encode with correct RIFF/WEBP magic
+bytes, JPEG round trip, WebP round trip, GIF/PDF → null, a HEIC stub proving
+the real `libheif-js` WASM decode path runs) and `exif.test.ts` (5: real
+`exifr` GPS detection and `piexifjs` GPS-strip wiring against a JPEG with a
+genuine GPS IFD it builds itself, plus the no-EXIF/non-JPEG passthrough
+paths). Full pnpm gate (**533**) + full Deno gate (**78**, all four
+functions) + `supabase db lint` + `supabase test db` (**235**) all green;
+`pnpm gen:types` confirmed no drift (the migration touches `storage`, not
+`public`). Code review: 1 must-fix applied (`media.exif.gpsStripped` was
+computed from "did we attempt a strip", not from the real `exif.ts`'s own
+report of whether it actually could — a HEIC/PNG/WebP upload with GPS data
+would keep its coordinates while the DB claimed they were removed;
+`ExifTools.stripGps` now returns `{ bytes, stripped }` and the processor
+uses that) + 1 should-fix applied (`MediaOwner` was three independent copies
+— the Postgres enum, the TS union, and a separate runtime array in
+`index.ts` only two of which the parity guard covered; `processor.ts` now
+exports one `MEDIA_OWNERS` const array everything else derives from) — see
+`DECISIONS.md`. One advisory deferred, documented rather than fixed: a
+thrown `insertMedia`/`insertMediaLink` after storage writes can leave an
+orphaned `media/<id>/*` object set with no matching row (a storage-leak
+concern, not data loss — no sweep job exists yet for it). Labelled #34
+`ready` (depends only on #33, staged this session).
+
 ## Next action
 
-**Phase 5 is done.** #30 (Sources section) is done, staged on
-`feat/edit-sources-section` — see below. #33 (Phase 6 — `media-process` edge
-function) is labelled `ready` — depends only on #6, already merged. Take it
-next unless this file says otherwise by then.
+**Phase 6 has started.** #33 (`media-process` edge function) is done, staged
+on `feat/media-process-function` — see above. #34 (Media section in the edit
+view + profile gallery + `/media/[id]` viewer) is labelled `ready` — depends
+only on #33, staged this session. Take it next unless this file says
+otherwise by then. #34's frontend needs to match #33's staging-upload
+contract (`media/staging/<token>.<ext>` → `{ ownerType, ownerId, stagingPath,
+originalFilename }`) — see the #33 entry above and `DECISIONS.md`.
 
-Still pending across #14–#30: a deployed-function run (`supabase functions
+Still pending across #14–#33: a deployed-function run (`supabase functions
 serve`) plus a real signed-in browser session driving `/login` → `/import` →
 `/onboarding` → `/moderation` → `/tree/<root>` → `/person/<id>` →
 `/person/<id>/edit` (now including the Name & Gender / Additional Names /
 Reference Numbers / Events / Facts / Sources / Notes sections, a live
-multi-tab conflict walkthrough for the `ConflictDialog`, and two browser tabs
-on the same person's edit view to see the #32 presence banner update live)
-end to end. Do this as a dedicated integration pass, and restart the local
-stack first so the `config.toml` Google + redirect-URL change loads.
+multi-tab conflict walkthrough for the `ConflictDialog`, two browser tabs on
+the same person's edit view to see the #32 presence banner update live, and
+once #34 lands, an actual photo upload through `media-process`) end to end.
+Do this as a dedicated integration pass, and restart the local stack first so
+the `config.toml` Google + redirect-URL change loads.
 
-**Shared local stack:** migrations through `20260831230616` (#32's
-`edit_presence_authorization`) are applied — #32's session ran a full
-`supabase db reset` (not just `migration up`), so the seed and every prior
-migration replayed clean. #29 and #30 added no migration, so the stack is
-unaffected. `supabase db reset` remains safe going forward (every branch
-through #30 is either merged or additive-safe).
+**Shared local stack:** migrations through `20260901111850` (#33's
+`media_bucket`) are applied via `supabase migration up` (additive — the stack
+is shared with other concurrent sessions on this machine, so this session
+did not run `supabase db reset`). `supabase db lint` and `supabase test db`
+both green against that state (235 tests). A full `supabase db reset` remains
+safe whenever it's next convenient (every migration through #33 is either
+merged or additive-safe).
 
 `gh issue list --label ready` is the queue. Take the lowest-numbered `ready`
 issue unless this file says otherwise. When an issue merges, label the issues it

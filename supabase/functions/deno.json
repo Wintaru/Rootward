@@ -3,15 +3,27 @@
     "@rootward/gedcom": "../../packages/gedcom/src/index.ts",
     "@rootward/shared": "../../packages/shared/src/index.ts",
     "@supabase/supabase-js": "npm:@supabase/supabase-js@2.112.4",
-    "@std/assert": "jsr:@std/assert@1.0.14"
+    "@std/assert": "jsr:@std/assert@1.0.14",
+    "@jsquash/jpeg": "npm:@jsquash/jpeg@1.6.0",
+    "@jsquash/png": "npm:@jsquash/png@3.1.1",
+    "@jsquash/webp": "npm:@jsquash/webp@1.5.0",
+    "@jsquash/resize": "npm:@jsquash/resize@2.1.1",
+    "heic-decode": "npm:heic-decode@1.1.1",
+    "exifr": "npm:exifr@7.1.3",
+    "piexifjs": "npm:piexifjs@1.0.6"
   },
   "unstable": ["sloppy-imports"],
   "lint": {
-    "include": ["gedcom-import/", "gedcom-export/", "onboarding-match/"],
+    "include": [
+      "gedcom-import/",
+      "gedcom-export/",
+      "onboarding-match/",
+      "media-process/"
+    ],
     "rules": { "tags": ["recommended"] }
   },
   "tasks": {
-    "check": "deno check gedcom-import/ gedcom-export/ onboarding-match/",
-    "test": "deno test --allow-read gedcom-import/ gedcom-export/ onboarding-match/"
+    "check": "deno check gedcom-import/ gedcom-export/ onboarding-match/ media-process/",
+    "test": "deno test --allow-read gedcom-import/ gedcom-export/ onboarding-match/ media-process/"
   }
 }
