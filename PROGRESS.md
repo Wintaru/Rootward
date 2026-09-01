@@ -15,8 +15,25 @@ section) and #35 (Notification center) were each merged to `main` (`f247664`,
 `8da8649`) but left open — both closed by hand this session (#34 by the prior
 session's notes, #35 this session; PROGRESS still said #35 was "staged" when
 it was actually already on `main`).** Phase 6 is now complete. **#36
-(Moderation queue) is done, staged on `feat/moderation-queue`** — see below.
-Next: #37 (`ready`, Phase 7, no other dependency).
+(Moderation queue) was also already merged to `main` (`b51069e`) but left
+open — closed by hand this session, same pattern.** Phase 7 has begun: next
+is #37 (`ready`, no other dependency).
+
+**#48 (seed.sql: NULL `confirmation_token` breaks GoTrue sign-in for the demo
+admin) — fixed on `fix/seed-gotrue-tokens`, staged.** Not a SPEC issue — a bug
+surfaced during #35's browser review. `supabase/seed.sql`'s demo-admin
+`insert into auth.users` left six GoTrue token columns unset; three
+(`confirmation_token` / `recovery_token` / `email_change_token_new`) have no
+column default (nullable → `NULL`), and GoTrue's row-scan for these expects a
+`string`, so any lookup (magic link, password grant, `admin/generate_link`)
+500'd. Fixed by writing `''` for all six, matching what a real GoTrue signup
+always writes. Verified live against the shared stack (already patched by a
+concurrent session by the time this one checked — `updated_at` was minutes
+old — `POST /auth/v1/token?grant_type=password` returned a real token); a
+fresh `supabase db reset` replay is the real test, left for whoever next
+resets the shared stack or for CI. See `DECISIONS.md`. **#49** (a related but
+separate `notify_access_requested` dedup edge case) is still open, not
+blocking, deferred.
 **Planning:** complete. 35 decisions in `docs/WAYFINDER.md`, full build spec in
 `docs/SPEC.md`. No open questions that block starting.
 **Issues:** created. 46 GitHub issues on `Wintaru/Rootward` — items 1–40 from
