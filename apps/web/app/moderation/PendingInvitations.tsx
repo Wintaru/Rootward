@@ -1,19 +1,15 @@
 import type { PendingInvitation } from "@/lib/db";
 
-/**
- * The `/moderation` stub list: pending invitations, newest first. The full
- * moderation queue (access requests, self-claims, reassign / unlink) is issue
- * #36.
- */
+import { Section } from "./Section";
+
+/** Pending invitations from the #20 invite flow, newest first. */
 export function PendingInvitations({
   invitations,
 }: {
   invitations: readonly PendingInvitation[];
 }) {
   return (
-    <section className="border-border flex flex-col gap-4 rounded-lg border p-6">
-      <h2 className="text-lg font-medium">Pending invitations</h2>
-
+    <Section title="Pending invitations">
       {invitations.length === 0 ? (
         <p className="text-muted-foreground text-sm">
           No invitations are waiting to be accepted.
@@ -37,7 +33,7 @@ export function PendingInvitations({
           ))}
         </ul>
       )}
-    </section>
+    </Section>
   );
 }
 

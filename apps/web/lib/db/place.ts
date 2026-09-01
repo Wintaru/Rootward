@@ -18,11 +18,12 @@ export interface PlaceOption {
 
 const PLACE_SEARCH_LIMIT = 8;
 
-/** Escape `LIKE`/`ILIKE` wildcards (`%`, `_`) so a place name that happens to
+/** Escape `LIKE`/`ILIKE` wildcards (`%`, `_`) so a name that happens to
  * contain one (rare, but not impossible) is matched literally instead of as
  * a pattern — not a SQL-injection concern (PostgREST parameterizes the
- * value), just search relevance. */
-function escapeLikePattern(value: string): string {
+ * value), just search relevance. Shared with `searchPersonsForModeration`
+ * (`moderation.ts`), the only other `ilike` search in the app. */
+export function escapeLikePattern(value: string): string {
   return value.replace(/[%_\\]/g, "\\$&");
 }
 

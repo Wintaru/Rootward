@@ -2,10 +2,16 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { resolveModerationAccess } from "@/lib/auth/require-moderator";
-import { listPendingInvitations } from "@/lib/db";
+import {
+  listLinkedAccounts,
+  listPendingAccessRequests,
+  listPendingInvitations,
+} from "@/lib/db";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
+import { AccessRequestsQueue } from "./AccessRequestsQueue";
 import { InviteToClaimForm } from "./InviteToClaimForm";
+import { LinkedAccounts } from "./LinkedAccounts";
 import { ModerationForbidden } from "./ModerationForbidden";
 import { PendingInvitations } from "./PendingInvitations";
 
@@ -14,10 +20,10 @@ export const metadata: Metadata = {
 };
 
 /**
- * `/moderation` — moderator+ only (SPEC §8.1). The v1 stub: the "Invite to
- * claim" action and a list of pending invitations. The full queue (access
- * requests, self-claims, reassign / unlink) is issue #36. Reading the session
- * makes this route dynamic.
+ * `/moderation` — moderator+ only (SPEC §8.1, §10 item 36). The full queue:
+ * pending access requests (approve/reject), linked accounts (reassign /
+ * unlink a wrong claim), and the #20 "invite to claim" form + pending
+ * invitations. Reading the session makes this route dynamic.
  */
 export default async function ModerationPage({
   searchParams,
@@ -32,9 +38,12 @@ export default async function ModerationPage({
     return <ModerationForbidden />;
   }
 
-  const invitations = await listPendingInvitations(
-    await createSupabaseServerClient(),
-  );
+  const supabase = await createSupabaseServerClient();
+  const [accessRequests, linkedAccounts, invitations] = await Promise.all([
+    listPendingAccessRequests(supabase),
+    listLinkedAccounts(supabase),
+    listPendingInvitations(supabase),
+  ]);
   const { personId } = await searchParams;
 
   return (
@@ -42,10 +51,16 @@ export default async function ModerationPage({
       <header className="flex flex-col gap-2">
         <h1 className="text-3xl font-semibold tracking-tight">Moderation</h1>
         <p className="text-muted-foreground text-sm">
-          Invite people to claim their place in the tree and track invitations
-          that are still open.
+          Handle access requests and claims, invite people to claim their place
+          in the tree, and track invitations that are still open.
         </p>
       </header>
+
+      <AccessRequestsQueue
+        requests={accessRequests}
+        canApprove={access.isAdmin}
+      />
+      <LinkedAccounts accounts={linkedAccounts} canManage={access.isAdmin} />
 
       <InviteToClaimForm
         canGrantRoles={access.isAdmin}

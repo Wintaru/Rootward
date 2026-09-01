@@ -29,7 +29,10 @@ export interface PendingInvitation {
   readonly createdAt: string;
 }
 
-function personName(
+/** Shared with `lib/db/moderation.ts`'s `listLinkedAccounts` — same "given +
+ * surname, else 'Unknown person'" fallback both modules need for a person
+ * embedded through an `account`/`invitation` row. */
+export function personName(
   person: { given_name: string | null; surname: string | null } | null,
 ): string {
   const parts = [person?.given_name, person?.surname].filter(

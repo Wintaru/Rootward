@@ -5,10 +5,17 @@ import { revalidatePath } from "next/cache";
 
 import { resolveModerationAccess } from "@/lib/auth/require-moderator";
 import {
+  approveAccessRequest,
   createInvitation,
   deletePendingInvitation,
+  type PersonSearchOption,
   personExists,
+  reassignAccount,
+  rejectAccessRequest,
+  searchPersonsForModeration,
+  unlinkAccount,
 } from "@/lib/db";
+import { isUuid } from "@/lib/db/uuid";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import {
@@ -77,6 +84,167 @@ export async function inviteToClaim(
 
   revalidatePath("/moderation");
   return { ok: true, email };
+}
+
+/** Shared result shape for the queue actions below. */
+export type ModerationActionResult =
+  { readonly ok: true } | { readonly ok: false; readonly error: string };
+
+/** Reject a pending access request — moderator+ (SPEC §5 `access_request_update`,
+ * no `account` write). */
+export async function rejectAccessRequestAction(
+  requestId: string,
+): Promise<ModerationActionResult> {
+  const access = await resolveModerationAccess();
+  if (access.kind !== "allowed") {
+    return { ok: false, error: "You do not have permission to do that." };
+  }
+
+  const server = await createSupabaseServerClient();
+  const result = await rejectAccessRequest(server, {
+    requestId,
+    resolvedByAccountId: access.userId,
+  });
+  if (!result.ok) {
+    return {
+      ok: false,
+      error: "Someone already resolved this request.",
+    };
+  }
+
+  revalidatePath("/moderation");
+  return { ok: true };
+}
+
+/**
+ * Approve a pending access request, linking the account to `personId` and
+ * activating it. Admin-only — `account_update` RLS (SPEC §5) is `is_admin()`
+ * with no per-column carve-out, so this re-checks `access.isAdmin` for a
+ * clean error before the write hits that boundary.
+ *
+ * `accountId` comes from the caller's own copy of the pending request (the
+ * queue already fetched it via `listPendingAccessRequests`) rather than a
+ * second server-side lookup by `requestId` — `approveAccessRequest` still
+ * re-checks `status = 'pending'` on both rows, so a stale/mismatched pair
+ * fails the same way a fresh lookup would.
+ */
+export async function approveAccessRequestAction(
+  requestId: string,
+  accountId: string,
+  personId: string,
+): Promise<ModerationActionResult> {
+  const access = await resolveModerationAccess();
+  if (access.kind !== "allowed") {
+    return { ok: false, error: "You do not have permission to do that." };
+  }
+  if (!access.isAdmin) {
+    return {
+      ok: false,
+      error: "Only an administrator can approve and link a request.",
+    };
+  }
+  if (!isUuid(personId)) {
+    return { ok: false, error: "Choose a person to link." };
+  }
+
+  const server = await createSupabaseServerClient();
+  if (!(await personExists(server, personId))) {
+    return { ok: false, error: "No person with that ID is visible to you." };
+  }
+
+  const result = await approveAccessRequest(server, {
+    requestId,
+    accountId,
+    personId,
+    resolvedByAccountId: access.userId,
+  });
+  if (!result.ok) {
+    const messages: Record<typeof result.reason, string> = {
+      "already-resolved": "Someone already resolved this request.",
+      "account-already-linked": "That account is already linked to a person.",
+      "person-already-linked":
+        "That person is already linked to another account.",
+    };
+    return { ok: false, error: messages[result.reason] };
+  }
+
+  revalidatePath("/moderation");
+  return { ok: true };
+}
+
+/** Point an already-linked account at a different person. Admin-only. */
+export async function reassignAccountAction(
+  accountId: string,
+  personId: string,
+): Promise<ModerationActionResult> {
+  const access = await resolveModerationAccess();
+  if (access.kind !== "allowed") {
+    return { ok: false, error: "You do not have permission to do that." };
+  }
+  if (!access.isAdmin) {
+    return {
+      ok: false,
+      error: "Only an administrator can reassign a linked account.",
+    };
+  }
+  if (!isUuid(personId)) {
+    return { ok: false, error: "Choose a person to link." };
+  }
+
+  const server = await createSupabaseServerClient();
+  if (!(await personExists(server, personId))) {
+    return { ok: false, error: "No person with that ID is visible to you." };
+  }
+
+  const result = await reassignAccount(server, { accountId, personId });
+  if (!result.ok) {
+    const messages: Record<typeof result.reason, string> = {
+      "person-already-linked":
+        "That person is already linked to another account.",
+      "account-not-found": "That account no longer exists.",
+    };
+    return { ok: false, error: messages[result.reason] };
+  }
+
+  revalidatePath("/moderation");
+  return { ok: true };
+}
+
+/** Unlink an account from its person, reverting it to `pending`. Admin-only. */
+export async function unlinkAccountAction(
+  accountId: string,
+): Promise<ModerationActionResult> {
+  const access = await resolveModerationAccess();
+  if (access.kind !== "allowed") {
+    return { ok: false, error: "You do not have permission to do that." };
+  }
+  if (!access.isAdmin) {
+    return {
+      ok: false,
+      error: "Only an administrator can unlink an account.",
+    };
+  }
+
+  const server = await createSupabaseServerClient();
+  const result = await unlinkAccount(server, accountId);
+  if (!result.ok) {
+    return { ok: false, error: "That account no longer exists." };
+  }
+
+  revalidatePath("/moderation");
+  return { ok: true };
+}
+
+/** Name search backing the approve/reassign person picker. Moderator+. */
+export async function searchModerationPersons(
+  query: string,
+): Promise<readonly PersonSearchOption[]> {
+  const access = await resolveModerationAccess();
+  if (access.kind !== "allowed") {
+    return [];
+  }
+  const server = await createSupabaseServerClient();
+  return searchPersonsForModeration(server, query);
 }
 
 /**

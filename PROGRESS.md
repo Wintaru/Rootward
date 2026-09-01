@@ -11,11 +11,12 @@ issues), and Phase 6 (#33, #34) are all merged to `main`. #30 (Sources
 section) and #33 (`media-process`) were each merged by a prior session but
 left open on GitHub — same stale-issue-left-open pattern as #17 / #20–#23 /
 #25 / #29 before them — closed by hand in earlier sessions. **#34 (Media
-section) was merged to `main` (`f247664`) but also left open — closed by hand
-this session.** Phase 6 is now complete. **#35 (Notification center) is done,
-staged on `feat/notification-center`** — see below. Next: #37 (`ready`, Phase
-7, no dependency on #35) or #36 (was `blocked` on #35 — now unblocked, but
-still depends on #20 too, already merged).
+section) and #35 (Notification center) were each merged to `main` (`f247664`,
+`8da8649`) but left open — both closed by hand this session (#34 by the prior
+session's notes, #35 this session; PROGRESS still said #35 was "staged" when
+it was actually already on `main`).** Phase 6 is now complete. **#36
+(Moderation queue) is done, staged on `feat/moderation-queue`** — see below.
+Next: #37 (`ready`, Phase 7, no other dependency).
 **Planning:** complete. 35 decisions in `docs/WAYFINDER.md`, full build spec in
 `docs/SPEC.md`. No open questions that block starting.
 **Issues:** created. 46 GitHub issues on `Wintaru/Rootward` — items 1–40 from
@@ -1555,36 +1556,109 @@ db` (**252**) green. Browser-verified end to end against the shared local
   manual resolve, all confirmed working. Labelled #36 `ready` (was `blocked`
   on #35; also depends on #20, already merged).
 
+**Issue #36 — Moderation queue (access requests, self-claims, reassign /
+unlink): done, staged on `feat/moderation-queue`.** Phase 7 (`docs/SPEC.md`
+§9, §10 item 36, WAYFINDER decision 12). Reconciled #35 as stale-open first
+(merged `8da8649`, PROGRESS still said "staged" — closed it). No migration —
+every table and policy this needs already exists (#8, #9, #19).
+
+- **`lib/db/moderation.ts`** — the typed layer, split by RLS boundary rather
+  than the issue text's looser "an admin for role changes" wording: SPEC §5
+  is explicit that `account_update` RLS is `is_admin()` **the only writer,
+  no per-column carve-out**, so approving a request, reassigning a claim, or
+  unlinking one are all admin-only, not just changing `role`. Rejecting a
+  request only touches `access_request` (`is_moderator()`), so that one stays
+  moderator+. `listPendingAccessRequests` embeds `account:account!access_request_account_id_fkey(display_name)`
+  — `access_request` has two FKs to `account` (`account_id`, `resolved_by`),
+  so the embed needs the constraint-name hint or PostgREST 400s.
+  `approveAccessRequest` links `account.person_id` + activates first, guarded
+  on `status = 'pending' and person_id is null` (same shape as #20's
+  `maybeAcceptInvitation`), then resolves the request — a load-bearing-write-
+  first ordering, so a failure after the link leaves the account correctly
+  linked with the request record needing manual closure, never the reverse.
+  `unlinkAccount` reverts `status` to `pending` (the enum's own definition —
+  SPEC §4.6 — not just clearing `person_id`), which also revokes
+  `isApproved()` tree access until re-linked (decision 13's "no match → no
+  access", applied symmetrically to unlinking). `reassignAccount` is
+  deliberately _unguarded_ on prior state — an admin correcting a claim they
+  can already see is wrong is not a race, so a version check would only get
+  in the way (commented in place). Every `account` write goes through the
+  caller's own `createSupabaseServerClient()`, never the service-role client
+  — migration `20260901205718`'s `resolve_self_claim_notification` trigger
+  reads `auth.uid()` to attribute a reassignment, which only resolves
+  correctly when the caller really is the signed-in admin.
+- **`app/moderation/{AccessRequestsQueue,LinkedAccounts,PersonPicker,Section}.tsx`**
+  — new client components; `page.tsx` fetches all three lists in parallel
+  alongside #20's existing invitations query. `PersonPicker` is a new
+  debounced search-by-name component (`searchPersonsForModeration`, an
+  `ilike` search over given name / surname / nickname) — a deliberate
+  departure from the invite form's "paste a person UUID" pattern, because an
+  access-request-approving moderator has only the requester's submitted name
+  to go on, not an id in hand from a profile page; reused for the reassign
+  picker too. `PendingInvitations.tsx` refactored onto a new shared
+  `Section.tsx` card wrapper (now used by all four panels) and its stale
+  "the full queue is #36" doc comment removed.
+- **Not browser-verified this session** — the shared Playwright MCP browser
+  profile was held by another live session's Chrome instance the whole
+  session (confirmed via `ps`, not a stale lock); did not force it. Relied on
+  the full pnpm gate (**575** — 569 + 6 new) green instead. See
+  `DECISIONS.md` for the full writeup, including a near-miss: ran
+  `pnpm dev:stop` against the _shared_ local Supabase stack before realizing
+  it was shared, taking it down for ~15s for every other session before
+  `supabase start` restored it from its own backup (no data lost). A future
+  session should treat `supabase stop` / `pnpm dev:stop` in this repo as
+  never safe without first confirming no other session has the stack open.
+- Code review: 3 should-fix applied — `LinkedAccounts.tsx`'s local
+  `linkedTo` state never resynced against fresh props (a concurrent
+  reassign/unlink by another admin left a mounted row showing a stale
+  linked-person name; fixed with React's render-time "adjust state when a
+  prop changes" pattern, not a `useEffect`, per the repo's
+  `react-hooks/set-state-in-effect` rule); `searchPersonsForModeration`
+  didn't search `nickname` even though its own label formatter falls back to
+  it; a duplicated "given + surname, else 'Unknown person'" helper unified
+  into one `personName` export shared between `lib/db/invitations.ts` and
+  `lib/db/moderation.ts`.
+
 ## Next action
 
-**Phase 7 is under way.** #35 is done — see above. **#37** (`/settings` —
-tree settings + role management) is `ready` and independent of #35/#36.
-**#36** (Moderation queue) is now `ready` too (#35 and #20 both merged). Take
-#36 or #37 next unless this file says otherwise by then.
+**Phase 7 is under way.** #36 is done — see above. **#37** (`/settings` —
+tree settings + role management) is `ready` and independent of #36. Take #37
+next unless this file says otherwise by then — it's the only Phase 7 item
+left, and finishing it completes Phase 7.
 
-Still pending across #14–#35: a deployed-function run (`supabase functions
+Still pending across #14–#36: a deployed-function run (`supabase functions
 serve`) plus a real signed-in browser session driving the full flow with a
 _working_ magic-link sign-in — blocked until #48 (seed.sql NULL token
-columns) is fixed; #35's own verification used a throwaway workaround, not
-this. Once #48 is fixed: `/login` → `/import` → `/onboarding` → `/moderation`
-→ `/tree/<root>` → `/person/<id>` → `/person/<id>/edit` (every v1 section,
-including Media — an actual photo upload through `media-process`) →
-`/media/<id>`, a live multi-tab conflict walkthrough for the `ConflictDialog`,
-two browser tabs on the same person's edit view for the #32 presence banner,
-and two tabs on `/tree` or `/moderation` for the #35 bell's live badge update
-across sessions (this session verified the Realtime wiring works, but only
-within one browser context — a genuine second-viewer check is still open).
+columns) is fixed. #35's own verification used a throwaway workaround; #36
+got no browser verification at all this session (the shared Playwright MCP
+browser was held by another live session the whole time — see `DECISIONS.md`
+and #36's own entry above). Once #48 is fixed and the browser is free:
+`/login` → `/import` → `/onboarding` → `/moderation` (access-request
+approve/reject, reassign/unlink) → `/tree/<root>` → `/person/<id>` →
+`/person/<id>/edit` (every v1 section, including Media — an actual photo
+upload through `media-process`) → `/media/<id>`, a live multi-tab conflict
+walkthrough for the `ConflictDialog`, two browser tabs on the same person's
+edit view for the #32 presence banner, and two tabs on `/tree` or
+`/moderation` for the #35 bell's live badge update across sessions (this
+session verified the Realtime wiring works, but only within one browser
+context — a genuine second-viewer check is still open).
 
 **Shared local stack:** migrations through `20260901205718` (#35's
 `notification_center`) are applied via `supabase migration up` (additive —
 the stack is shared with other concurrent sessions on this machine, so this
-session did not run `supabase db reset`). `supabase db lint` and `supabase
-test db` both green against that state as of #35 (252 tests). A full
-`supabase db reset` remains safe whenever it's next convenient (every
-migration through #35 is either merged or additive-safe). This session also
+session did not run `supabase db reset`); #36 added no migration, so this is
+unchanged. `supabase db lint` and `supabase test db` both green against that
+state as of #35 (252 tests) — not re-run this session, no schema changed.
+A full `supabase db reset` remains safe whenever it's next convenient (every
+migration through #35 is either merged or additive-safe). #35's session also
 directly patched the _live_ seeded admin's `auth.users` row (NULL GoTrue
 token columns → `''`) to unblock its own browser verification — that patch is
 data-only, not schema, and does not survive a `db reset`; #48 is the real fix.
+**Never run `supabase stop` / `pnpm dev:stop` against this shared stack**
+without first confirming no other session has it open — #36's session did
+this by mistake (recovered via `supabase start`'s automatic backup restore,
+no data lost, but a real near-miss for the other ~25 sessions listed live at
+its start — see `DECISIONS.md`).
 
 `gh issue list --label ready` is the queue. Take the lowest-numbered `ready`
 issue unless this file says otherwise. When an issue merges, label the issues it
@@ -1633,6 +1707,7 @@ unblocks `ready`.
 | 2026-08-31 | Closed stale-open issue #32 (merged `1948b33`, left open). Issue #29 — Facts section (no migration, `fact_write`/`fact_select` RLS from #9): `lib/db/fact-edit.ts` (`getPersonFacts`/`saveFacts`) + `lib/edit/facts.ts` (pure reducer/diff/`describeFactConflicts`) mirror #28's `event-edit.ts`/`events.ts` closely, adapted for `fact`'s own shape — no `age_text`/`sort_key` (orders by `id`, no re-sort after save, the `additional-names.ts` shape not the `events.ts` one), a writable `visibility` enum restricted in the MVP UI to `everyone_approved`/`hidden` (issue scope, decisions 7/31's restriction applied to `fact`), and a generated `is_sensitive` column never sent on write but mirrored client-side (`factIsSensitive`) so the sensitive badge reflects instantly on choosing a sensitive type. `FactsSection.tsx` wired into `page.tsx`'s section switch and a new `saveFacts` server action. 28 vitest added (pnpm 484) + build green. Code review: 1 should-fix applied (a fact loaded with an out-of-MVP-scope visibility value — `close_family`/`moderators_only` — would silently downgrade to `everyone_approved` on the next save if the moderator touched the control, since a plain `<select>` with no matching option falls back to displaying its first one while the real value stays underneath; fixed by disabling the control and rendering a non-selectable option for the true value in that case). Labelled #30 `ready` (unaffected — already was).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | `feat/edit-facts-section`               |
 | 2026-08-31 | Reconciled #29 (already merged `347ea5c`, left open — closed it). Issue #30 — Sources section (no migration, `repository_write`/`source_write`/`citation_write` RLS from #9): three independently-saved lists — Repositories, then Sources (may link a repository), then Citations (link a source; owned by the person or one of their events/facts) — `lib/db/source-edit.ts` (`getRepositories`/`saveRepositories`, `getSources`/`saveSources`, `getPersonCitations`/`saveCitations`, `getSourcesSectionData`) + `lib/edit/repositories.ts`/`sources.ts`/`citations.ts` (pure, one per table) mirror `fact-edit.ts`/`facts.ts` and `note-edit.ts`/`notes.ts`; `repository`/`source` read as full unfiltered lists (global reference data, `place`'s same RLS boundary); citations scoped to `owner_type in ('person','event','fact')` (`note_owner`'s narrowing precedent); each list's picker only offers already-_saved_ rows from the list above it, so a citation can never reference an unsaved source id. `SourcesSection.tsx` wired into `page.tsx`'s section switch and three new server actions. 47 vitest added (pnpm 531→533) + build green. Code review: 1 must-fix applied (deleting a `source` cascades to every citation referencing it tree-wide, not just this person's — the generic "Remove" button gave no warning; added source-specific copy) + 1 nit applied (missing conflict-preserving reconcile test cases). Labelled #33 `ready` (depends only on #6, already merged). Phase 5 complete.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |                                         | `feat/edit-sources-section` |
 | 2026-09-01 | Reconciled #34 (already merged `f247664`, left open — closed it). Issue #35 — Notification center: `20260901205718` migration (Realtime publication on `notification` + two `security definer` auto-resolve triggers built ahead of #36); `lib/db/notifications.ts` (unread count via subtraction, list/mark-read/resolve) + `lib/notifications/format.ts` + `NotificationBell.tsx` (Realtime badge, filter tabs, mark-read-on-open, manual resolve) rendered from `app/layout.tsx` for moderator+ only. 17 pgTAP + 8 vitest added (pnpm 577, `supabase test db` 252) + build green. Code review: 2 must-fix applied (a stale-response race in the panel's fetch; unhandled promise rejections with no error UI) + 1 should-fix applied (Realtime reconnect/visibility resync) + 1 filed as #49 (pre-existing #19 dedup gap). Also found and fixed as a separate first commit: `lib/supabase/env.ts` was silently breaking every client-side Supabase call in the browser (dynamic `process.env[name]` lookup Next.js cannot inline) — see `DECISIONS.md`. Found, not fixed: #48 (seeded admin's `auth.users` row has NULL GoTrue token columns, breaking all sign-in for that account). Browser-verified end to end via a throwaway session-injection workaround. Labelled #36 `ready` (was `blocked` on #35).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | `feat/notification-center`              |
+| 2026-09-01 | Reconciled #35 (already merged `8da8649`, left open — closed it). Issue #36 — Moderation queue: `lib/db/moderation.ts` (approve/reject `access_request`, reassign/unlink `account`, nickname-inclusive person search) splits moderator-vs-admin exactly on the `account_update` RLS boundary (admin-only for every column, not just role); `AccessRequestsQueue`/`LinkedAccounts`/`PersonPicker`/`Section.tsx` new client components wired into `page.tsx` alongside #20's invitations list. 6 vitest added (pnpm 575) + build green. Code review: 3 should-fix applied (stale `linkedTo` state fixed with React's render-time prop-adjust pattern, not a `useEffect`; nickname search gap; a duplicated person-name helper unified). Not browser-verified — the shared Playwright MCP browser was held by another live session throughout; see `DECISIONS.md`, which also logs an accidental `pnpm dev:stop` against the shared Supabase stack (recovered via its own backup restore, no data lost).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | `feat/moderation-queue`                 |
 
 ## Notes for the next session
 
@@ -1641,19 +1716,19 @@ unblocks `ready`.
   `Depends on:` issue numbers and a `### Done when` checklist.
 - Issue numbers match `docs/SPEC.md` §10 item numbers for 1–40. Issues 41–46 are
   the Post-MVP bullets.
-- #1–#35 (and #38) are merged to `main` except #35 itself, staged this session
-  on `feat/notification-center`. Later issues get `ready` as their
+- #1–#36 (and #38) are merged to `main` except #36 itself, staged this session
+  on `feat/moderation-queue`. Later issues get `ready` as their
   dependencies close — do this when you finish an issue.
   #17 / #20 / #21 / #22 / #23 / #24 / #25 / #26 / #27 / #28 / #29 / #31 / #32 /
-  #34 / #38 were each closed by hand after their work merged but the issue
-  stayed open — **this pattern has recurred in every single session so far**;
-  always check `gh issue list --state open` against what's actually on `main`
-  before picking the next issue.
+  #34 / #35 / #38 were each closed by hand after their work merged but the
+  issue stayed open — **this pattern has recurred in every single session so
+  far**; always check `gh issue list --state open` against what's actually on
+  `main` before picking the next issue.
 - Phase 1 complete (#4–#10). Phase 2 (GEDCOM) complete (#11–#16). Phase 3 (auth
   & onboarding) complete (#17, #38, #18, #19, #20). Phase 4 (tree view,
   #21–#25) complete. Phase 5 (edit view, #26–#32) complete. Phase 6 (media,
-  #33–#34) complete. Phase 7 (moderation & settings, #35–#37): #35 staged
-  (`feat/notification-center`), #36/#37 `ready`, neither started.
+  #33–#34) complete. Phase 7 (moderation & settings, #35–#37): #35 merged,
+  #36 staged (`feat/moderation-queue`), #37 `ready` and unstarted.
 - **Seed data (#38).** `supabase/seed.sql` now loads a demo admin
   (`admin@rootward.test` / `rootward-admin`) + the 28-person Ashby tree on every
   `supabase db reset` / first `supabase start`. **After merging `feat/seed-demo-data`,
@@ -1681,11 +1756,30 @@ unblocks `ready`.
   `pending`, unlinked account to a pending `invitation` matched by exact
   lower-cased email. `/moderation` (moderator+) holds the "Invite to claim" form
   (`inviteToClaim` server action — the app's first) + the pending-invitation
-  list; the full moderation queue is #36. No migration — the `invitation` table
+  list; the rest of the queue (access requests, linked accounts) is #36 — see
+  below. No migration — the `invitation` table
   and its RLS are from #8 / #9. `AccountRole` / `AccountStatus` now live in
   `lib/db/types.ts`; `lib/auth/access.ts` re-exports them. Deferred: an
   integration test for the `conflict` / `23505` branches of
   `maybeAcceptInvitation`.
+- **Moderation queue (#36).** `lib/db/moderation.ts` is the one place to look
+  before writing any future code that touches the `account` table: SPEC §5's
+  `account_update` RLS is `is_admin()` with **no per-column carve-out** — a
+  role change, a person link, a reassign, and an unlink are _all_ admin-only,
+  not just role. Every `account` write in this module goes through the
+  caller's own `createSupabaseServerClient()`, never the service-role client,
+  because `resolve_self_claim_notification` (migration `20260901205718`)
+  reads `auth.uid()` to attribute a reassignment — a service-role write would
+  attribute to nobody. `approveAccessRequest` mirrors #20's
+  `maybeAcceptInvitation` guard shape (`status = 'pending' and person_id is
+null`, load-bearing write first); `reassignAccount` is deliberately
+  unguarded (an admin override, not a race) — see its doc comment before
+  copying that pattern elsewhere. `unlinkAccount` reverts `status` to
+  `pending`, not just clearing `person_id` — an unlinked account loses tree
+  access until re-linked. `PersonPicker.tsx` (search-by-name, not a pasted
+  UUID) is the first departure from the invite form's id-paste pattern; reuse
+  it for #37's role-management person lookups if that issue ends up needing
+  one. Not browser-verified — see "Next action" above and `DECISIONS.md`.
 - **Frontend (#16 is the first route).** `apps/web` now has tests: the root
   `pnpm test` (`vitest.config.ts`) globs `apps/web/**/*.{test,spec}.ts` with a
   `@/` alias (trailing slash — must not swallow `@rootward/*` / `@supabase/*`);
