@@ -16,6 +16,8 @@ import {
   getPersonReferenceNumbers,
   getSourcesSectionData,
 } from "@/lib/db";
+import { getPersonMedia } from "@/lib/db/media-edit";
+import { getSignedMediaUrls } from "@/lib/db/media-urls";
 import type { PersonEditShellData } from "@/lib/db/person";
 import { resolveEditSection, type EditSectionSlug } from "@/lib/edit/sections";
 import type { NameGenderFields } from "@/lib/edit/person-fields";
@@ -24,6 +26,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { AdditionalNamesSection } from "@/components/person/edit/AdditionalNamesSection";
 import { EventsSection } from "@/components/person/edit/EventsSection";
 import { FactsSection } from "@/components/person/edit/FactsSection";
+import { MediaSection } from "@/components/person/edit/MediaSection";
 import { NameGenderSection } from "@/components/person/edit/NameGenderSection";
 import { NotesSection } from "@/components/person/edit/NotesSection";
 import { ReferenceNumbersSection } from "@/components/person/edit/ReferenceNumbersSection";
@@ -38,9 +41,9 @@ export const metadata: Metadata = {
 
 /**
  * `/person/[personId]/edit` — the full-screen edit shell (SPEC §8.3, §10 item
- * 26) plus, as of #27/#28/#29/#30/#31, the Name & Gender, Additional Names,
- * Reference Numbers, Events, Facts, Sources, and Notes sections. Moderator+
- * only; Media (#33) still falls back to the shell's placeholder.
+ * 26) plus, as of #27–#32 and #34, all eight v1 sections: Name & Gender,
+ * Additional Names, Reference Numbers, Events, Facts, Sources, Notes, and
+ * Media. Moderator+ only.
  *
  * Gate mirrors `/person/[personId]`'s (unauthenticated → `/login`, not
  * approved → `/onboarding`) plus a moderator check on top, matching
@@ -63,6 +66,13 @@ export const metadata: Metadata = {
  * caller's email — the presence channel is private + `is_moderator()`-gated
  * (see the #32 migration), but there is no reason to broadcast a real email
  * address to every other moderator as a matter of course.
+ *
+ * The Media section (#33/#34) needs one extra step beyond every other
+ * section's plain `lib/db` read: `getSignedMediaUrls` runs under the service
+ * role (the `media` bucket's `storage.objects` policy is moderator-only, and
+ * even a moderator's own browser session can't mint a signed URL past it —
+ * see `media-urls.ts`), so `loadSectionContent` signs the loaded rows'
+ * thumbnail paths there before handing them to the client component.
  */
 export default async function EditPersonPage({
   params,
@@ -163,8 +173,35 @@ async function loadSectionContent(
       return <SourcesSection personId={personId} loaded={data} />;
     }
 
+    case "media": {
+      const media = await getPersonMedia(supabase, personId);
+      const thumbUrlsByPath = await getSignedMediaUrls(
+        media.map((row) => row.storagePathThumb),
+      );
+      const thumbUrls: Record<string, string> = {};
+      for (const row of media) {
+        const url =
+          row.storagePathThumb === null
+            ? undefined
+            : thumbUrlsByPath.get(row.storagePathThumb);
+        if (url !== undefined) {
+          thumbUrls[row.id] = url;
+        }
+      }
+      return (
+        <MediaSection
+          personId={personId}
+          loaded={media}
+          thumbUrls={thumbUrls}
+        />
+      );
+    }
+
     default:
-      // Media — not built yet (#33); the shell's own placeholder covers it.
-      return undefined;
+      return assertNeverSection(section);
   }
+}
+
+function assertNeverSection(section: never): never {
+  throw new Error(`edit page: unreachable section: ${JSON.stringify(section)}`);
 }

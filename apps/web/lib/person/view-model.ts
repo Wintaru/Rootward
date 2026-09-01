@@ -65,9 +65,14 @@ export interface RelationLine {
 
 export interface MediaLine {
   readonly id: string;
+  readonly href: string;
   readonly label: string;
   readonly caption: string | null;
   readonly isPrimary: boolean;
+  /** `null` when the section has no thumbnail (no derivative codec for this
+   * MIME, or the signed URL failed to mint) — the card falls back to the
+   * filename label instead of an `<img>`. */
+  readonly thumbUrl: string | null;
 }
 
 export interface SourceLine {
@@ -104,6 +109,11 @@ export interface NoteLine {
 
 export function buildPersonProfileView(
   data: PersonProfileData,
+  /** `storage_path_thumb` → signed URL, pre-fetched server-side (the `media`
+   * bucket only grants `storage.objects` access to moderators — see
+   * `media-urls.ts`). This function stays pure by taking the lookup rather
+   * than minting URLs itself. */
+  thumbUrls: ReadonlyMap<string, string> = new Map(),
 ): PersonProfileView {
   const focus =
     data.relationships.persons.find((p) => p.id === data.person.id) ?? null;
@@ -133,9 +143,14 @@ export function buildPersonProfileView(
     children: rel.children.map((p) => toRelationLine(p)),
     media: data.media.map((m) => ({
       id: m.id,
+      href: `/media/${m.mediaId}`,
       label: m.title?.trim() || m.filename?.trim() || "Untitled media",
       caption: m.caption,
       isPrimary: m.isPrimary,
+      thumbUrl:
+        m.storagePathThumb === null
+          ? null
+          : (thumbUrls.get(m.storagePathThumb) ?? null),
     })),
     sources: data.citations.map(toSourceLine),
     notes: data.notes

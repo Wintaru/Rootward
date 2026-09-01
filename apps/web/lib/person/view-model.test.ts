@@ -356,10 +356,12 @@ describe("buildPersonProfileView", () => {
         media: [
           {
             id: "m1",
+            mediaId: "media-1",
             title: null,
             filename: "portrait.jpg",
             caption: "Studio portrait",
             isPrimary: true,
+            storagePathThumb: "media-1/thumb.webp",
           },
         ],
         citations: [
@@ -382,9 +384,11 @@ describe("buildPersonProfileView", () => {
     );
 
     expect(view.media[0]).toMatchObject({
+      href: "/media/media-1",
       label: "portrait.jpg",
       caption: "Studio portrait",
       isPrimary: true,
+      thumbUrl: null,
     });
     expect(view.sources[0]).toMatchObject({
       title: "1930 Census",
@@ -395,6 +399,27 @@ describe("buildPersonProfileView", () => {
     expect(view.sources[0]?.meta).toContain("National Archives");
     // Blank notes are dropped.
     expect(view.notes).toEqual([{ id: "n2", text: "A family story." }]);
+  });
+
+  it("resolves a media thumbnail from the signed-URL lookup", () => {
+    const view = buildPersonProfileView(
+      fixtureData({
+        media: [
+          {
+            id: "m1",
+            mediaId: "media-1",
+            title: null,
+            filename: "portrait.jpg",
+            caption: null,
+            isPrimary: false,
+            storagePathThumb: "media-1/thumb.webp",
+          },
+        ],
+      }),
+      new Map([["media-1/thumb.webp", "https://signed.example/thumb"]]),
+    );
+
+    expect(view.media[0]?.thumbUrl).toBe("https://signed.example/thumb");
   });
 
   it("drops an additional name row that has no assembled value", () => {

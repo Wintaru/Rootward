@@ -10,9 +10,12 @@ the relevant `docs/SPEC.md` section.
 issues) are all merged to `main`. #30 (Sources section) was itself merged
 (`0d5613e`) but left open on GitHub by the session that shipped it — same
 stale-issue-left-open pattern as #17 / #20–#23 / #25 / #29 before it — closed
-by hand this session. **#33 (`media-process` edge function) is done, staged
-on `feat/media-process-function`** — see below. Next: #34 (`ready`, depends
-only on #33, staged this session).
+by hand this session. **#33 (`media-process` edge function) was merged to
+`main` (`2a1c37e`) by a prior session but left open on GitHub — same stale
+pattern, closed by hand this session. #34 (Media section) is done, staged on
+`feat/media-section`** — see below. Phase 6 is now complete. Next: #35 or #37
+(both `ready`, both Phase 7, no dependency between them — pick either;
+#36 stays `blocked` until #35 lands).
 **Planning:** complete. 35 decisions in `docs/WAYFINDER.md`, full build spec in
 `docs/SPEC.md`. No open questions that block starting.
 **Issues:** created. 46 GitHub issues on `Wintaru/Rootward` — items 1–40 from
@@ -1381,34 +1384,111 @@ orphaned `media/<id>/*` object set with no matching row (a storage-leak
 concern, not data loss — no sweep job exists yet for it). Labelled #34
 `ready` (depends only on #33, staged this session).
 
+**Issue #34 — Media upload + gallery + primary photo + `/media/[id]` viewer +
+Media section: done, staged on `feat/media-section`.** The last Phase 6 issue
+(`docs/SPEC.md` §8.3, §4.4, §10 item 34). Reconciled #33 as stale-open first
+(merged `2a1c37e`, left open — same pattern as every session before it). No
+migration — `media`/`media_link` (RLS from #9), the `media` bucket (#33), and
+`tree_settings`'s media columns (#7) all already exist.
+
+- **`apps/web/lib/db/media-edit.ts`** — the section's typed layer, scoped to
+  `owner_type = 'person'` only (`SectionMediaOwner`, same narrowing call as
+  #31's `SectionNoteOwner`). `getPersonMedia` / `getMediaLinkByMediaId` (reads
+  back the row `media-process` just inserted, since its response carries only
+  `mediaId`), `uploadMediaOriginal` + `invokeMediaProcess` (upload to
+  `media/staging/<uuid>.<ext>` then call the #33 function directly from the
+  browser client — no server action, same upload-then-invoke shape as #16's
+  `useGedcomImport`, since the function already inserts `media` +
+  `media_link` itself), `saveMediaLinks` (version-checked caption/sort-order/
+  delete diff, same shape as `note-edit.ts`), `setPrimaryMedia` (its own
+  immediate unset-then-set action, not a diffed field — the partial unique
+  index needs the unset to land first, and it `.select()`s both touched rows
+  so the caller can refresh their cached `updated_at` — see the code-review
+  fix below).
+- **`apps/web/lib/db/media-urls.ts`** (`server-only`) — signs `media` bucket
+  paths with the service-role client, since the bucket's only
+  `storage.objects` policy is moderator-only and even an approved
+  non-moderator's own session can't mint a signed URL past it. Deliberately
+  not exported from the shared `@/lib/db` barrel (a `server-only` import
+  reaching a Client Component is a build error). Every caller passes only
+  paths a caller-scoped RLS read already returned.
+- **`apps/web/lib/edit/media.ts`** + **`components/person/edit/MediaSection.tsx`**
+  — the section itself. No "added blank row" action (unlike every other
+  section) — a row only ever enters state already persisted, via `row_added`
+  once an upload finishes. `isPrimary` is never part of the diff; "Set as
+  primary" is immediate and its result is folded back through
+  `reconcileMediaLinksAfterSave` (see below).
+- **`apps/web/lib/db/media.ts`** (`getMediaDetail`) + **`lib/media/view-model.ts`**
+  (`buildMediaDetailView`) + **`components/media/MediaViewer.tsx`** + **`app/media/[mediaId]/page.tsx`**
+  — the new `/media/[id]` viewer. Renders the display derivative (falling
+  back to the original for a natively-browser-renderable MIME with no
+  derivative, e.g. an uncoded GIF), a download link, and linked records
+  (person-owned links resolve a name + `/person/<id>` link; every other
+  owner type gets a generic per-type label — no other owner type has its own
+  detail route yet).
+- **`apps/web/lib/db/person.ts`** / **`lib/person/view-model.ts`** / **`components/person/PersonProfile.tsx`**
+  — extended, not rewritten: the read-only profile's Media section now shows
+  real thumbnails (signed server-side) linking to `/media/<id>` instead of a
+  bare text list.
+- Tests: `lib/edit/media.test.ts` (20), `lib/media/view-model.test.ts` (7),
+  plus fixture/assertion updates in `lib/person/view-model.test.ts` for the
+  extended `ProfileMedia` shape. Full pnpm gate (**561**) + Deno gate
+  (**78**, unaffected — no `supabase/functions/` change) + `pnpm build`
+  green. `supabase db lint` / `supabase test db` not re-run (no migration).
+- **Code review: 2 must-fix applied, bundled with 2 should-fix in the same
+  region — see `DECISIONS.md` for the full writeup.** (1) `/media/[id]`
+  leaked full image bytes independent of link visibility: `getMediaDetail`
+  read the `media` row through the deliberately-permissive `media_select`
+  RLS (SPEC §5: metadata visible to any approved member) but the #33
+  migration's own comment is explicit that _this route_ must gate the bytes
+  on `media_link_is_visible` per WAYFINDER decision 25 — fixed by returning
+  `null` whenever every attached link is invisible to the caller (safe
+  because `media-process` always inserts exactly one link, so an empty
+  post-RLS list only ever means "hidden from this caller"). (2)
+  `setPrimaryMedia` returned `void` and the component hand-flipped
+  `isPrimary` locally without refreshing either touched row's `updated_at`
+  — since `set_updated_at` bumps it unconditionally, the very next
+  caption/reorder save on either row was guaranteed to hit a spurious
+  version-check conflict. Fixed by having `setPrimaryMedia` return both
+  touched rows and folding them through `reconcileMediaLinksAfterSave`
+  (deleting the now-redundant `primary_changed` reducer action outright).
+  Bundled in: the "set primary" step now checks a row was actually matched
+  (a concurrent delete no longer succeeds silently with no primary set) and
+  is scoped to `(ownerType, ownerId)` matching the "clear" step. One
+  advisory deferred (a transient upload/save race can drop a freshly
+  uploaded row from the in-memory list — it stays persisted regardless,
+  reappearing on reload — mitigated cheaply by disabling the upload input
+  while saving and vice versa, not a deeper rewrite). Labelled #35 and #37
+  `ready` (both depend only on already-merged issues; #36 stays `blocked`
+  on #35).
+
 ## Next action
 
-**Phase 6 has started.** #33 (`media-process` edge function) is done, staged
-on `feat/media-process-function` — see above. #34 (Media section in the edit
-view + profile gallery + `/media/[id]` viewer) is labelled `ready` — depends
-only on #33, staged this session. Take it next unless this file says
-otherwise by then. #34's frontend needs to match #33's staging-upload
-contract (`media/staging/<token>.<ext>` → `{ ownerType, ownerId, stagingPath,
-originalFilename }`) — see the #33 entry above and `DECISIONS.md`.
+**Phase 6 is complete.** #33 and #34 are both done — see above. Phase 7 has
+two independently-`ready` issues: **#35** (Notification center + bell +
+Realtime + auto-resolve triggers) and **#37** (`/settings` — tree settings +
+role management), neither depending on the other. **#36** (Moderation queue)
+stays `blocked` until #35 lands (it depends on #35 for the notification
+plumbing). Take #35 or #37 next unless this file says otherwise by then.
 
-Still pending across #14–#33: a deployed-function run (`supabase functions
+Still pending across #14–#34: a deployed-function run (`supabase functions
 serve`) plus a real signed-in browser session driving `/login` → `/import` →
 `/onboarding` → `/moderation` → `/tree/<root>` → `/person/<id>` →
-`/person/<id>/edit` (now including the Name & Gender / Additional Names /
-Reference Numbers / Events / Facts / Sources / Notes sections, a live
-multi-tab conflict walkthrough for the `ConflictDialog`, two browser tabs on
-the same person's edit view to see the #32 presence banner update live, and
-once #34 lands, an actual photo upload through `media-process`) end to end.
-Do this as a dedicated integration pass, and restart the local stack first so
-the `config.toml` Google + redirect-URL change loads.
+`/person/<id>/edit` (every v1 section, including Media — an actual photo
+upload through `media-process`) → `/media/<id>`, a live multi-tab conflict
+walkthrough for the `ConflictDialog`, and two browser tabs on the same
+person's edit view to see the #32 presence banner update live. Do this as a
+dedicated integration pass, and restart the local stack first so the
+`config.toml` Google + redirect-URL change loads.
 
 **Shared local stack:** migrations through `20260901111850` (#33's
 `media_bucket`) are applied via `supabase migration up` (additive — the stack
 is shared with other concurrent sessions on this machine, so this session
-did not run `supabase db reset`). `supabase db lint` and `supabase test db`
-both green against that state (235 tests). A full `supabase db reset` remains
-safe whenever it's next convenient (every migration through #33 is either
-merged or additive-safe).
+did not run `supabase db reset`); #34 added no migration, so this is
+unchanged from #33. `supabase db lint` and `supabase test db` both green
+against that state as of #33 (235 tests) — not re-run this session. A full
+`supabase db reset` remains safe whenever it's next convenient (every
+migration through #33 is either merged or additive-safe).
 
 `gh issue list --label ready` is the queue. Take the lowest-numbered `ready`
 issue unless this file says otherwise. When an issue merges, label the issues it

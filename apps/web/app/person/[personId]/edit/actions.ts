@@ -47,6 +47,15 @@ import {
   type SourceInsertInput,
   type SourceUpdateInput,
 } from "@/lib/db";
+import {
+  saveMediaLinks as persistMediaLinks,
+  setPrimaryMedia,
+  type MediaLinkDeleteInput,
+  type MediaLinkUpdateInput,
+  type SaveMediaLinksResult,
+  type SetPrimaryMediaResult,
+} from "@/lib/db/media-edit";
+import { getSignedMediaUrl } from "@/lib/db/media-urls";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 /**
@@ -385,4 +394,103 @@ export async function searchPlaces(
 
   const supabase = await createSupabaseServerClient();
   return searchPlacesDb(supabase, query);
+}
+
+export type SaveMediaLinksActionResult =
+  | { readonly status: "saved"; readonly result: SaveMediaLinksResult }
+  | { readonly status: "error"; readonly message: string };
+
+/** The Media section's caption/reorder/delete batch (SPEC §10 item 34) — the
+ * upload itself does not go through a server action (see `MediaSection.tsx`'s
+ * doc comment); this only covers edits to a link `media-process` already
+ * created. */
+export async function saveMediaLinks(input: {
+  readonly personId: string;
+  readonly updates: readonly MediaLinkUpdateInput[];
+  readonly deletes: readonly MediaLinkDeleteInput[];
+}): Promise<SaveMediaLinksActionResult> {
+  const access = await resolveEditAccess();
+  if (access.kind !== "allowed") {
+    return {
+      status: "error",
+      message: "You do not have permission to edit this person.",
+    };
+  }
+  if (!isUuid(input.personId)) {
+    return { status: "error", message: "Invalid person." };
+  }
+  if (input.updates.length === 0 && input.deletes.length === 0) {
+    return { status: "error", message: "Nothing to save." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const result = await persistMediaLinks(supabase, input);
+
+  revalidatePath(`/person/${input.personId}/edit`);
+  revalidatePath(`/person/${input.personId}`);
+  return { status: "saved", result };
+}
+
+export type SetPrimaryMediaActionResult =
+  | { readonly status: "saved"; readonly result: SetPrimaryMediaResult }
+  | { readonly status: "error"; readonly message: string };
+
+/** Set a media link as the person's primary photo (SPEC §10 item 34) —
+ * immediate, not part of the batched save above (see `setPrimaryMedia`'s own
+ * doc comment for why it can't be a version-checked field patch). Returns the
+ * touched rows' fresh `updated_at` so the client can fold them back in
+ * through `reconcileMediaLinksAfterSave` rather than caching a now-stale
+ * version for either row. */
+export async function setPrimaryMediaAction(input: {
+  readonly personId: string;
+  readonly mediaLinkId: string;
+}): Promise<SetPrimaryMediaActionResult> {
+  const access = await resolveEditAccess();
+  if (access.kind !== "allowed") {
+    return {
+      status: "error",
+      message: "You do not have permission to edit this person.",
+    };
+  }
+  if (!isUuid(input.personId) || !isUuid(input.mediaLinkId)) {
+    return { status: "error", message: "Invalid request." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  let result: SetPrimaryMediaResult;
+  try {
+    result = await setPrimaryMedia(supabase, {
+      ownerType: "person",
+      ownerId: input.personId,
+      mediaLinkId: input.mediaLinkId,
+    });
+  } catch (err) {
+    return {
+      status: "error",
+      message:
+        err instanceof Error
+          ? err.message
+          : "That photo could not be set as primary.",
+    };
+  }
+
+  revalidatePath(`/person/${input.personId}/edit`);
+  revalidatePath(`/person/${input.personId}`);
+  return { status: "saved", result };
+}
+
+/** Sign a freshly uploaded media's thumbnail path (SPEC §10 item 34) — the
+ * `media` bucket only grants `storage.objects` access to moderators, and even
+ * a moderator's own browser session can't mint a signed URL past that policy
+ * the way the service role can (see `media-urls.ts`'s module doc). Gated the
+ * same as every other action here even though the row this path came from was
+ * already confirmed visible by the caller's own read moments earlier. */
+export async function signMediaThumbUrl(
+  path: string | null,
+): Promise<string | null> {
+  const access = await resolveEditAccess();
+  if (access.kind !== "allowed") {
+    return null;
+  }
+  return getSignedMediaUrl(path);
 }

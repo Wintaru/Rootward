@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { isActiveModerator, isApproved } from "@/lib/auth/access";
 import { getCurrentAccount } from "@/lib/auth/current-account";
 import { getPersonProfile } from "@/lib/db";
+import { getSignedMediaUrls } from "@/lib/db/media-urls";
 import { buildPersonProfileView } from "@/lib/person/view-model";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { PersonProfile } from "@/components/person/PersonProfile";
@@ -21,6 +22,12 @@ export const metadata: Metadata = {
  * so a hidden person and an absent one both come back as `null` → `notFound()`
  * (never leak which). The "Edit" link is shown to moderators+ only, matching the
  * `/person/[personId]/edit` route's own gate.
+ *
+ * The gallery's thumbnails need one extra step (#34): `getSignedMediaUrls`
+ * runs under the service role, since the `media` bucket's `storage.objects`
+ * policy is moderator-only and even an approved member's own session can't
+ * mint a signed URL past it (see `media-urls.ts`). Only paths already
+ * returned by `getPersonProfile`'s RLS-scoped read are signed.
  */
 export default async function PersonPage({
   params,
@@ -41,9 +48,13 @@ export default async function PersonPage({
     notFound();
   }
 
+  const thumbUrls = await getSignedMediaUrls(
+    data.media.map((item) => item.storagePathThumb),
+  );
+
   return (
     <PersonProfile
-      view={buildPersonProfileView(data)}
+      view={buildPersonProfileView(data, thumbUrls)}
       canEdit={isActiveModerator(current.account)}
     />
   );

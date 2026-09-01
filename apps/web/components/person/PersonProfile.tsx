@@ -124,18 +124,35 @@ export function PersonProfile({
 
       {view.media.length > 0 && (
         <Section title="Media">
-          <ul className="flex flex-col gap-2 text-sm">
+          <ul className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             {view.media.map((item) => (
-              <li key={item.id} className="flex flex-col">
-                <span>
-                  {item.label}
-                  {item.isPrimary && (
-                    <span className="text-muted-foreground"> · primary</span>
+              <li key={item.id}>
+                <Link href={item.href} className="flex flex-col gap-1">
+                  <span className="bg-muted relative block aspect-square overflow-hidden rounded-md">
+                    {item.thumbUrl !== null ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- a signed storage URL, not a static asset `next/image` can optimize
+                      <img
+                        src={item.thumbUrl}
+                        alt={item.label}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <span className="text-muted-foreground flex h-full items-center justify-center p-2 text-center text-xs">
+                        {item.label}
+                      </span>
+                    )}
+                    {item.isPrimary && (
+                      <span className="bg-background/80 absolute right-1 top-1 rounded px-1 text-[0.65rem] font-medium">
+                        Primary
+                      </span>
+                    )}
+                  </span>
+                  {item.caption !== null && (
+                    <span className="text-muted-foreground truncate text-xs">
+                      {item.caption}
+                    </span>
                   )}
-                </span>
-                {item.caption !== null && (
-                  <span className="text-muted-foreground">{item.caption}</span>
-                )}
+                </Link>
               </li>
             ))}
           </ul>

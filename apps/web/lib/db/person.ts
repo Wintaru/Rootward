@@ -81,10 +81,12 @@ export interface ProfileFact {
 export interface ProfileMedia {
   /** `media_link` id — the attachment, not the underlying media row. */
   readonly id: string;
+  readonly mediaId: string;
   readonly title: string | null;
   readonly filename: string | null;
   readonly caption: string | null;
   readonly isPrimary: boolean;
+  readonly storagePathThumb: string | null;
 }
 
 export interface ProfileCitation {
@@ -209,7 +211,7 @@ export async function getPersonProfile(
     client
       .from("media_link")
       .select(
-        "id, caption, is_primary, sort_order, media:media_id(title, original_filename)",
+        "id, media_id, caption, is_primary, sort_order, media:media_id(title, original_filename, storage_path_thumb)",
       )
       .eq("owner_type", "person")
       .eq("owner_id", personId)
@@ -282,10 +284,12 @@ export async function getPersonProfile(
     })),
     media: (mediaRes.data ?? []).map((row) => ({
       id: row.id,
+      mediaId: row.media_id,
       title: row.media?.title ?? null,
       filename: row.media?.original_filename ?? null,
       caption: row.caption,
       isPrimary: row.is_primary,
+      storagePathThumb: row.media?.storage_path_thumb ?? null,
     })),
     citations: (citationsRes.data ?? []).map((row) => ({
       id: row.id,
