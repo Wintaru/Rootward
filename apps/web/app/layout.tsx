@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import "./globals.css";
 
 import { NotificationBell } from "@/components/notifications/NotificationBell";
-import { isActiveModerator } from "@/lib/auth/access";
+import { isActiveModerator, isApproved } from "@/lib/auth/access";
 import { getCurrentAccount } from "@/lib/auth/current-account";
 import { getUnreadNotificationCount } from "@/lib/db/notifications";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -13,13 +14,16 @@ export const metadata: Metadata = {
 };
 
 /**
- * The bell is app-wide for a moderator+ (SPEC §8.5: "moderators subscribe
- * app-wide"), the only piece of persistent chrome the app has today. Every
- * other route stays exactly as it renders now -- a viewer or a signed-out
- * visitor gets no header at all, no layout shift.
+ * Persistent chrome for an approved account: a "Home" link back to `/` (the
+ * §8.1 router, which sends an approved viewer to their default tree view —
+ * the only way back to it once a re-centred or expanded tree view has no
+ * URL a person would think to type by hand) and, for a moderator+, the
+ * notification bell (SPEC §8.5: "moderators subscribe app-wide"). A pending
+ * or signed-out visitor gets no header at all, no layout shift.
  */
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   const current = await getCurrentAccount();
+  const showHeader = current !== null && isApproved(current.account);
   const showBell = current !== null && isActiveModerator(current.account);
   const unreadCount = showBell
     ? await getUnreadNotificationCount(
@@ -31,12 +35,17 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className="h-full antialiased">
       <body className="bg-background text-foreground flex min-h-full flex-col">
-        {showBell && current !== null && (
-          <header className="border-border flex justify-end border-b px-4 py-2">
-            <NotificationBell
-              accountId={current.userId}
-              initialUnreadCount={unreadCount}
-            />
+        {showHeader && (
+          <header className="border-border flex items-center justify-between border-b px-4 py-2">
+            <Link href="/" className="text-sm font-medium hover:underline">
+              Home
+            </Link>
+            {showBell && current !== null && (
+              <NotificationBell
+                accountId={current.userId}
+                initialUnreadCount={unreadCount}
+              />
+            )}
           </header>
         )}
         {children}

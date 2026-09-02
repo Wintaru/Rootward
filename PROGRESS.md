@@ -20,14 +20,16 @@ and #48 (seed.sql GoTrue token fix, see below) were also already merged to
 session, same pattern.** **#37 (`/settings`) was also already merged to
 `main` (`df07d3b`) but left open — closed by hand this session, same
 pattern again.** Phase 6 and Phase 7 are now complete. **Issue #39 (deploy
-docs) is done this session, staged on `docs/deploy-guide` — see below.**
+docs) is done this session, merged to `main` (`451c968`) — see below.**
 #40 (README/self-host guide, screenshots) is the last Phase 8 item, not yet
 `ready`-labelled. #47 (tooling-parity follow-up) and #49
 (`notify_access_requested` dedup edge case) are open, non-blocking, not
-part of the SPEC §10 numbered sequence.
+part of the SPEC §10 numbered sequence. **A "Home" link (not a SPEC issue —
+a UX gap Josh hit live) is done this session, staged on
+`feat/tree-home-link` — see below.**
 
 **Issue #39 — Deploy docs: Vercel + Supabase Cloud, and Docker Compose
-self-host: done, staged on `docs/deploy-guide`.** SPEC §10 item 39,
+self-host: done, merged to `main` (`451c968`).** SPEC §10 item 39,
 WAYFINDER decision 32. Mostly documentation, plus the supporting Docker
 infra a self-host guide needs to be more than a promise:
 
@@ -96,6 +98,26 @@ infra a self-host guide needs to be more than a promise:
   shared Playwright browser: another concurrent session held it for the
   whole session (same contention PROGRESS has flagged before), so the app
   was left for Josh to view directly rather than screenshotted.
+
+**"Home" link in the app header — done, staged on `feat/tree-home-link`.**
+Not a SPEC issue — a UX gap Josh hit live while looking at the tree view
+this session (see above): no persistent navigation existed anywhere in the
+app, so re-centring on another person in `/tree/[personId]` left no
+in-app way back to the default root person, only the browser Back button
+(undiscoverable — each card click is a `router.push`, so it does work, but
+nothing on screen says so). `apps/web/app/layout.tsx`'s header used to
+render only for a moderator+ (to show the notification bell); it now
+renders for any `isApproved` account (matches the guard `/tree/[personId]`
+and `/person/[personId]` already use) with a "Home" link to `/` — the
+existing §8.1 router, unchanged, already resolves an approved account to
+`/tree/<default_root_person_id>`. The bell's own visibility
+(`isActiveModerator`) and data fetch are unchanged, just nested one level
+deeper in the JSX. Code review (foreground): no correctness findings: one
+nit (the link's first draft used the brand name "Rootward" as its text,
+which does not read as an affordance given the literal complaint was
+about discoverability) — fixed by using the literal text "Home" instead.
+Full pnpm gate green (592 tests, unchanged — no new logic, a header-markup
+change only).
 
 **#48 (seed.sql: NULL `confirmation_token` breaks GoTrue sign-in for the demo
 admin) — fixed, merged to `main` (`f0d144d`).** Not a SPEC issue — a bug
