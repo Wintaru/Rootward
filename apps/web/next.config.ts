@@ -14,6 +14,13 @@ const nextConfig: NextConfig = {
   // standalone bundle misses `packages/shared`, which Next transpiles from
   // source rather than from a built `dist/`.
   outputFileTracingRoot: path.join(__dirname, "../.."),
+  // Dev-only: the dev server initializes on `localhost` and otherwise
+  // refuses cross-origin requests for its own dev assets (JS chunks, HMR)
+  // from any other hostname — including `127.0.0.1`, even though it is the
+  // same machine. README.md tells people to open http://127.0.0.1:3000, so
+  // without this every fresh `pnpm dev` follow-along loads a half-hydrated
+  // page with no visible error beyond a console warning.
+  allowedDevOrigins: ["127.0.0.1"],
 };
 
 export default nextConfig;

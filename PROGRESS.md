@@ -25,8 +25,10 @@ docs) is done this session, merged to `main` (`451c968`) — see below.**
 `ready`-labelled. #47 (tooling-parity follow-up) and #49
 (`notify_access_requested` dedup edge case) are open, non-blocking, not
 part of the SPEC §10 numbered sequence. **A "Home" link (not a SPEC issue —
-a UX gap Josh hit live) is done this session, staged on
-`feat/tree-home-link` — see below.**
+a UX gap Josh hit live) is done this session, merged to `main`
+(`999e225`) — see below. A dev-server `allowedDevOrigins` fix (also not a
+SPEC issue, same live session) is done this session, staged on
+`fix/dev-origin-127` — see below.**
 
 **Issue #39 — Deploy docs: Vercel + Supabase Cloud, and Docker Compose
 self-host: done, merged to `main` (`451c968`).** SPEC §10 item 39,
@@ -99,7 +101,7 @@ infra a self-host guide needs to be more than a promise:
   whole session (same contention PROGRESS has flagged before), so the app
   was left for Josh to view directly rather than screenshotted.
 
-**"Home" link in the app header — done, staged on `feat/tree-home-link`.**
+**"Home" link in the app header — done, merged to `main` (`999e225`).**
 Not a SPEC issue — a UX gap Josh hit live while looking at the tree view
 this session (see above): no persistent navigation existed anywhere in the
 app, so re-centring on another person in `/tree/[personId]` left no
@@ -118,6 +120,25 @@ which does not read as an affordance given the literal complaint was
 about discoverability) — fixed by using the literal text "Home" instead.
 Full pnpm gate green (592 tests, unchanged — no new logic, a header-markup
 change only).
+
+**Dev server: `allowedDevOrigins` fix — done, staged on
+`fix/dev-origin-127`.** Not a SPEC issue — found live this session.
+`README.md` tells a fresh contributor to open `http://127.0.0.1:3000`, but
+Next 16's dev server initializes on `localhost` and silently blocks
+cross-origin requests for its own dev assets (JS chunks, the HMR socket)
+from any other hostname, `127.0.0.1` included — so following the README
+exactly as written loads a half-hydrated page with no visible error, only
+a console warning. Confirmed live: a magic-link sign-in attempt produced
+zero requests at the GoTrue auth container and zero messages in Mailpit,
+because the click handler's JS chunk never loaded. Fixed with one entry in
+`apps/web/next.config.ts`: `allowedDevOrigins: ["127.0.0.1"]` — dev-only,
+no effect on `next build`, `output: "standalone"`, or
+`outputFileTracingRoot` (confirmed against Next's own bundled docs and the
+consuming source file, `block-cross-site-dev.js`, which is dev-router-only).
+Re-verified live after the fix: the same JS-chunk request, replayed with a
+`127.0.0.1` referer, now returns `200` with no block warning in the dev
+server's log. Code review (foreground): no findings. Full pnpm gate green
+(592 tests, unchanged).
 
 **#48 (seed.sql: NULL `confirmation_token` breaks GoTrue sign-in for the demo
 admin) — fixed, merged to `main` (`f0d144d`).** Not a SPEC issue — a bug
