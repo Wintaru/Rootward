@@ -41,6 +41,15 @@
   overflow: hidden;
   background-color: var(--rw-tree-bg);
   color: #fff;
+  /* `family-chart` sets internal elements (e.g. `#htmlSvg`, the card layer)
+   * to positive `z-index` values via inline styles. Without this, those
+   * values escape into the shared stacking context with `.rw-tree-depth`
+   * below and can outrank it — physically covering the stepper and
+   * swallowing every click even though the buttons still render on top
+   * visually. `isolation: isolate` traps the whole library-owned subtree in
+   * its own stacking context so any z-index it sets internally, now or after
+   * a version bump, can never climb above a sibling outside this element. */
+  isolation: isolate;
 }
 
 /*
