@@ -197,6 +197,17 @@ export function FamilyTree({
   const initialTreeRef = useRef(tree);
   const isFirstSync = useRef(true);
 
+  // `depth` as of the last chart sync — lets the sync effect tell whether
+  // *this* update actually changed the generation window, rather than a
+  // card-click re-centre or an expand-in-place merge (both leave `depth`
+  // unchanged). Comparing against the prop itself, instead of a flag set by
+  // whichever handler ran, keeps the answer correlated with the update
+  // actually being applied: if a card click races ahead of an in-flight
+  // depth-stepper fetch and its response is what lands, `depth` on that
+  // render is still the pre-change value, so the comparison correctly says
+  // "unchanged" instead of inheriting a stale "this was a depth change".
+  const lastSyncedDepthRef = useRef(depth);
+
   // Build the chart once.
   useEffect(() => {
     const container = containerRef.current;
@@ -302,12 +313,24 @@ export function FamilyTree({
     }
     if (isFirstSync.current) {
       isFirstSync.current = false;
+      lastSyncedDepthRef.current = depth;
       return;
     }
+    // A depth-stepper change refits the whole tree — widening or narrowing
+    // the window can bring a generation into or out of view that the current
+    // pan/zoom does not account for. A card-click re-centre or an
+    // expand-in-place merge leaves `depth` unchanged, so both keep the
+    // library's default: re-centre the main card at the current zoom level.
+    const depthChanged =
+      depth.up !== lastSyncedDepthRef.current.up ||
+      depth.down !== lastSyncedDepthRef.current.down;
     chart.updateData([...tree.data]);
     chart.updateMainId(tree.mainId);
-    chart.updateTree({ tree_position: "main_to_middle" });
-  }, [tree]);
+    chart.updateTree({
+      tree_position: depthChanged ? "fit" : "main_to_middle",
+    });
+    lastSyncedDepthRef.current = depth;
+  }, [tree, depth]);
 
   return (
     <div
