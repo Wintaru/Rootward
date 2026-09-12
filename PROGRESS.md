@@ -5,8 +5,10 @@ the relevant `docs/SPEC.md` section.
 
 ## Current state
 
-**Next issue: #54 (`ready`), then label #55 `ready` and take #55 → #56 →
-#57.** **#53 (root person by name) is merged to `main` — see below. #73
+**Next issue: #55 (label it `ready` first), then #56 → #57.** **#54
+(GEDCOM export UI) is done this session, staged on `feat/gedcom-export-ui`
+— see below; it filed #86, which blocks a real served-function run of both
+GEDCOM functions. #53 (root person by name) is merged to `main`. #73
 (the `/settings` and `/moderation` 500) is merged to `main` (`23a2b1c`).
 #52 (tree card → profile) is merged to `main` (`d2cbf2a`). #51 (`/tree`
 index) is merged to `main` (`3d902db`), closed. #50
@@ -23,6 +25,75 @@ WAYFINDER decision 36 + the new **Journeys** section. After #54, label #55
 `ready` and take #55 → #56 → #57 in that order (each depends on the one
 before). #40 (README) waits until Phase 9 lands, so the screenshots show a
 usable app. The audit itself is in `GAP-AUDIT-HANDOFF.md` (gitignored).
+
+**Issue #54 — GEDCOM export UI: button, `export_job`, signed download:
+done, staged on `feat/gedcom-export-ui`.** SPEC §8.1 (`/import` is now
+"Import / Export"), §7 `gedcom-export`, audit item C1. No migration.
+
+- **`lib/db/export-jobs.ts`** — `createExportJob` (`manual_gedcom`),
+  `invokeGedcomExport` (returns a discriminated `InvokeOutcome`: `ok` /
+  `refused` = the function answered non-2xx, with the shell's `{ error }`
+  body lifted out / `transport` = no answer), `getExportJob`,
+  `listExportJobs` (newest 20), `markExportJobFailed` (guarded on
+  `status = 'pending'`, so the client records only a failure the engine
+  never got to write), and `signExportDownload` — a signed URL minted **on
+  click** as the moderator (`exports_moderator_all` grants `select` on the
+  object row) with `download: rootward-<date>.ged`. Nothing stores or
+  pre-signs URLs; the function's response body is ignored and the row is the
+  source of truth. 5 vitest cases on the pure helpers.
+- **`lib/export/orchestrator.ts`** + **`useGedcomExport.ts`** — the import
+  flow's shape: pure reducer (`idle → starting → polling? → completed |
+failed`) and `settle(job, invoke)` exhaustive over `export_status`. A
+  refusal on a `pending` row fails at once and is written to the row; a
+  transport failure waits, and `settlePoll` gives the dropped call's reason
+  only if the row is still `pending` after 10 s (`PENDING_GRACE_POLLS`) — a
+  `running` row is polled up to 2 min and then abandoned untouched. 15
+  vitest cases.
+- **`app/import/`** — `page.tsx` owns the `<main>` / `h1` "Import / Export"
+  and loads the past jobs server-side; `ImportWorkspace` is now one `h2`
+  section; new `ExportPanel` (client: button + stage cards), `ExportJobList`
+  (a **server** component passed into the panel as a `jobList` slot, so
+  timestamps render once with the server locale like `PendingInvitations` —
+  no hydration mismatch — and `router.refresh()` on settle re-renders it),
+  `DownloadButton` (client island, `primary` / `compact` variants — the
+  same button on the finished card and every list row), shared `StatusCard`
+  / progress bars extracted from `ImportWorkspace`. Header nav label →
+  "Import / Export" (`header-nav.ts` + test + layout comment).
+- **`supabase/functions/deno.json`** — `"@rootward/gedcom/"` /
+  `"@rootward/shared/"` directory entries so `supabase functions serve
+--import-map supabase/functions/deno.json` binds the package directories
+  (a bare file entry binds one file). Documented in the functions README
+  under "Serving locally", with the remaining gap (#86).
+- **Verified live** on the shared dev stack as the demo admin: `/import`
+  renders both sections + the nav label; Export → the real edge runtime 503s
+  (see #86) → "Export failed" with the reason, the row recorded as `failed`
+  with that text, list refreshed. Download path: the real engine + real
+  gateway completed a job from a throwaway Deno script (28 persons, 4959
+  bytes), then the list's **Download** minted a signed URL as the moderator
+  and the browser saved a valid `rootward-2026-09-12.ged` (`0 HEAD` … 28
+  `INDI` … `0 TRLR`) without leaving the page. **Not run:** the
+  click-to-download through the _served_ function — impossible until #86.
+- **Found: #86.** Neither `gedcom-import` nor `gedcom-export` has ever
+  booted inside a Supabase edge runtime. `supabase start`'s runtime mounts
+  only `supabase/functions/` (so `../../packages/*` is missing), and even
+  with the directories bound the runtime does not honour `sloppy-imports`,
+  so `packages/*`'s extensionless `from "./reader"` imports fail. Fix is
+  `.ts` extensions on ~27 imports in 10 files — mechanical, but a separate
+  concern that also blocks the import UI and the #39 deploy story, so it is
+  its own issue. **Shared-stack side effect:** `functions serve` replaced
+  the baked `supabase_edge_runtime_rootward` container and removed it on
+  exit; `supabase start` does not recreate it, so `onboarding-match` /
+  `media-process` are unreachable locally until the next full `supabase
+stop && supabase start` (only when no other session has the stack open).
+- Code review (foreground): no blocking findings. Applied: on-demand
+  signing on the finished card (deleted the eager URL + one failure path),
+  the `refused` / `transport` split, `source: "row" | "invoke"` on the
+  failed settlement, no `completed_at` on a client-marked failure, a
+  `console.warn` on the best-effort write, `unknown` narrowing. Filed
+  **#87** (the bucket / path / error-cap contract is copied three ways;
+  fix touches `exporter.ts`). Full pnpm gate green (**621** vitest, +23),
+  Deno gate green (81). Web dev server and `functions serve` were
+  harness-tracked and stopped; port 3000 is free.
 
 **Issue #53 — Settings: pick the default root person by name, not UUID:
 done, merged to `main`.** SPEC §8.1 (`/settings`),
@@ -2158,6 +2229,7 @@ unblocks `ready`.
 | 2026-08-31 | Reconciled #29 (already merged `347ea5c`, left open — closed it). Issue #30 — Sources section (no migration, `repository_write`/`source_write`/`citation_write` RLS from #9): three independently-saved lists — Repositories, then Sources (may link a repository), then Citations (link a source; owned by the person or one of their events/facts) — `lib/db/source-edit.ts` (`getRepositories`/`saveRepositories`, `getSources`/`saveSources`, `getPersonCitations`/`saveCitations`, `getSourcesSectionData`) + `lib/edit/repositories.ts`/`sources.ts`/`citations.ts` (pure, one per table) mirror `fact-edit.ts`/`facts.ts` and `note-edit.ts`/`notes.ts`; `repository`/`source` read as full unfiltered lists (global reference data, `place`'s same RLS boundary); citations scoped to `owner_type in ('person','event','fact')` (`note_owner`'s narrowing precedent); each list's picker only offers already-_saved_ rows from the list above it, so a citation can never reference an unsaved source id. `SourcesSection.tsx` wired into `page.tsx`'s section switch and three new server actions. 47 vitest added (pnpm 531→533) + build green. Code review: 1 must-fix applied (deleting a `source` cascades to every citation referencing it tree-wide, not just this person's — the generic "Remove" button gave no warning; added source-specific copy) + 1 nit applied (missing conflict-preserving reconcile test cases). Labelled #33 `ready` (depends only on #6, already merged). Phase 5 complete.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |                                         | `feat/edit-sources-section` |
 | 2026-09-01 | Reconciled #34 (already merged `f247664`, left open — closed it). Issue #35 — Notification center: `20260901205718` migration (Realtime publication on `notification` + two `security definer` auto-resolve triggers built ahead of #36); `lib/db/notifications.ts` (unread count via subtraction, list/mark-read/resolve) + `lib/notifications/format.ts` + `NotificationBell.tsx` (Realtime badge, filter tabs, mark-read-on-open, manual resolve) rendered from `app/layout.tsx` for moderator+ only. 17 pgTAP + 8 vitest added (pnpm 577, `supabase test db` 252) + build green. Code review: 2 must-fix applied (a stale-response race in the panel's fetch; unhandled promise rejections with no error UI) + 1 should-fix applied (Realtime reconnect/visibility resync) + 1 filed as #49 (pre-existing #19 dedup gap). Also found and fixed as a separate first commit: `lib/supabase/env.ts` was silently breaking every client-side Supabase call in the browser (dynamic `process.env[name]` lookup Next.js cannot inline) — see `DECISIONS.md`. Found, not fixed: #48 (seeded admin's `auth.users` row has NULL GoTrue token columns, breaking all sign-in for that account). Browser-verified end to end via a throwaway session-injection workaround. Labelled #36 `ready` (was `blocked` on #35).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | `feat/notification-center`              |
 | 2026-09-01 | Reconciled #35 (already merged `8da8649`, left open — closed it). Issue #36 — Moderation queue: `lib/db/moderation.ts` (approve/reject `access_request`, reassign/unlink `account`, nickname-inclusive person search) splits moderator-vs-admin exactly on the `account_update` RLS boundary (admin-only for every column, not just role); `AccessRequestsQueue`/`LinkedAccounts`/`PersonPicker`/`Section.tsx` new client components wired into `page.tsx` alongside #20's invitations list. 6 vitest added (pnpm 575) + build green. Code review: 3 should-fix applied (stale `linkedTo` state fixed with React's render-time prop-adjust pattern, not a `useEffect`; nickname search gap; a duplicated person-name helper unified). Not browser-verified — the shared Playwright MCP browser was held by another live session throughout; see `DECISIONS.md`, which also logs an accidental `pnpm dev:stop` against the shared Supabase stack (recovered via its own backup restore, no data lost).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | `feat/moderation-queue`                 |
+| 2026-09-12 | Issue #54 — GEDCOM export UI: `/import` → Import / Export, `lib/db/export-jobs.ts` (row-as-source-of-truth, on-click signed download), `lib/export` reducer + hook, server-rendered past-jobs list. 23 vitest added (621). Found #86 (GEDCOM functions cannot boot in any edge runtime — extensionless imports in `packages/*`), filed #87 (storage-contract drift). Live: failure path + list download verified; served-function download blocked on #86.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | `feat/gedcom-export-ui`                 |
 
 ## Notes for the next session
 

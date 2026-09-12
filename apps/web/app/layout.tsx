@@ -18,7 +18,7 @@ export const metadata: Metadata = {
 
 /**
  * Global chrome for a signed-in visitor (SPEC §8.1, #50): the role-gated
- * links `resolveHeaderNav` decides ("Home", "My record", "Import",
+ * links `resolveHeaderNav` decides ("Home", "My record", "Import / Export",
  * "Moderation", "Settings" — empty for a pending member, who still needs the
  * sign-out), the notification bell for a moderator+ (SPEC §8.5: "moderators
  * subscribe app-wide"), and a sign-out form. A signed-out visitor gets no

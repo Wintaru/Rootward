@@ -1,30 +1,34 @@
 "use client";
 
-import { type FormEvent, type ReactNode, useId, useState } from "react";
+import { type FormEvent, useId, useState } from "react";
 
 import type { ImportJob, ImportStats } from "@/lib/db";
 import { progressOf, type ImportFlowState } from "@/lib/import/orchestrator";
 import { useGedcomImport } from "@/lib/import/useGedcomImport";
 
+import { DeterminateBar, IndeterminateBar, StatusCard } from "./StatusCard";
+
 /** Matches the storage bucket's default `file_size_limit` (supabase/config.toml). */
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 
+/** The import half of `/import` (SPEC §8.1). The page owns the `<main>` and
+ * the `h1`; this is one `h2` section beside `ExportPanel`. */
 export function ImportWorkspace({ startedBy }: { startedBy: string }) {
   const { state, start, reset } = useGedcomImport(startedBy);
 
   return (
-    <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-8 px-6 py-16">
-      <header className="flex flex-col gap-2">
-        <h1 className="text-3xl font-semibold tracking-tight">Import GEDCOM</h1>
-        <p className="text-muted-foreground">
+    <section className="flex flex-col gap-4">
+      <div className="flex flex-col gap-1.5">
+        <h2 className="text-xl font-semibold tracking-tight">Import</h2>
+        <p className="text-muted-foreground text-sm">
           Upload a GEDCOM file to load its people, families, sources, and notes
           into the tree. Large files import in the background — you can watch
           the progress here.
         </p>
-      </header>
+      </div>
 
       <ImportStage state={state} onStart={start} onReset={reset} />
-    </main>
+    </section>
   );
 }
 
@@ -190,59 +194,7 @@ function FailedCard({
   );
 }
 
-// --- shared pieces ---------------------------------------------------------
-
-function StatusCard({
-  title,
-  children,
-}: {
-  title: string;
-  children: ReactNode;
-}) {
-  return (
-    <section className="border-border flex flex-col gap-4 rounded-lg border p-6">
-      <h2 className="text-lg font-medium">{title}</h2>
-      {children}
-    </section>
-  );
-}
-
-function DeterminateBar({ ratio, label }: { ratio: number; label: string }) {
-  const percent = Math.round(ratio * 100);
-  return (
-    <div className="flex flex-col gap-1.5">
-      <div
-        className="bg-muted h-2 w-full overflow-hidden rounded-full"
-        role="progressbar"
-        aria-valuenow={percent}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-label={label}
-      >
-        <div
-          className="bg-primary h-full rounded-full transition-[width] duration-500"
-          style={{ width: `${percent}%` }}
-        />
-      </div>
-      <span className="text-muted-foreground text-xs">{label}</span>
-    </div>
-  );
-}
-
-function IndeterminateBar({ label }: { label: string }) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <div
-        className="bg-muted h-2 w-full overflow-hidden rounded-full"
-        role="progressbar"
-        aria-label={label}
-      >
-        <div className="bg-primary h-full w-1/3 animate-pulse rounded-full" />
-      </div>
-      <span className="text-muted-foreground text-xs">{label}…</span>
-    </div>
-  );
-}
+// --- result pieces ---------------------------------------------------------
 
 function StatsGrid({ stats }: { stats: ImportStats }) {
   const rows: ReadonlyArray<readonly [string, number]> = [
