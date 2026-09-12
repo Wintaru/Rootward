@@ -7,6 +7,8 @@ import {
   changeAccountRole,
   isAccountRole,
   personExists,
+  type PersonSearchOption,
+  searchPersonsForModeration,
   setAccountStatus,
   updateTreeSettings,
 } from "@/lib/db";
@@ -43,12 +45,27 @@ export async function saveTreeSettingsAction(
     patch.defaultRootPersonId !== null &&
     !(await personExists(server, patch.defaultRootPersonId))
   ) {
-    return { ok: false, error: "No person with that ID is visible to you." };
+    return { ok: false, error: "That person no longer exists." };
   }
 
   await updateTreeSettings(server, { ...patch, updatedBy: access.userId });
   revalidatePath("/settings");
   return { ok: true };
+}
+
+/** Name search backing the default-root `PersonPicker` (issue #53).
+ * Admin-only like every other `/settings` action — the same query as
+ * `/moderation`'s picker, gated on this route's access, so the settings form
+ * does not import another route's actions. */
+export async function searchSettingsPersons(
+  query: string,
+): Promise<readonly PersonSearchOption[]> {
+  const access = await resolveSettingsAccess();
+  if (access.kind !== "allowed") {
+    return [];
+  }
+  const server = await createSupabaseServerClient();
+  return searchPersonsForModeration(server, query);
 }
 
 /** Change an account's role. Admin-only, and never the caller's own account

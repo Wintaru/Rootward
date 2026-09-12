@@ -5,11 +5,11 @@ the relevant `docs/SPEC.md` section.
 
 ## Current state
 
-**Next issue: #53 (on `feat/settings-root-picker`, already staged — see
-`PROGRESS.md` on that branch), then #54 (both `ready`).** **#73 (the
-`/settings` and `/moderation` 500) is merged to `main` (`23a2b1c`). #52
-(tree card → profile) is merged to `main` — see below. #51 (`/tree` index)
-is merged to `main` (`3d902db`), closed. #50
+**Next issue: #54 (`ready`), then label #55 `ready` and take #55 → #56 →
+#57.** **#53 (root person by name) is merged to `main` — see below. #73
+(the `/settings` and `/moderation` 500) is merged to `main` (`23a2b1c`).
+#52 (tree card → profile) is merged to `main` (`d2cbf2a`). #51 (`/tree`
+index) is merged to `main` (`3d902db`), closed. #50
 (header) is merged to `main` (`b825745`), closed.** A 2026-09-12 audit
 found that every §10 item is built but the app is not usable: no sign-out, no
 navigation to `/import` / `/moderation` / `/settings`, no way to open a
@@ -23,6 +23,44 @@ WAYFINDER decision 36 + the new **Journeys** section. After #54, label #55
 `ready` and take #55 → #56 → #57 in that order (each depends on the one
 before). #40 (README) waits until Phase 9 lands, so the screenshots show a
 usable app. The audit itself is in `GAP-AUDIT-HANDOFF.md` (gitignored).
+
+**Issue #53 — Settings: pick the default root person by name, not UUID:
+done, merged to `main`.** SPEC §8.1 (`/settings`),
+audit item C4. No migration.
+
+- **`components/person/PersonPicker.tsx`** (moved from `app/moderation/`) —
+  takes a `search` prop instead of importing `/moderation`'s server action,
+  so a shared component does not depend on one route's `actions.ts`. The
+  two `/moderation` callers pass `searchModerationPersons`; the settings
+  form passes a new **`searchSettingsPersons`** (`app/settings/actions.ts`,
+  gated on `resolveSettingsAccess`, same `searchPersonsForModeration` query).
+- **`lib/db/tree-settings.ts`** — `TreeSettings` gains `defaultRootPerson:
+PersonSearchOption | null`, read in the **same round trip** through
+  `default_root_person:person!tree_settings_default_root_person_id_fkey(…)`
+  (FK-hinted on purpose after #73, though `person` has no path back today).
+  `TreeSettingsPatch` omits it — the write shape is unchanged
+  (`defaultRootPersonId`, uuid or blank). `personSearchLabel` exported from
+  `moderation.ts` so the stored root reads exactly as the picker's options.
+- **`app/settings/TreeSettingsForm.tsx`** — the UUID input is gone: the
+  current root's name (or "Not set — the tree opens on the earliest person
+  added"), a **Clear** button, and the picker. A local `defaultRootPerson`
+  mirrors the picked option for display only; the id still travels in the
+  form patch. The `personExists` failure copy on save now reads "That person
+  no longer exists" (nobody types an id any more).
+- **Verified live** on the dev stack as the demo admin: stored root shown
+  by name; search "Harriet" → pick → save → DB holds Harriet Vance and the
+  reload shows the name; Clear → save → DB null + "Not set"; pick Samuel →
+  save restored the seed root; `/moderation`'s Reassign picker still
+  searches after the move. The web dev server was started as a
+  harness-tracked `pnpm dev` (the previous session's had stopped; Supabase
+  stayed up) and stopped at the end — port 3000 is free.
+- Code review (foreground): no correctness findings; a doc-drift advisory
+  (`searchPersonsForModeration`'s JSDoc now names both routes), a
+  stable-reference note on the `search` prop, and the error copy applied.
+  Filed **#85** (three person-name formatters with different fallbacks;
+  out of diff). Full pnpm gate green (**598** tests, unchanged — the change
+  is wiring + a select string; the pure validator is untouched). Deno gate
+  not run — `supabase/functions/` untouched.
 
 **Issue #52 — Tree card: open the profile (icon + double-click): done,
 merged to `main`.** SPEC §8.2, WAYFINDER decision 28,

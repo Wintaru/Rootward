@@ -320,7 +320,7 @@ export async function unlinkAccount(
   return { ok: true };
 }
 
-// --- person search (the approve / reassign picker) --------------------------
+// --- person search (the shared `PersonPicker`) -------------------------------
 
 export interface PersonSearchOption {
   readonly id: string;
@@ -329,7 +329,10 @@ export interface PersonSearchOption {
 
 const PERSON_SEARCH_LIMIT = 8;
 
-function personSearchLabel(row: {
+/** The name a `PersonSearchOption` carries — given + surname, else nickname.
+ * Shared with `tree-settings.ts` so the stored default root reads exactly as
+ * the picker's options do (issue #53). */
+export function personSearchLabel(row: {
   given_name: string | null;
   surname: string | null;
   nickname: string | null;
@@ -342,10 +345,12 @@ function personSearchLabel(row: {
 }
 
 /**
- * Name search backing the approve/reassign person picker — a moderator has
- * only the requester's submitted name/birth info to go on, not a person id
- * (unlike the invite form's `?personId=` prefill from an existing profile
- * page). Case-insensitive substring match on given name, surname, or
+ * Name search behind every `PersonPicker` — `/moderation`'s approve /
+ * reassign (a moderator has only the requester's submitted name/birth info
+ * to go on, not a person id, unlike the invite form's `?personId=` prefill)
+ * and `/settings`' default root (issue #53). Each route wraps it in its own
+ * access-gated server action; the name keeps the original home for the
+ * call sites. Case-insensitive substring match on given name, surname, or
  * nickname — `personSearchLabel` below falls back to nickname when neither
  * name part is set, so the search has to cover it too, or a
  * nickname-only person (common for an infant or an unidentified relative)

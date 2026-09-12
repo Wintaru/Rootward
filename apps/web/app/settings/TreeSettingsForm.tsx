@@ -3,9 +3,10 @@
 import { type FormEvent, useId, useState } from "react";
 
 import { Section } from "@/components/layout/Section";
-import type { TreeSettings } from "@/lib/db";
+import { PersonPicker } from "@/components/person/PersonPicker";
+import type { PersonSearchOption, TreeSettings } from "@/lib/db";
 
-import { saveTreeSettingsAction } from "./actions";
+import { saveTreeSettingsAction, searchSettingsPersons } from "./actions";
 
 /** Submit lifecycle — a discriminated union so no two flags disagree. */
 type SubmitState =
@@ -50,6 +51,11 @@ export function TreeSettingsForm({
   readonly settings: TreeSettings;
 }) {
   const [form, setForm] = useState<FormState>(() => toFormState(settings));
+  // Display-only companion to `form.defaultRootPersonId` (issue #53): the
+  // picked person's name. Not part of the patch — the server re-derives the
+  // name from the id on the next render.
+  const [defaultRootPerson, setDefaultRootPerson] =
+    useState<PersonSearchOption | null>(settings.defaultRootPerson);
   const [state, setState] = useState<SubmitState>({ status: "idle" });
   const busy = state.status === "submitting";
 
@@ -57,7 +63,6 @@ export function TreeSettingsForm({
   const treeDescriptionId = useId();
   const allowSelfSignupId = useId();
   const livingThresholdYearsId = useId();
-  const defaultRootPersonIdId = useId();
   const defaultGenerationsUpId = useId();
   const defaultGenerationsDownId = useId();
   const mediaMaxBytesId = useId();
@@ -146,16 +151,46 @@ export function TreeSettingsForm({
           />
         </Field>
 
-        <Field label="Default root person ID" htmlFor={defaultRootPersonIdId}>
-          <input
-            id={defaultRootPersonIdId}
-            value={form.defaultRootPersonId}
-            onChange={(e) => set("defaultRootPersonId", e.target.value)}
-            placeholder="00000000-0000-0000-0000-000000000000"
+        <div className="flex flex-col gap-1.5">
+          <span className="text-sm font-medium">Default root person</span>
+          <p className="text-sm">
+            {form.defaultRootPersonId === "" ? (
+              <span className="text-muted-foreground">
+                Not set — the tree opens on the earliest person added.
+              </span>
+            ) : (
+              <>
+                {defaultRootPerson?.name ?? (
+                  <span className="font-mono">{form.defaultRootPersonId}</span>
+                )}
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => {
+                    set("defaultRootPersonId", "");
+                    setDefaultRootPerson(null);
+                  }}
+                  className="text-muted-foreground ml-3 text-xs underline disabled:opacity-50"
+                >
+                  Clear
+                </button>
+              </>
+            )}
+          </p>
+          <PersonPicker
+            label={
+              form.defaultRootPersonId === ""
+                ? "Choose a person"
+                : "Choose a different person"
+            }
             disabled={busy}
-            className={`${inputClass} font-mono`}
+            search={searchSettingsPersons}
+            onSelect={(person) => {
+              set("defaultRootPersonId", person.id);
+              setDefaultRootPerson(person);
+            }}
           />
-        </Field>
+        </div>
 
         <div className="flex gap-4">
           <Field
