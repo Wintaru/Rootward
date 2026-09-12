@@ -5,7 +5,10 @@ the relevant `docs/SPEC.md` section.
 
 ## Current state
 
-**Next issue: #50, then #51–#54 in order (all `ready`).** A 2026-09-12 audit
+**Next issue: #51, then #52–#54 in order (all `ready`).** **#50 (header) is
+done this session, staged on `feat/header-nav-signout` — see below. #64 was
+already merged to `main` (`5709d17`) but left open — closed by hand this
+session, same stale-issue pattern as before.** A 2026-09-12 audit
 found that every §10 item is built but the app is not usable: no sign-out, no
 navigation to `/import` / `/moderation` / `/settings`, no way to open a
 profile from the tree, a 404 on a fresh deploy, and no way to create a person
@@ -19,8 +22,51 @@ WAYFINDER decision 36 + the new **Journeys** section. After #54, label #55
 before). #40 (README) waits until Phase 9 lands, so the screenshots show a
 usable app. The audit itself is in `GAP-AUDIT-HANDOFF.md` (gitignored).
 
+**Issue #50 — Header: sign-out, role-gated nav, My record: done, staged on
+`feat/header-nav-signout`.** SPEC §8.1 "Global chrome", audit items A1 + A2 +
+D2. No migration.
+
+- **`lib/auth/header-nav.ts`** (new, pure, tested) — `resolveHeaderNav`
+  returns the link list in display order: Home, **My record**
+  (`/person/<account.person_id>`, when linked), **Import** + **Moderation**
+  (`isActiveModerator`), **Settings** (`isActiveAdmin`). Empty for a pending
+  or suspended account. Reuses the `access.ts` predicates, so the nav gate
+  and the page guards share one rule source. 6 vitest cases.
+- **`lib/auth/current-account.ts`** — the `account` select gains `person_id`
+  (same round trip); `CurrentAccount` gains `personId: string | null`.
+- **`app/auth/actions.ts`** (new) — `signOutAction`, a `"use server"`
+  action: `auth.signOut({ scope: "local" })` → `revalidatePath("/",
+"layout")` → `redirect("/login")`. Local scope on purpose: signing out of
+  a shared computer must not sign the member out of their phone. An error is
+  logged, not thrown — auth-js clears the local session before it reports
+  most failures, so a throw would show an error page to a user who is in
+  fact signed out (review finding). See `DECISIONS.md`.
+- **`app/layout.tsx`** — the header now renders for **any** signed-in
+  visitor (was approved-only), so a pending member on `/onboarding` can
+  sign out too. Nav links from `resolveHeaderNav`, the bell (moderator+,
+  unchanged), and a plain `<form action={signOutAction}>` — works before
+  hydration, the exact failure the `allowedDevOrigins` incident hit.
+- **Verified live** on the shared dev stack as the demo admin through the
+  real magic-link flow (Mailpit): Home / Import / Moderation / Settings +
+  bell + Sign out render; **My record** appeared after linking the admin to
+  Samuel Ashby (then unlinked again); Sign out landed on `/login` and a
+  follow-up `/import` request bounced back to `/login`. Note: the PKCE
+  verifier lives under the origin the sign-in started from, so the flow must
+  start on `http://localhost:3000` (the auth site URL), not `127.0.0.1`.
+- **Found while verifying, filed as #73, not fixed here (out of diff):**
+  `/settings` and `/moderation` both **500 for an admin** —
+  `listAllAccounts` / `listLinkedAccounts` embed `person(...)` from
+  `account`, and PostgREST rejects it as ambiguous (two FK paths between the
+  tables). Fix is the `person!account_person_id_fkey(...)` hint. Neither
+  route had a live click-through when it shipped. **Take #73 before #53,
+  which builds on `/settings`.**
+- Code review (foreground): no correctness findings; the sign-out error
+  path (above) and a `.gitignore` entry for `.playwright-mcp/` applied, plus
+  two nits. Full pnpm gate green (**598** tests, +6). Deno gate not run —
+  `supabase/functions/` untouched.
+
 **Issue #64 — Docs: record Phase 9 in SPEC §10 and WAYFINDER decision 36:
-done, staged on `docs/phase-9-spec-wayfinder`.** Docs only, no code.
+done, merged to `main` (`5709d17`), closed.** Docs only, no code.
 `docs/WAYFINDER.md`: the destination gains a product sentence ("a family
 maintains and grows its tree on a website it hosts itself") with the original
 feature-list sentence kept and marked amended in place; decision 21 marked

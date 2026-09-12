@@ -3,10 +3,13 @@ import Link from "next/link";
 import "./globals.css";
 
 import { NotificationBell } from "@/components/notifications/NotificationBell";
-import { isActiveModerator, isApproved } from "@/lib/auth/access";
+import { isActiveModerator } from "@/lib/auth/access";
 import { getCurrentAccount } from "@/lib/auth/current-account";
+import { resolveHeaderNav } from "@/lib/auth/header-nav";
 import { getUnreadNotificationCount } from "@/lib/db/notifications";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+
+import { signOutAction } from "./auth/actions";
 
 export const metadata: Metadata = {
   title: "Rootward",
@@ -14,16 +17,16 @@ export const metadata: Metadata = {
 };
 
 /**
- * Persistent chrome for an approved account: a "Home" link back to `/` (the
- * §8.1 router, which sends an approved viewer to their default tree view —
- * the only way back to it once a re-centred or expanded tree view has no
- * URL a person would think to type by hand) and, for a moderator+, the
- * notification bell (SPEC §8.5: "moderators subscribe app-wide"). A pending
- * or signed-out visitor gets no header at all, no layout shift.
+ * Global chrome for a signed-in visitor (SPEC §8.1, #50): the role-gated
+ * links `resolveHeaderNav` decides ("Home", "My record", "Import",
+ * "Moderation", "Settings" — empty for a pending member, who still needs the
+ * sign-out), the notification bell for a moderator+ (SPEC §8.5: "moderators
+ * subscribe app-wide"), and a sign-out form. A signed-out visitor gets no
+ * header at all, no layout shift — they can reach only `/login` and the
+ * `/auth/*` handlers.
  */
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   const current = await getCurrentAccount();
-  const showHeader = current !== null && isApproved(current.account);
   const showBell = current !== null && isActiveModerator(current.account);
   const unreadCount = showBell
     ? await getUnreadNotificationCount(
@@ -35,17 +38,35 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className="h-full antialiased">
       <body className="bg-background text-foreground flex min-h-full flex-col">
-        {showHeader && (
-          <header className="border-border flex items-center justify-between border-b px-4 py-2">
-            <Link href="/" className="text-sm font-medium hover:underline">
-              Home
-            </Link>
-            {showBell && current !== null && (
-              <NotificationBell
-                accountId={current.userId}
-                initialUnreadCount={unreadCount}
-              />
-            )}
+        {current !== null && (
+          <header className="border-border flex items-center justify-between gap-4 border-b px-4 py-2">
+            <nav aria-label="Main" className="flex flex-wrap gap-x-4 gap-y-1">
+              {resolveHeaderNav(current).map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className="text-sm font-medium hover:underline"
+                >
+                  {link.label}
+                </Link>
+              ))}
+            </nav>
+            <div className="flex items-center gap-4">
+              {showBell && (
+                <NotificationBell
+                  accountId={current.userId}
+                  initialUnreadCount={unreadCount}
+                />
+              )}
+              <form action={signOutAction}>
+                <button
+                  type="submit"
+                  className="text-muted-foreground text-sm hover:underline"
+                >
+                  Sign out
+                </button>
+              </form>
+            </div>
           </header>
         )}
         {children}

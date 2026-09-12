@@ -1,0 +1,65 @@
+import { describe, expect, it } from "vitest";
+
+import { resolveHeaderNav } from "./header-nav";
+
+const PERSON_ID = "d0000000-0000-4000-8000-000000000001";
+
+function labels(
+  ...args: Parameters<typeof resolveHeaderNav>
+): readonly string[] {
+  return resolveHeaderNav(...args).map((link) => link.label);
+}
+
+describe("resolveHeaderNav", () => {
+  it("shows nothing to a visitor with no account row", () => {
+    expect(labels({ account: null, personId: null })).toEqual([]);
+  });
+
+  it("shows nothing to a pending or suspended account", () => {
+    expect(
+      labels({
+        account: { role: "viewer", status: "pending" },
+        personId: null,
+      }),
+    ).toEqual([]);
+    expect(
+      labels({
+        account: { role: "admin", status: "suspended" },
+        personId: PERSON_ID,
+      }),
+    ).toEqual([]);
+  });
+
+  it("shows only Home to an unlinked viewer", () => {
+    expect(
+      labels({ account: { role: "viewer", status: "active" }, personId: null }),
+    ).toEqual(["Home"]);
+  });
+
+  it("adds My record for a linked viewer, pointing at their person", () => {
+    const links = resolveHeaderNav({
+      account: { role: "viewer", status: "active" },
+      personId: PERSON_ID,
+    });
+    expect(links.map((link) => link.label)).toEqual(["Home", "My record"]);
+    expect(links[1]?.href).toBe(`/person/${PERSON_ID}`);
+  });
+
+  it("adds Import and Moderation, but not Settings, for a moderator", () => {
+    expect(
+      labels({
+        account: { role: "moderator", status: "active" },
+        personId: null,
+      }),
+    ).toEqual(["Home", "Import", "Moderation"]);
+  });
+
+  it("adds Settings for an admin, after the moderator links", () => {
+    expect(
+      labels({
+        account: { role: "admin", status: "active" },
+        personId: PERSON_ID,
+      }),
+    ).toEqual(["Home", "My record", "Import", "Moderation", "Settings"]);
+  });
+});

@@ -11,6 +11,9 @@ export interface CurrentAccount {
   readonly userId: string;
   readonly email: string | null;
   readonly account: AccountAccess | null;
+  /** `account.person_id` — the linked person, for the header's "My record"
+   * link (#50). Null when unlinked or when there is no `account` row yet. */
+  readonly personId: string | null;
 }
 
 /**
@@ -48,7 +51,7 @@ export const getCurrentAccount = cache(
 
     const { data: account, error: accountError } = await supabase
       .from("account")
-      .select("role, status")
+      .select("role, status, person_id")
       .eq("id", user.id)
       .maybeSingle();
 
@@ -61,7 +64,11 @@ export const getCurrentAccount = cache(
     return {
       userId: user.id,
       email: user.email ?? null,
-      account: account,
+      account:
+        account === null
+          ? null
+          : { role: account.role, status: account.status },
+      personId: account?.person_id ?? null,
     };
   },
 );
