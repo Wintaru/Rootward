@@ -40,6 +40,18 @@ import "./family-tree.css";
 const TRANSITION_MS = 800;
 
 /**
+ * How long a single card click waits before it re-centres, so a double-click
+ * (open the profile, decision 28 / issue #52) can cancel it. The browser fires
+ * `click` twice before `dblclick`; without this grace the first click would
+ * already have pushed `/tree/<id>` — one wasted neighbourhood fetch and a
+ * history entry the profile then lands on top of. Best effort, not a
+ * guarantee: OS double-click thresholds range from ~500 ms (the common
+ * default) to several seconds, and a slower double-click degrades to the
+ * re-centre push followed by the profile push.
+ */
+const DOUBLE_CLICK_GRACE_MS = 250;
+
+/**
  * Card box, shared between `setCardDim` and the generation-band geometry
  * (SPEC §8.2). `CARD_WIDTH` / `CARD_HEIGHT` must match `.rw-card` in
  * `family-tree.css`.
@@ -79,6 +91,11 @@ interface FamilyTreeProps {
  * affordance fetches one branch via `expandRelatives` and merges it into local
  * state, which flows through the very same derive-then-sync path as a real
  * navigation — the chart never has to know the difference.
+ *
+ * Opening the profile (issue #52, decision 28) is a separate action from the
+ * re-centre: the card's icon button and a double-click on the card body both
+ * push `/person/<id>`. The icon is intercepted like an expand button; the
+ * double-click cancels the single click's pending re-centre.
  *
  * A repeated ancestor (pedigree collapse) is drawn once per path, each copy
  * carrying a `×N` badge. `family-chart`'s `setDuplicateBranchToggle` would add a
@@ -147,6 +164,22 @@ export function FamilyTree({
       });
     };
   });
+
+  // Same shape again for the open-profile action (issue #52): the delegated
+  // listeners in the build effect read the current router through this ref.
+  const openProfileRef = useRef<(personId: string) => void>(() => {});
+  useEffect(() => {
+    openProfileRef.current = (personId: string) => {
+      startNavigation(() => {
+        router.push(`/person/${personId}`);
+      });
+    };
+  });
+
+  // The build effect owns the single-click grace timer (see
+  // `DOUBLE_CLICK_GRACE_MS`); this lets the depth stepper, rendered by React
+  // outside that effect, cancel a pending re-centre too.
+  const cancelPendingRecentreRef = useRef<() => void>(() => {});
 
   // Same "bound once, kept fresh via a ref" shape as navigateRef — the
   // click-delegation listener that catches an expand-affordance click (in the
@@ -241,27 +274,59 @@ export function FamilyTree({
       );
 
     // Replace the library's in-window re-centre with a real navigation. The
-    // page refetches and the sync effect animates to the result.
+    // page refetches and the sync effect animates to the result. The
+    // navigation is held for `DOUBLE_CLICK_GRACE_MS` so a double-click (open
+    // the profile, below) can cancel it; a second single click within the
+    // grace simply restarts the wait with the newer card.
+    let pendingRecentre: ReturnType<typeof setTimeout> | null = null;
+    const cancelPendingRecentre = () => {
+      if (pendingRecentre !== null) {
+        clearTimeout(pendingRecentre);
+        pendingRecentre = null;
+      }
+    };
+    cancelPendingRecentreRef.current = cancelPendingRecentre;
     card.setOnCardClick((_event: unknown, node: unknown) => {
       const personId = readNodeId(node);
-      if (personId !== null) {
-        navigateRef.current(personId);
+      if (personId === null) {
+        return;
       }
+      cancelPendingRecentre();
+      pendingRecentre = setTimeout(() => {
+        pendingRecentre = null;
+        navigateRef.current(personId);
+      }, DOUBLE_CLICK_GRACE_MS);
     });
 
-    // Intercept an expand-in-place click (issue #24) before `setOnCardClick`'s
-    // handler — bound above, directly on the card element — can fire and
-    // navigate instead. That handler runs in the bubble phase during the
-    // click's target phase, which happens *before* a capture-phase listener on
-    // an ancestor would otherwise see the bubble; running this one in the
-    // capture phase is what gets it there first. `signal` ties the listener's
-    // lifetime to this effect so a StrictMode remount does not double-bind it.
-    const expandClickController = new AbortController();
+    // Intercept an expand-in-place click (issue #24) or an open-profile click
+    // (issue #52) before `setOnCardClick`'s handler — bound above, directly on
+    // the card element — can fire and re-centre instead. That handler runs in
+    // the bubble phase during the click's target phase, which happens *before*
+    // a capture-phase listener on an ancestor would otherwise see the bubble;
+    // running this one in the capture phase is what gets it there first.
+    // `signal` ties the listener's lifetime to this effect so a StrictMode
+    // remount does not double-bind it.
+    const cardActionController = new AbortController();
     container.addEventListener(
       "click",
       (event) => {
         const target = event.target;
         if (!(target instanceof Element)) {
+          return;
+        }
+        const profileButton = target.closest<HTMLElement>(
+          "[data-open-profile]",
+        );
+        if (profileButton !== null) {
+          event.stopPropagation();
+          event.preventDefault();
+          // A card-body click inside the grace must not re-centre on top of
+          // the profile push — the later action wins.
+          cancelPendingRecentre();
+          const personId = profileButton.dataset.openProfile;
+          if (personId !== undefined && isUuid(personId)) {
+            openProfileRef.current(personId);
+          }
           return;
         }
         const button = target.closest<HTMLElement>("[data-expand-relation]");
@@ -270,6 +335,7 @@ export function FamilyTree({
         }
         event.stopPropagation();
         event.preventDefault();
+        cancelPendingRecentre();
         const { expandRelation, expandTarget, expandAnchor } = button.dataset;
         if (
           expandTarget === undefined ||
@@ -280,7 +346,38 @@ export function FamilyTree({
         }
         expandRef.current(expandTarget, expandAnchor, expandRelation);
       },
-      { capture: true, signal: expandClickController.signal },
+      { capture: true, signal: cardActionController.signal },
+    );
+
+    // Double-click on the card body opens the profile (issue #52). Capture
+    // phase for the same reason as above, and also because d3-zoom binds its
+    // own `dblclick.zoom` on the canvas `family-chart` creates — stopping the
+    // event here keeps a double-click anywhere on a card from zooming the
+    // chart as well. A double-click that lands on one of the card's buttons
+    // is theirs (each click already ran above), not a profile open.
+    container.addEventListener(
+      "dblclick",
+      (event) => {
+        const target = event.target;
+        if (!(target instanceof Element)) {
+          return;
+        }
+        const cardBody = target.closest<HTMLElement>("[data-person-id]");
+        if (cardBody === null) {
+          return;
+        }
+        event.stopPropagation();
+        event.preventDefault();
+        cancelPendingRecentre();
+        if (target.closest("button") !== null) {
+          return;
+        }
+        const personId = cardBody.dataset.personId;
+        if (personId !== undefined && isUuid(personId)) {
+          openProfileRef.current(personId);
+        }
+      },
+      { capture: true, signal: cardActionController.signal },
     );
 
     // Redraw the generation bands after every layout — the initial render and
@@ -297,7 +394,9 @@ export function FamilyTree({
     // and its d3 zoom behaviour; the library attaches no window-level listeners
     // that would outlive it.
     return () => {
-      expandClickController.abort();
+      cancelPendingRecentre();
+      cancelPendingRecentreRef.current = () => {};
+      cardActionController.abort();
       container.innerHTML = "";
       chartRef.current = null;
     };
@@ -345,6 +444,9 @@ export function FamilyTree({
         depthDefaults={depthDefaults}
         disabled={isNavigating || isExpanding}
         onChange={(next) => {
+          // A card click still inside its grace would otherwise fire after
+          // this replace and push the old depth back.
+          cancelPendingRecentreRef.current();
           startNavigation(() => {
             router.replace(treeHref(tree.mainId, next, depthDefaults));
           });

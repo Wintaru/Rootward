@@ -5,10 +5,11 @@ the relevant `docs/SPEC.md` section.
 
 ## Current state
 
-**Next issue: #52, then #73 (the `/settings` 500 — before #53, which builds
-on `/settings`), then #53, #54 in order (all `ready` but #73).** **#51
-(`/tree` index) is done this session, staged on `feat/tree-index-route` — see
-below. #50 (header) is merged to `main` (`b825745`), closed.** A 2026-09-12 audit
+**Next issue: #73 (the `/settings` 500 — before #53, which builds on
+`/settings`), then #53, #54 in order (all `ready` but #73).** **#52 (tree
+card → profile) is done this session, staged on `feat/tree-card-open-profile`
+— see below. #51 (`/tree` index) is merged to `main` (`3d902db`), closed. #50
+(header) is merged to `main` (`b825745`), closed.** A 2026-09-12 audit
 found that every §10 item is built but the app is not usable: no sign-out, no
 navigation to `/import` / `/moderation` / `/settings`, no way to open a
 profile from the tree, a 404 on a fresh deploy, and no way to create a person
@@ -22,9 +23,53 @@ WAYFINDER decision 36 + the new **Journeys** section. After #54, label #55
 before). #40 (README) waits until Phase 9 lands, so the screenshots show a
 usable app. The audit itself is in `GAP-AUDIT-HANDOFF.md` (gitignored).
 
+**Issue #52 — Tree card: open the profile (icon + double-click): done,
+staged on `feat/tree-card-open-profile`.** SPEC §8.2, WAYFINDER decision 28,
+audit item A3. No migration, no server code.
+
+- **`lib/tree/person-card.ts`** — the card root carries `data-person-id`
+  and a real `<button class="rw-card__profile" data-open-profile="<id>">`
+  ("Open profile", an open-in arrow SVG). Both omitted when `personId` is
+  empty (a `family-chart` placeholder node). 3 new vitest cases (present,
+  absent for a placeholder, escaped).
+- **`components/tree/family-tree.css`** — the button sits centred on the
+  card's right edge, half outside, in the same visual language as the
+  `--up` / `--down` expand buttons, so it takes no width from the name
+  column. The shared button styles are one `.rw-card__expand,
+.rw-card__profile` block. `.rw-card` gains `user-select: none` — a
+  double-click would otherwise select the name text.
+- **`components/tree/FamilyTree.tsx`** — the capture-phase click listener
+  also intercepts `[data-open-profile]` → `router.push('/person/<id>')`
+  (`openProfileRef`, same bound-once / kept-fresh shape). A new
+  capture-phase `dblclick` listener on any `[data-person-id]` card opens
+  the profile from the body and stops propagation, which also keeps
+  d3-zoom's `dblclick.zoom` on `#f3Canvas` from zooming the chart. **The
+  single-click re-centre is now held for `DOUBLE_CLICK_GRACE_MS` (250 ms)**
+  so the double-click can cancel it — without that, a double-click pushed
+  `/tree/<id>` (a wasted fetch and a history entry) before `/person/<id>`.
+  Best effort: a slower OS double-click degrades to the old two pushes. See
+  `DECISIONS.md`.
+- **Verified live** on the shared dev stack as the demo admin: icon on a
+  non-focus card → its profile, no re-centre; single click → re-centre;
+  double-click on a non-focus card → exactly one `pushState`
+  (`/person/…`); double-click on the focus card → profile.
+- Code review (foreground) — **one must-fix applied:** a card-body click
+  followed within the grace by a button click (profile or expand) left the
+  timer running, so the re-centre fired on top of the profile push. Every
+  button branch and the `dblclick` listener now cancel the pending
+  re-centre first, and the `dblclick` stop-propagation moved above the
+  not-a-button guard so a double-click on a button no longer zooms. **One
+  should-fix applied:** the depth stepper's `onChange` cancels a pending
+  re-centre through `cancelPendingRecentreRef` — before, the grace opened a
+  250 ms window where a stepper click was accepted and then the timer pushed
+  the old depth back. Both re-verified live (one push / one replace). Filed
+  **#83** (a `personHref` helper — the `/person/<id>` template is now inlined
+  four times; out of diff). Full pnpm gate green (**601** tests, +3). Deno
+  gate not run — `supabase/functions/` untouched.
+
 **Issue #51 — `/tree` index route: empty state, root fallback, import sets
-the default root: done, staged on `feat/tree-index-route`.** SPEC §8.1 route
-table + §7, audit item A4. No migration.
+the default root: done, merged to `main` (`3d902db`, `4ed4214`), closed.**
+SPEC §8.1 route table + §7, audit item A4. No migration.
 
 - **`app/tree/page.tsx`** (new) — approved-only, same guard as
   `/tree/[personId]`. Three branches: root set → `/tree/<root>`; root unset

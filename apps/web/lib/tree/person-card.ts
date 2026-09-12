@@ -18,7 +18,10 @@ import type { FamilyChartPersonData } from "./to-family-chart";
  * @param personId the person's id — carried on every expand-affordance button
  *   ({@link expandButtonHtml}) as `data-expand-anchor`, the person already on
  *   screen the click's `expandRelatives` call and generation math are relative
- *   to (issue #24, `lib/tree/expand-tree.ts`).
+ *   to (issue #24, `lib/tree/expand-tree.ts`); and on the card root as
+ *   `data-person-id` plus the open-profile button (issue #52), which
+ *   `FamilyTree`'s delegated double-click / click listeners read. Empty for a
+ *   library-synthesised placeholder, which then gets neither.
  * @param duplicateCount how many times this person appears in the current
  *   layout — non-zero for a repeated ancestor (pedigree collapse). `family-chart`
  *   sets it on every copy; the card shows a small `×N` badge.
@@ -47,8 +50,14 @@ export function personCardHtml(
       })
     : "";
 
+  const isRealPerson = personId.length > 0;
+  const personIdAttr = isRealPerson
+    ? ` data-person-id="${escapeHtml(personId)}"`
+    : "";
+  const profileButton = isRealPerson ? profileButtonHtml(personId) : "";
+
   return [
-    `<div class="rw-card rw-card--${person.sex}">`,
+    `<div class="rw-card rw-card--${person.sex}"${personIdAttr}>`,
     person.canExpandUp
       ? expandButtonHtml({
           modifier: "up",
@@ -65,6 +74,7 @@ export function personCardHtml(
     `</span>`,
     dupBadge,
     partnerBadge,
+    profileButton,
     person.canExpandDown
       ? expandButtonHtml({
           modifier: "down",
@@ -109,6 +119,20 @@ function expandButtonHtml(spec: ExpandButtonSpec): string {
     `data-expand-target="${escapeHtml(spec.target)}" ` +
     `data-expand-anchor="${escapeHtml(spec.anchor)}" ` +
     `data-expand-relation="${spec.relation}">${EXPAND_GLYPH[spec.modifier]}</button>`
+  );
+}
+
+/**
+ * The open-profile affordance (issue #52, decision 28). Same shape as
+ * {@link expandButtonHtml}: a real `<button>` that `FamilyTree`'s capture-phase
+ * click listener catches by `data-open-profile` and routes to `/person/<id>`
+ * instead of letting `family-chart`'s card-click handler re-centre the tree.
+ */
+function profileButtonHtml(personId: string): string {
+  return (
+    `<button type="button" class="rw-card__profile" ` +
+    `aria-label="Open profile" title="Open profile" ` +
+    `data-open-profile="${escapeHtml(personId)}">${OPEN_PROFILE_SVG}</button>`
   );
 }
 
@@ -162,4 +186,11 @@ export function escapeHtml(value: string): string {
 const SILHOUETTE_SVG =
   '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">' +
   '<path d="M12 12c2.7 0 4.9-2.2 4.9-4.9S14.7 2.2 12 2.2 7.1 4.4 7.1 7.1 9.3 12 12 12Zm0 2.4c-3.3 0-9.8 1.6-9.8 4.9v2.5h19.6v-2.5c0-3.3-6.5-4.9-9.8-4.9Z"/>' +
+  "</svg>";
+
+/** "Open in" arrow — a box with an arrow leaving its top-right corner. */
+const OPEN_PROFILE_SVG =
+  '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" ' +
+  'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+  '<path d="M6.5 3H3v10h10V9.5M9 3h4v4M13 3 7.5 8.5"/>' +
   "</svg>";

@@ -175,6 +175,9 @@
   box-shadow: 0 1px 3px rgb(0 0 0 / 45%);
   font-size: 12px;
   line-height: 1.25;
+  /* A double-click opens the profile (issue #52); `preventDefault` on
+   * `dblclick` cannot stop the word selection that starts on `mousedown`. */
+  user-select: none;
 }
 
 .rw-card--male {
@@ -244,15 +247,18 @@
 }
 
 /*
- * Expand-in-place affordances (issue #24, SPEC §8.2). `.rw-card__expand--up` /
- * `--down` sit centred on the card's top / bottom edge and continue the
- * ancestor / descendant chain; `--partner` sits at the top-left corner (the
- * duplicate badge already owns top-right) and resolves an off-window spouse.
- * Real `<button>` elements — `FamilyTree`'s capture-phase click listener
- * intercepts them before `family-chart`'s own card-click handler can treat the
- * click as a re-centre.
+ * Card-edge affordances. Expand-in-place (issue #24, SPEC §8.2):
+ * `.rw-card__expand--up` / `--down` sit centred on the card's top / bottom edge
+ * and continue the ancestor / descendant chain; `--partner` sits at the
+ * top-left corner (the duplicate badge already owns top-right) and resolves an
+ * off-window spouse. Open profile (issue #52, decision 28): `.rw-card__profile`
+ * sits centred on the right edge, half outside like `--up` / `--down`, so it
+ * takes no width from the name. All are real `<button>` elements —
+ * `FamilyTree`'s capture-phase click listener intercepts them before
+ * `family-chart`'s own card-click handler can treat the click as a re-centre.
  */
-.rw-card__expand {
+.rw-card__expand,
+.rw-card__profile {
   position: absolute;
   z-index: 1;
   display: grid;
@@ -269,7 +275,8 @@
   cursor: pointer;
 }
 
-.rw-card__expand:hover {
+.rw-card__expand:hover,
+.rw-card__profile:hover {
   background-color: rgb(0 0 0 / 65%);
 }
 
@@ -288,6 +295,17 @@
 .rw-card__expand--partner {
   top: 4px;
   left: 4px;
+}
+
+.rw-card__profile {
+  top: 50%;
+  right: -10px;
+  transform: translateY(-50%);
+}
+
+.rw-card__profile svg {
+  width: 11px;
+  height: 11px;
 }
 
 /* Focus ring — keyed on the class `family-chart` puts on the centred card. */
