@@ -5,6 +5,16 @@ the relevant `docs/SPEC.md` section.
 
 ## Current state
 
+**Next issue: #64, then #50–#54 in order.** A 2026-09-12 audit found that
+every §10 item is built but the app is not usable: no sign-out, no navigation
+to `/import` / `/moderation` / `/settings`, no way to open a profile from the
+tree, a 404 on a fresh deploy, and no way to create a person or a relationship
+without a GEDCOM. Milestone **Phase 9 — Gap closure** (#50–#64, label
+`phase:9`) holds the fixes. #64 (docs: SPEC §10 Phase 9 + WAYFINDER decision
+36 through the `wayfinder` skill) goes first — it is the build contract for
+#55–#57. #40 (README) waits until Phase 9 lands, so the screenshots show a
+usable app. The audit itself is in `GAP-AUDIT-HANDOFF.md` (gitignored).
+
 **Phase:** 8 — Phase 0 (#1–#3), Phase 1 (#4–#10), Phase 2 (#11–#16), Phase 3
 (#17, #38, #18, #19, #20), Phase 4 (#21–#25), Phase 5 (#26–#32, all eight
 issues), Phase 6 (#33, #34), and Phase 7 (#36, #37) are all merged to `main`.
