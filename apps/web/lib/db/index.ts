@@ -17,6 +17,7 @@ export * from "./source-edit";
 export type { RowConflict } from "./conflict";
 export * from "./place";
 export * from "./import-jobs";
+export * from "./export-jobs";
 export * from "./invitations";
 export * from "./moderation";
 export * from "./onboarding";
