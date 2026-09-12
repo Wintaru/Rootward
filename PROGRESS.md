@@ -9,8 +9,9 @@ the relevant `docs/SPEC.md` section.
 every §10 item is built but the app is not usable: no sign-out, no navigation
 to `/import` / `/moderation` / `/settings`, no way to open a profile from the
 tree, a 404 on a fresh deploy, and no way to create a person or a relationship
-without a GEDCOM. Milestone **Phase 9 — Gap closure** (#50–#64, label
-`phase:9`) holds the fixes. #64 (docs: SPEC §10 Phase 9 + WAYFINDER decision
+without a GEDCOM. Milestone **Phase 9 — Gap closure** (#50–#65, label
+`phase:9`) holds the fixes, and a second product-lens pass added #66–#72
+to the Post-MVP milestone. #64 (docs: SPEC §10 Phase 9 + WAYFINDER decision
 36 through the `wayfinder` skill) goes first — it is the build contract for
 #55–#57. #40 (README) waits until Phase 9 lands, so the screenshots show a
 usable app. The audit itself is in `GAP-AUDIT-HANDOFF.md` (gitignored).
