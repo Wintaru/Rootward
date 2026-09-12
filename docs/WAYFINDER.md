@@ -5,10 +5,21 @@
 A settled architecture, data model, and access model for the genealogy site MVP —
 enough decisions locked that implementation becomes ordinary session work.
 
+**Product sentence (amended 2026-09-12 by decision 36):** a family maintains
+and grows its tree on a website it hosts itself. Viewers browse it, moderators
+build and correct it, one admin runs it. "Maintains and grows" is the tiebreaker
+for scope: a thing the site holds can be created, linked, and deleted from the UI.
+
 MVP scope: import a GEDCOM, view the tree with a focused-person / root-generation
 navigation, edit people in a MacFamilyTree-style full-screen panel as a moderator,
 export a GEDCOM, with auth and a "claim your node" onboarding. Self-hostable and
 open source is a constraint throughout, not a later add-on.
+**⚠️ AMENDED 2026-09-12 by decision 36** — this sentence is a feature list, and
+it was built literally: it never says a moderator _creates_ a person, _links_
+two people, or _deletes_ one, so nothing downstream built those. The product
+sentence above is the destination now. The feature list stays as the record of
+what was originally asked. The **Journeys** section below is the other half of
+the fix — it holds the capabilities no decision ever raised.
 
 Reference material (in `docs/reference/`):
 - `InitialIdeas.md` — original notes.
@@ -181,6 +192,15 @@ Settled 2026-08-30, continuing the same session.
     - **Change Log — plain database audit table for now**, not surfaced in the
       UI. A read-only per-person history is v2. The audit table is needed anyway
       for the multi-moderator version check (decision 15).
+    **⚠️ AMENDED 2026-09-12 by decision 36** — the MVP panel list gains a ninth
+    section, **Relationships** (add / remove parent, partner, child). The list
+    above copied the MacFamilyTree person editor, which has no such panel because
+    MacFamilyTree adds relatives on its tree canvas — and decision 23 made our
+    tree navigate-only, so no screen could add a relative. Also amended: the
+    Events panel names Marriage, but the build excluded family events from the
+    person edit view — decision 36 puts them back, grouped per union. The Name &
+    Gender panel gains the `visibility` and `is_living` controls decision 7
+    promised ("moderator sets the flag").
 
 22. **GEDCOM date model.**
     - **Storage — hybrid, raw plus parsed.** Each date value stores: `value_raw`
@@ -402,9 +422,154 @@ that found no numbered decision covered them.
     `public_visibility` setting from decision 20 is removed. A public read-only
     view stays a possible post-MVP feature. Amends decisions 6 and 20.
 
+## Decisions so far — gap closure
+
+Settled 2026-09-12 after a gap audit (`GAP-AUDIT-HANDOFF.md`, gitignored) found
+that every numbered §10 item was built and the app was still not usable.
+
+36. **In-app authoring — a moderator creates people and relationships without a
+    GEDCOM.** Amends the destination and decision 21.
+    - **What the audit found.** No sign-out, no navigation to `/import` /
+      `/moderation` / `/settings`, no way to open a profile from the tree, a 404
+      on a fresh deploy, no create-person, no add-parent / partner / child, no
+      marriage editing, no delete, no wipe, no export button, no privacy
+      controls, no hide-my-record request, no search. The database was ahead of
+      the UI on every one of these: the RLS write policies, `person.visibility`,
+      `person.is_living`, `export_job`, and the `hide_request` notification type
+      all existed with no caller.
+    - **Why the plan missed it.** Three things lined up. (1) The destination
+      was a feature list — "import, view, edit, export" — and it never said
+      _grow the tree_, so every later decision assumed the tree arrives by
+      import. (2) Decision 21 copied the MacFamilyTree person editor's panels,
+      and that screen has no relationships panel because MacFamilyTree adds
+      relatives on its tree canvas — which decision 23 made navigate-only here.
+      Together they closed the door on adding a relative without anyone
+      noticing. (3) The build rule "do one issue, pull nothing forward" means
+      plumbing with no issue (sign-out, navigation, empty state) never got a
+      session. The spec review that added decisions 34–35 looked for missing
+      technology choices, not missing user journeys.
+    - **Destination.** Restated as a product sentence (see the top of this
+      file). Create / link / delete for every entity follow from "maintains and
+      grows" and need no further decision each.
+    - **Relationships live in the edit view, not on the tree.** A ninth v1
+      section: add parent, add partner, add child, remove from family. Each
+      action resolves to `family` / `family_child` rows per decision 2. Picking
+      an existing person or creating one inline are both allowed. The section
+      also exposes what the schema already carries: `family.relationship_type`,
+      per-parent `child_relation`, child `sort_order`, partner roles derived
+      from sex but editable. A single known parent is a family with one partner
+      null — a later "add parent" fills that slot. Removing the last member
+      deletes the family row. The tree stays navigate-only (decision 23).
+    - **Create a person.** A small form (given name, surname, sex — placeholders
+      and `unknown` allowed, no birth date required) that lands in the edit
+      view. `gedcom_xref` stays null until export assigns one.
+    - **Family events.** Marriage, divorce, engagement, annulment are edited
+      from either partner's edit view, grouped per union — `event.family_id`
+      set, `person_id` null.
+    - **The rest of the audit is journeys, not decisions.** Sign-out, role-gated
+      navigation, "My record", the `/tree` index and empty state, import sets
+      the root, profile from a tree card, root picker by name, export button,
+      visibility + living controls, delete a person, wipe the tree with a
+      backup export first, hide-my-record request, search + `/people`, invite
+      from the profile, a mobile pass. Each was already promised by a decision
+      (7, 12, 18, 28, 33) or is ordinary plumbing. They are listed under
+      **Journeys** and built as Phase 9 (`docs/SPEC.md` §10).
+    - **Rejected:** adding relatives on the tree canvas — it re-introduces the
+      drag-to-edit tradeoff decision 23 gave up, and `family-chart`'s card
+      system is not a form. Also rejected: a GEDCOM-only tree — a self-hoster
+      with no existing file could never start.
+    - **Process fix.** This map now carries a **Journeys** section, and the
+      spec is derived from Journeys ∪ Decisions, never from decisions alone.
+      The `wayfinder` skill's completeness pass (roles × entities × verbs,
+      reachability, lifecycle, backend-has-a-front, reference product,
+      reverse / repair, ordinary complaints) runs before a spec and again
+      against the issue list.
+
+## Journeys
+
+Added 2026-09-12 by decision 36. One line per thing a role must be able to do
+from the UI. `(built)` names the §10 item that shipped it. `#NN` names the
+Phase 9 or Post-MVP issue that builds it. A journey with neither is a gap.
+The spec (`docs/SPEC.md`) is derived from this list plus the decisions.
+
+**Not signed in**
+
+- Sees `/login` only. Signs in by magic link or Google (built, 17).
+- Opens an invite link, signs in, is linked and approved (built, 20).
+- Opens an expired or used link and sees an error page (built, 17 / 20).
+
+**Signed in, not yet approved**
+
+- Claims their own record through the challenge (built, 18 / 19).
+- Gets no match, or hits the attempt cap, and requests access (built, 18 / 19).
+- Is suspended and sees a suspended-account screen (built, 19).
+- Has `allow_self_signup` off and sees invite-only messaging (built, 19).
+
+**Viewer** (any approved member)
+
+- Lands on the default root person's tree (built, 23). On a fresh deploy with
+  no root set, lands on a fallback person or an empty state, not a 404 (#51).
+- Re-centers, expands a collapsed branch, walks back (built, 23 / 24).
+- Opens a profile from a tree card by icon or double-click (#52).
+- Finds a person by name from any page. Browses everyone at `/people` (#62).
+- Opens their own record from the header (#50).
+- Views a profile, its media, sources, and notes (built, 25 / 34).
+- Asks a moderator to hide their record or their child's (#61).
+- Signs out (#50).
+- Does all of the above on a phone (#65).
+- Suggests a correction to a moderator (#70, post-MVP).
+- Sees a person's change history (#71, post-MVP).
+
+**Moderator** (plus everything a viewer does)
+
+- Reaches `/import` and `/moderation` from the header (#50).
+- Imports a GEDCOM into an empty tree and watches the job (built, 16). Is
+  blocked with a clear message when the tree is not empty (#60).
+- Exports a GEDCOM and downloads it. Sees past export jobs (#54).
+- Creates a person with no GEDCOM (#55).
+- Edits name, additional names, events, facts, media, sources, notes,
+  reference numbers (built, 27–31, 34).
+- Adds and removes a parent, partner, or child. Sets relationship type, child
+  relation, and child order (#56).
+- Adds and edits a marriage or divorce (#57).
+- Sets a person's visibility and living override (#58).
+- Invites a person to claim, from their profile (#63) or from `/moderation`
+  (built, 20).
+- Handles access requests and self-claims. Reassigns or unlinks a wrong claim
+  (built, 36). Deletes a pending invitation (built, 20).
+- Sees notifications in the bell, marks read, resolves (built, 35).
+- Edits at the same time as another moderator: presence cue, version check,
+  conflict dialog (built, 31 / 32).
+- Merges duplicate people (#66, post-MVP).
+- Browses, renames, merges places (#67, post-MVP). Browses and edits sources
+  and repositories from one index (#68, post-MVP).
+- Attaches media to an event or a source, not only a person (#69, post-MVP).
+- Works a data-quality list: no birth date, no parents, no sources (#72,
+  post-MVP).
+
+**Admin** (plus everything a moderator does)
+
+- Reaches `/settings` from the header (#50).
+- Picks the default root person by name (#53).
+- Manages roles. Suspends and reactivates an account (built, 37).
+- Deletes a person (#59).
+- Wipes the tree, with a backup export first, then re-imports (#60).
+
+**Lifecycle**
+
+- Fresh deploy, empty tree: the empty state offers "Import a GEDCOM" and "Add
+  the first person" (#51, #55).
+- First import sets the default root person (#51).
+- A failed import or export shows its error (built, 16 / #54).
+- Zero search results show an empty result, not a blank page (#62).
+
 ## Status
 
 All frontier items are resolved (2026-08-30). Decisions 1–35 are the full plan.
+**2026-09-12:** decision 36 amended the destination and decision 21 after a gap
+audit. The Journeys section above is now the second input to the spec. Phase 9
+(`docs/SPEC.md` §10, issues #50–#65) builds the missing journeys. No open
+frontier items.
 
 Next step per the wayfinder pattern: turn this map into a spec, then break the
 spec into GitHub issues on `Wintaru/Rootward`, then build. Decisions 1–28 cover

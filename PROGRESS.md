@@ -5,16 +5,47 @@ the relevant `docs/SPEC.md` section.
 
 ## Current state
 
-**Next issue: #64, then #50–#54 in order.** A 2026-09-12 audit found that
-every §10 item is built but the app is not usable: no sign-out, no navigation
-to `/import` / `/moderation` / `/settings`, no way to open a profile from the
-tree, a 404 on a fresh deploy, and no way to create a person or a relationship
-without a GEDCOM. Milestone **Phase 9 — Gap closure** (#50–#65, label
-`phase:9`) holds the fixes, and a second product-lens pass added #66–#72
-to the Post-MVP milestone. #64 (docs: SPEC §10 Phase 9 + WAYFINDER decision
-36 through the `wayfinder` skill) goes first — it is the build contract for
-#55–#57. #40 (README) waits until Phase 9 lands, so the screenshots show a
+**Next issue: #50, then #51–#54 in order (all `ready`).** A 2026-09-12 audit
+found that every §10 item is built but the app is not usable: no sign-out, no
+navigation to `/import` / `/moderation` / `/settings`, no way to open a
+profile from the tree, a 404 on a fresh deploy, and no way to create a person
+or a relationship without a GEDCOM. Milestone **Phase 9 — Gap closure**
+(#50–#65, label `phase:9`) holds the fixes, and a second product-lens pass
+added #66–#72 to the Post-MVP milestone. **#64 (docs) is done this session,
+staged on `docs/phase-9-spec-wayfinder` — see below.** The build contract for
+Phase 9 is now `docs/SPEC.md` §10 "Phase 9" plus §8.1 / §8.3 / §7, and
+WAYFINDER decision 36 + the new **Journeys** section. After #54, label #55
+`ready` and take #55 → #56 → #57 in that order (each depends on the one
+before). #40 (README) waits until Phase 9 lands, so the screenshots show a
 usable app. The audit itself is in `GAP-AUDIT-HANDOFF.md` (gitignored).
+
+**Issue #64 — Docs: record Phase 9 in SPEC §10 and WAYFINDER decision 36:
+done, staged on `docs/phase-9-spec-wayfinder`.** Docs only, no code.
+`docs/WAYFINDER.md`: the destination gains a product sentence ("a family
+maintains and grows its tree on a website it hosts itself") with the original
+feature-list sentence kept and marked amended in place; decision 21 marked
+amended in place (Relationships section, family events back in Events,
+visibility + living controls); a new **decision 36 — In-app authoring**
+records what the audit found, the three-part cause (feature-list destination,
+decision 21 copied a person-only panel inventory, decision 23 made the tree
+navigate-only), the choices (relationships in the edit view, not on the tree;
+minimal create form; family events per union), the rejected alternatives, and
+the process fix; a new **Journeys** section (`<role> <verb> <thing>`, one line
+each, every line tagged `(built, N)` or `#NN`) per the `wayfinder` skill —
+the spec is now derived from Journeys ∪ Decisions. `(built, N)` attributions
+were checked against `git log --diff-filter=A` for the files involved, not
+guessed. `docs/SPEC.md`: §1 product sentence; §7 `gedcom-import` sets the
+root when unset (#51) and `replace_all` is wipe + `initial` in the MVP (#60);
+§8.1 route table gains `/tree`, `/people`, `/person/new`, the Import / Export
+purpose on `/import`, per-route Phase 9 actions, and a "global chrome"
+paragraph for the header (#50); §8.2 the card profile affordance (#52); §8.3
+the ninth section **Relationships** (#56), family events (#57), visibility +
+living (#58), create (#55), delete (#59); §10 a "Phase 9 — Gap closure"
+section (#64, #50–#63, #65, with dependencies) and #66–#72 under Post-MVP.
+Did not use the wayfinder claim marker: #64 is a GitHub docs issue that also
+edits SPEC and PROGRESS, and the marker's edit gate exempts only a root
+`WAYFINDER.md`. Verify gate: `pnpm format:check` for the touched Markdown
+(the only check that applies to a docs-only diff).
 
 **Phase:** 8 — Phase 0 (#1–#3), Phase 1 (#4–#10), Phase 2 (#11–#16), Phase 3
 (#17, #38, #18, #19, #20), Phase 4 (#21–#25), Phase 5 (#26–#32, all eight

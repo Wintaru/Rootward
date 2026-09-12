@@ -14,6 +14,12 @@ A self-hostable, open-source family-tree website. The database is the source of
 truth; GEDCOM is import/export only (decision 1). Approved family members browse
 the whole tree; moderators edit; one admin per deployment configures it
 (decisions 6, 18). Single-tenant — one deployment, one tree (decision 17).
+The product sentence (decision 36): **a family maintains and grows its tree on
+a website it hosts itself.** A GEDCOM is one way to start a tree, not the only
+way — moderators create people and relationships in-app, and admins delete
+and wipe. Every entity the site holds is created, linked, and deleted from the
+UI; the WAYFINDER **Journeys** section is the checklist this spec is built from,
+alongside the decisions.
 
 Two primary screens:
 - **Tree view** — an animated hourglass chart (`family-chart`) centered on one
@@ -614,13 +620,20 @@ media folder / zip, or media is added later).
 - `mode`:
   - `initial` — empty tree, straight insert.
   - `replace_all` — admin only; refuses if any `account.person_id` is set or
-    edits exist since last import; truncates and reloads.
+    edits exist since last import; truncates and reloads. **Not a function
+    mode in the MVP (#60):** the UI blocks `initial` on a non-empty tree, and
+    an admin's **Wipe tree** (§8.1 `/settings` — a backup export first, then
+    truncate the genealogy tables, unlink every account, remove media objects)
+    followed by a plain `initial` import is the same thing.
   - `match_update` — matches by `gedcom_xref` / `_UID`; produces a diff into
     `stats`; applies only after admin approval (two-phase: `parsing` produces the
     diff, admin approves, `importing` applies). Post-MVP for the approval UI;
     engine can land earlier.
 - On finish: `status = completed|failed`, emit `notification`
-  (`import_finished` / `import_failed`).
+  (`import_finished` / `import_failed`). When the default root person is
+  unset (`tree_settings.default_root_person_id` null), set it (#51) — the
+  rule (first `INDI`, or most descendants) is documented in the engine's doc
+  comment.
 
 ### `gedcom-export` — decisions 1, 29
 
@@ -685,12 +698,22 @@ media folder / zip, or media is added later).
 | `/` | Redirect: `/tree/<root>` when approved, `/onboarding` when authed-not-approved, else `/login` | — |
 | `/login` | Magic link + Google | public |
 | `/onboarding` | Claim flow (name/birth → challenge) or request access | authed, not yet approved |
+| `/tree` | Index: redirect to the default root; fallback to a deterministic person when no root is set; empty state ("Import a GEDCOM" / "Add the first person") when the tree is empty (#51) | approved |
 | `/tree/[personId]` | `family-chart` hourglass view | approved |
-| `/person/[personId]` | Read-only profile | approved |
-| `/person/[personId]/edit` | Full-screen edit view | moderator+ |
-| `/moderation` | Notification queue, access requests, claims | moderator+ |
-| `/import` | Upload GEDCOM, job status | moderator+ |
-| `/settings` | Tree settings + role management | admin |
+| `/people` | Everyone, sorted by surname then given name, surname filter, paginated at the source (#62) | approved |
+| `/person/[personId]` | Read-only profile. Moderators also see **Invite to claim** when the person has no linked account (#63). A linked viewer sees **Ask a moderator to hide this record** (#61) | approved |
+| `/person/[personId]/edit` | Full-screen edit view. Admins also see **Delete person** (#59) | moderator+ |
+| `/person/new` (or a header action) | Create a person: given name, surname, sex — all optional — then redirect to the edit view (#55) | moderator+ |
+| `/moderation` | Notification queue, access requests, claims. `?invite=<personId>` preselects the invite form (#63) | moderator+ |
+| `/import` | **Import / Export.** Upload GEDCOM, job status. Blocked with a clear message when the tree is not empty (#60). Export: start a `manual_gedcom` `export_job`, poll it, download through the signed URL; list past export jobs (#54) | moderator+ |
+| `/settings` | Tree settings + role management. Root person picked by name (#53). **Wipe tree** with a backup export first (#60) | admin |
+
+**Global chrome (#50):** the header renders on every authed route. It carries
+**Home**, a person search box (#62), **My record** (when `account.person_id` is
+set), role-gated links — **Import** and **Moderation** for `moderator+`,
+**Settings** for `admin` — the notification bell (`moderator+`), and **Sign
+out** (server action → `auth.signOut()` → `/login`). Links are convenience; the
+pages enforce access server-side. Every route is usable at 390 px wide (#65).
 
 ### 8.2 Tree view — decisions 23, 28
 
@@ -707,6 +730,10 @@ media folder / zip, or media is added later).
   in-session.
 - **Click** a card → `router.push('/tree/<id>')`; `family-chart` animates the
   re-center. Focus person in the URL (decision 28) — back button works.
+- **Open the profile** (decision 28, #52): an icon button on the card and a
+  double-click on the card body both `router.push('/person/<id>')`. The icon
+  uses the same delegation pattern as the expand buttons (`data-*` attribute,
+  a real `<button>`, `stopPropagation` so it does not also re-center).
 - **Expand affordance** on any card with relatives outside the current window →
   loads one more level for that branch without re-centering.
 - Extended family (aunts/uncles/cousins) — a later toggle, not in v1.
@@ -716,9 +743,43 @@ media folder / zip, or media is added later).
 Full-screen. Left rail: section nav. Top: parents (click to navigate). Bottom:
 partners + children (click to navigate). "Done" returns to the profile.
 
-Sections (v1): **Name & Gender · Additional Names · Events · Facts · Media ·
-Sources · Notes · Reference Numbers**. (v2: Labels, Bookmarks, Influential
-Persons, DNA, Stories, ToDos, Numbering System — decision 21.)
+Sections (v1): **Name & Gender · Additional Names · Relationships · Events ·
+Facts · Media · Sources · Notes · Reference Numbers**. (v2: Labels, Bookmarks,
+Influential Persons, DNA, Stories, ToDos, Numbering System — decision 21.)
+
+- **Relationships** (decision 36, #56) — the ninth v1 section, added 2026-09-12.
+  Actions: **add parent**, **add partner**, **add child**, **remove from
+  family**. Each resolves to `family` / `family_child` rows per decision 2 — a
+  family is a couple plus children, partner roles as the enum. Picking an
+  existing person uses the shared `PersonPicker`; **create new** inserts a
+  person (#55) and links it in one step. Exposes `family.relationship_type`,
+  `family_child.relation_to_partner1/2`, and `family_child.sort_order`
+  (reorder children; default by birth `date_sort_key`). `partner1_role` /
+  `partner2_role` derive from sex, editable. A single known parent is a family
+  with one partner null; a later "add parent" fills that slot, not a second
+  family. Removing the last member deletes the family row and its family
+  events. `family` rows carry `updated_at` and take the same version check as
+  every other row. `get_neighborhood` needs no change — the tree reflects the
+  new rows on return.
+- **Family events** (decision 21 as amended by 36, #57) — marriage, divorce,
+  engagement, annulment appear in the Events section under a **Union with
+  \<partner\>** group, one per `family` the person is a partner in. Writes go
+  to `event` with `family_id` set and `person_id` null. Same `DateInput`,
+  `PlaceInput`, citations, notes, and version check as person events.
+- **Visibility and living** (decisions 6, 7, #58) — two controls in Name &
+  Gender. Visibility offers `everyone_approved`, `moderators_only`, `hidden`
+  in the MVP (`close_family` is post-MVP, #43 — hidden or shown disabled).
+  Living is three-state: computed (`null`, with the computed value shown), yes,
+  no.
+- **Create** (#55): a new person needs only the form in §8.1 — placeholders
+  (empty given name or surname, shown as "Unknown") and `sex = unknown` are
+  normal in genealogy. `gedcom_xref` stays null; export assigns one (§4.2).
+- **Delete** (decision 18, #59): admin only, behind a typed-name confirmation.
+  `person_name`, `event`, `fact`, `note`, `citation`, `media_link`, and
+  `family_child` rows follow their FK rules. A `family` where the person was a
+  partner keeps its row with that partner null — the other partner's children
+  are not touched. A linked `account` is unlinked (`person_id = null`), not
+  deleted. The audit trigger records it.
 
 - **`DateInput`** component (decision 22): one text field, live parse via
   `parseGenealogyDate`, interpretation shown below, shorthand hint (`abt`, `bet …
@@ -893,7 +954,54 @@ frontend|auth|edge|infra`, `mvp`, `post-mvp`, `blocked`, `ready`.
     drift. `supabase/tests/seed_smoke_test.sql` guards the seed; `rls_test.sql`
     truncates the data tables up front because `supabase test db` loads the seed.
 39. Deploy docs: Vercel + Supabase Cloud, and Docker Compose self-host.
-40. README, CONTRIBUTING, self-host guide, screenshots.
+40. README, CONTRIBUTING, self-host guide, screenshots. *(Waits for Phase 9,
+    so the screenshots show a usable app.)*
+
+### Phase 9 — Gap closure (decision 36)
+
+Added 2026-09-12. A gap audit found every item above built and the app still
+not usable: no sign-out, no navigation, no create-person, no relationships, a
+404 on a fresh deploy. The cause and the fix are WAYFINDER decision 36 and its
+**Journeys** section. Issue numbers here are the GitHub issue numbers, not the
+§10 sequence — the milestone is `Phase 9 — Gap closure`, label `phase:9`, all
+`mvp`. Order is one session each, top to bottom; #64 goes first because it is
+the build contract for #55–#57.
+
+- **#64** Docs: this section, §8.1 / §8.3 / §7, WAYFINDER decision 36 +
+  Journeys, `PROGRESS.md` pointer. *(Docs only.)*
+- **#50** Header: sign-out, role-gated nav to Import / Moderation / Settings,
+  **My record** (§8.1 global chrome).
+- **#51** `/tree` index route: redirect to the root, deterministic fallback,
+  empty state; `gedcom-import` sets the default root when unset (§7).
+- **#52** Tree card: open the profile by icon and double-click (§8.2,
+  decision 28).
+- **#53** Settings: pick the default root person by name (`PersonPicker` moved
+  to `components/`), not UUID.
+- **#54** GEDCOM export UI: `/import` becomes Import / Export;
+  `lib/db/export-jobs.ts`, invoke `gedcom-export`, poll, signed download,
+  past-jobs list (§8.1).
+- **#55** Create a person in-app: minimal form → edit view;
+  `lib/db/person-create.ts`; placeholders allowed; RLS insert test (§8.3).
+- **#56** Relationships section: add / remove parent, partner, child;
+  `relationship_type`, `child_relation`, `sort_order`; single-parent families;
+  empty-family cleanup; RLS family-write tests (§8.3). *Depends on #55.*
+- **#57** Family events (marriage, divorce, engagement, annulment) in the
+  Events section, grouped per union (§8.3). *Depends on #56.*
+- **#58** Person visibility and `is_living` override in the edit view (§8.3).
+- **#59** Delete a person (admin): typed-name confirmation, cascade rules,
+  account unlinked, RLS deny test for moderators (§8.3).
+- **#60** Wipe tree (admin, `/settings`, backup export first) + block import on
+  a non-empty tree (§7, §8.1).
+- **#61** "Hide my record" request from a linked viewer: writes a
+  `hide_request` notification; moderator resolve links to the edit view.
+  *Depends on #58.*
+- **#62** Person search in the header + `/people` index: `searchPersons` in
+  `lib/db` (generalised from the moderation search), RLS-scoped, capped
+  results; `/people` paginated at the source (§8.1).
+- **#63** Invite to claim from the person profile (`/moderation?invite=`,
+  §9.2).
+- **#65** Mobile layout pass: every route usable at 390 px, screenshots on the
+  PR (§8.1). *Last in the MVP set.*
 
 ### Post-MVP (separate milestone)
 - Scheduled backup (`scheduled_full` + `pg_cron` + retention) — decision 29.
@@ -903,6 +1011,19 @@ frontend|auth|edge|infra`, `mvp`, `post-mvp`, `blocked`, `ready`.
 - Extended-family toggle in the tree view — decision 28.
 - Edit-view v2 sections: Labels, Bookmarks, Influential Persons, DNA, Stories,
   ToDos, Numbering System — decision 21.
+- *Added 2026-09-12 by the second audit pass (product lens: "maintain and
+  expand a family tree"), decision 36:*
+- **#66** Merge duplicate people — keep events, media, and links from both.
+- **#67** Places index: browse, rename, merge (decision 5's "location lookup").
+- **#68** Sources and repositories index — fix a census title once, not per
+  person.
+- **#69** Attach media to events and sources, not only people — `media_link`
+  already supports five owner types (decision 25).
+- **#70** Suggest a correction: viewer → moderator notification.
+- **#71** Recent changes and per-person history from `audit_log` (decision 21's
+  v2 Change Log).
+- **#72** Data-quality lists for maintainers: no birth date, no parents, no
+  sources.
 
 ---
 
