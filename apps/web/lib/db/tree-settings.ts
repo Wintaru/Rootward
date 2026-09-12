@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database } from "./database.types";
+import { type PersonSearchOption, personSearchLabel } from "./moderation";
 import {
   DEFAULT_GENERATIONS_DOWN,
   DEFAULT_GENERATIONS_UP,
@@ -97,6 +98,11 @@ export interface TreeSettings {
   readonly allowSelfSignup: boolean;
   readonly livingThresholdYears: number;
   readonly defaultRootPersonId: string | null;
+  /** The root person as the `PersonPicker` labels them (issue #53) — read
+   * alongside the id in the same round trip, so the form can show a name
+   * rather than a UUID. `null` when no root is set, or when RLS hides the
+   * person from the reader (an admin sees everyone, so in practice: unset). */
+  readonly defaultRootPerson: PersonSearchOption | null;
   readonly defaultGenerationsUp: number;
   readonly defaultGenerationsDown: number;
   readonly mediaMaxBytes: number;
@@ -105,17 +111,26 @@ export interface TreeSettings {
   readonly updatedAt: string;
 }
 
+// `person!tree_settings_default_root_person_id_fkey` names the FK: `person`
+// has no path back to `tree_settings`, so a bare `person(...)` would resolve
+// today, but #73 is what an unhinted embed costs the day a second path
+// appears.
 const TREE_SETTINGS_COLUMNS =
-  "tree_name, tree_description, allow_self_signup, living_threshold_years, default_root_person_id, default_generations_up, default_generations_down, media_max_bytes, media_allowed_mime, strip_exif_gps, updated_at";
+  "tree_name, tree_description, allow_self_signup, living_threshold_years, default_root_person_id, default_root_person:person!tree_settings_default_root_person_id_fkey(id, given_name, surname, nickname), default_generations_up, default_generations_down, media_max_bytes, media_allowed_mime, strip_exif_gps, updated_at";
 
 /** A validated set of `tree_settings` field values, ready to write —
  * {@link TreeSettings} minus `updatedAt` (server-set on every write, never
- * client-supplied). Owned by the data layer so `lib/settings/tree-settings-form.ts`'s
- * pure validator can import this shape rather than the db layer depending on
- * a feature module (the reverse of every other `lib/db` ↔ `lib/<feature>`
- * pairing in the app — see `lib/moderation/invite.ts` importing `AccountRole`
- * from here for the pattern this follows). */
-export type TreeSettingsPatch = Omit<TreeSettings, "updatedAt">;
+ * client-supplied) and `defaultRootPerson` (a read-side projection of
+ * `defaultRootPersonId`, not a column). Owned by the data layer so
+ * `lib/settings/tree-settings-form.ts`'s pure validator can import this shape
+ * rather than the db layer depending on a feature module (the reverse of
+ * every other `lib/db` ↔ `lib/<feature>` pairing in the app — see
+ * `lib/moderation/invite.ts` importing `AccountRole` from here for the
+ * pattern this follows). */
+export type TreeSettingsPatch = Omit<
+  TreeSettings,
+  "updatedAt" | "defaultRootPerson"
+>;
 
 /**
  * The full row, for the settings form to populate itself from. Unlike the
@@ -143,6 +158,13 @@ export async function getTreeSettings(client: Db): Promise<TreeSettings> {
     allowSelfSignup: data.allow_self_signup,
     livingThresholdYears: data.living_threshold_years,
     defaultRootPersonId: data.default_root_person_id,
+    defaultRootPerson:
+      data.default_root_person === null
+        ? null
+        : {
+            id: data.default_root_person.id,
+            name: personSearchLabel(data.default_root_person),
+          },
     defaultGenerationsUp: data.default_generations_up,
     defaultGenerationsDown: data.default_generations_down,
     mediaMaxBytes: data.media_max_bytes,

@@ -4,11 +4,15 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { Section } from "@/components/layout/Section";
+import { PersonPicker } from "@/components/person/PersonPicker";
 import type { LinkedAccount, PersonSearchOption } from "@/lib/db";
 import { enumTokenLabel } from "@/lib/person/labels";
 
-import { reassignAccountAction, unlinkAccountAction } from "./actions";
-import { PersonPicker } from "./PersonPicker";
+import {
+  reassignAccountAction,
+  searchModerationPersons,
+  unlinkAccountAction,
+} from "./actions";
 
 type RowState =
   | { readonly status: "idle" }
@@ -159,6 +163,7 @@ function LinkedAccountRow({
         <PersonPicker
           label="Reassign to person"
           disabled={busy}
+          search={searchModerationPersons}
           onSelect={(person) => void reassign(person)}
         />
       )}

@@ -4,18 +4,25 @@ import { useEffect, useId, useRef, useState } from "react";
 
 import type { PersonSearchOption } from "@/lib/db";
 
-import { searchModerationPersons } from "./actions";
-
 const SEARCH_DEBOUNCE_MS = 250;
 
 /**
- * Search-by-name person picker backing "approve access request" and
- * "reassign account" (issue #36) — a moderator has only the requester's
- * submitted name to go on, not a person id, unlike the invite form's
- * `?personId=` prefill from an existing profile page. Emits the chosen
- * option and clears itself; the caller renders the selection (see
- * `AccessRequestsQueue.tsx` / `LinkedAccounts.tsx`) rather than this
- * component tracking "selected" state itself.
+ * Search-by-name person picker. Backs "approve access request" and
+ * "reassign account" on `/moderation` (issue #36) — a moderator has only the
+ * requester's submitted name to go on, not a person id — and the default
+ * root person on `/settings` (issue #53), where nobody knows a UUID. Emits
+ * the chosen option and clears itself; the caller renders the selection
+ * (see `AccessRequestsQueue.tsx` / `LinkedAccounts.tsx` /
+ * `TreeSettingsForm.tsx`) rather than this component tracking "selected"
+ * state itself.
+ *
+ * `search` is injected because a server action is bound to the route that
+ * gates it (`resolveModerationAccess` on `/moderation`,
+ * `resolveSettingsAccess` on `/settings`) — a shared component under
+ * `components/` must not import one route's `actions.ts`. Pass a stable
+ * reference (the imported action itself, not an inline closure): it is an
+ * effect dependency, so a new function per render would restart the
+ * debounce on every keystroke's re-render and fire duplicate requests.
  *
  * Same debounced-search-with-a-stale-response-guard shape as `PlaceInput.tsx`
  * — see its comment for why the empty-query branch below returns before any
@@ -24,10 +31,12 @@ const SEARCH_DEBOUNCE_MS = 250;
 export function PersonPicker({
   label,
   disabled,
+  search,
   onSelect,
 }: {
   readonly label: string;
   readonly disabled?: boolean;
+  readonly search: (query: string) => Promise<readonly PersonSearchOption[]>;
   readonly onSelect: (option: PersonSearchOption) => void;
 }) {
   const id = useId();
@@ -43,7 +52,7 @@ export function PersonPicker({
 
     const token = ++requestToken.current;
     const timer = setTimeout(() => {
-      searchModerationPersons(trimmed)
+      search(trimmed)
         .then((results) => {
           if (requestToken.current === token) {
             setOptions(results);
@@ -57,7 +66,7 @@ export function PersonPicker({
     }, SEARCH_DEBOUNCE_MS);
 
     return () => clearTimeout(timer);
-  }, [query]);
+  }, [query, search]);
 
   const shownOptions = query.trim() === "" ? [] : options;
 

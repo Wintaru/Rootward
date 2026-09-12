@@ -3,14 +3,15 @@
 import { useState } from "react";
 
 import { Section } from "@/components/layout/Section";
+import { PersonPicker } from "@/components/person/PersonPicker";
 import type { PendingAccessRequest, PersonSearchOption } from "@/lib/db";
 import { formatSubmittedBirth } from "@/lib/moderation/access-requests";
 
 import {
   approveAccessRequestAction,
   rejectAccessRequestAction,
+  searchModerationPersons,
 } from "./actions";
-import { PersonPicker } from "./PersonPicker";
 
 type RowState =
   | { readonly status: "idle" }
@@ -154,6 +155,7 @@ function AccessRequestRow({
           <PersonPicker
             label="Link to person"
             disabled={busy}
+            search={searchModerationPersons}
             onSelect={setPerson}
           />
         ) : (
