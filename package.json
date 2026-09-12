@@ -13,6 +13,8 @@
   "scripts": {
     "dev": "node --env-file-if-exists=.env scripts/dev.mjs",
     "dev:status": "node --env-file-if-exists=.env scripts/dev-status.mjs",
+    "dev:fresh": "node --env-file-if-exists=.env scripts/dev-fresh.mjs",
+    "dev:up": "node --env-file-if-exists=.env scripts/dev-fresh.mjs --keep-data",
     "dev:stop": "supabase stop",
     "dev:reset": "supabase db reset",
     "gen:types": "supabase gen types typescript --local --schema public > apps/web/lib/db/database.types.ts",

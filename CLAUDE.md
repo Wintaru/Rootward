@@ -72,6 +72,11 @@ Claude-managed. Run the dev stack as a harness-tracked background task
 (`pnpm dev`, `supabase start`) and stop it when the session ends. Do not
 fire-and-forget it. Check `pnpm dev:status` before assuming the app is up.
 
+The Supabase stack is shared by every session on the machine. `pnpm dev:fresh`,
+`pnpm dev:up`, `pnpm dev:stop`, and `supabase functions serve` all restart or
+remove containers other sessions may be using. Do not run them unless Josh
+asks; when a fresh stack is needed, say so and let Josh run `pnpm dev:fresh`.
+
 ## Stack skills
 
 Load `typescript` for app code, `sql` for migrations and policies,

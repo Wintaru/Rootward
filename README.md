@@ -45,12 +45,20 @@ pnpm dev                    # starts the Supabase stack, then the web app
 `pnpm dev` brings up the local Supabase stack (`supabase start`) and the Next.js
 app together. Open http://127.0.0.1:3000.
 
-| Command           | What it does                                     |
-| ----------------- | ------------------------------------------------ |
-| `pnpm dev`        | Supabase stack + web app (http://127.0.0.1:3000) |
-| `pnpm dev:status` | Up/down summary of both, with the local URLs     |
-| `pnpm dev:stop`   | Stops the Supabase stack (`supabase stop`)       |
-| `pnpm dev:reset`  | Drops and re-migrates the local database + seed  |
+| Command           | What it does                                                                                                                                                                                        |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm dev`        | Supabase stack + web app (http://127.0.0.1:3000). Ctrl-C stops only the web app.                                                                                                                    |
+| `pnpm dev:fresh`  | Everything, rebuilt to what is in git: `pnpm install`, restart the stack, `db reset` (migrations + seed — **wipes local data**), regenerate types, then edge functions + web app. Ctrl-C stops all. |
+| `pnpm dev:up`     | Same as `dev:fresh`, but keeps local data (`migration up` instead of `db reset`).                                                                                                                   |
+| `pnpm dev:status` | Up/down summary of both, with the local URLs                                                                                                                                                        |
+| `pnpm dev:stop`   | Stops the Supabase stack (`supabase stop`)                                                                                                                                                          |
+| `pnpm dev:reset`  | Drops and re-migrates the local database + seed                                                                                                                                                     |
+
+`dev:fresh` and `dev:up` serve the edge functions with
+`supabase functions serve --import-map supabase/functions/deno.json`, the form
+that binds the `packages/*` directories (see `supabase/functions/README.md`).
+Both restart the Supabase stack, so run them only when nothing else on the
+machine is using it.
 
 **Demo data.** `supabase db reset` (and the first `supabase start`) load
 `supabase/seed.sql` — a demo family tree and an admin account. Sign in at
