@@ -20,6 +20,11 @@ const JOB_ID = "00000000-0000-4000-8000-00000000abcd";
 interface FakeOptions {
   readonly gedcom?: string;
   readonly mode?: ImportJobRow["mode"];
+  /** A root the admin already chose; the import must not move it. */
+  readonly defaultRootPersonId?: string;
+  /** Report the job as `completed` on the finish guard's re-read, as if an
+   * overlapping invocation finished first. */
+  readonly completedBeforeGuard?: boolean;
 }
 
 /** In-memory {@link ImportGateway}. Tables are id-keyed, so an upsert of a
@@ -28,11 +33,20 @@ class FakeGateway implements ImportGateway {
   readonly tables = new Map<TableName, Map<string, Row>>();
   readonly notifications: { type: NotificationType; payload: unknown }[] = [];
   upsertCalls = 0;
+  loadJobCalls = 0;
+  defaultRootPersonId: string | null;
+  /** Every id the engine asked to set, in order — the engine's contract is
+   * "always ask on finish; the gateway decides", so a preset root still sees
+   * one call. */
+  readonly rootWrites: string[] = [];
   private readonly gedcom: string;
+  private readonly completedBeforeGuard: boolean;
   private job: ImportJobRow;
 
   constructor(opts: FakeOptions = {}) {
     this.gedcom = opts.gedcom ?? GEDCOM_551;
+    this.defaultRootPersonId = opts.defaultRootPersonId ?? null;
+    this.completedBeforeGuard = opts.completedBeforeGuard ?? false;
     this.job = {
       id: JOB_ID,
       mode: opts.mode ?? "initial",
@@ -47,6 +61,12 @@ class FakeGateway implements ImportGateway {
   }
 
   loadJob(): Promise<ImportJobRow> {
+    this.loadJobCalls += 1;
+    // The second read per invocation is the finish guard (`ingest` re-reads
+    // the job before claiming completion).
+    if (this.completedBeforeGuard && this.loadJobCalls === 2) {
+      return Promise.resolve({ ...this.job, status: "completed" });
+    }
     return Promise.resolve({ ...this.job });
   }
 
@@ -74,6 +94,12 @@ class FakeGateway implements ImportGateway {
     payload: Record<string, unknown>,
   ): Promise<void> {
     this.notifications.push({ type, payload });
+    return Promise.resolve();
+  }
+
+  setDefaultRootPersonIfUnset(personId: string): Promise<void> {
+    this.rootWrites.push(personId);
+    this.defaultRootPersonId ??= personId;
     return Promise.resolve();
   }
 
@@ -246,4 +272,43 @@ Deno.test("an empty tree still completes and notifies", async () => {
   assertEquals(outcome.status, "completed");
   assertEquals(outcome.totalRecords, 0);
   assertEquals(gw.notifications[0]?.type, "import_finished");
+  // Nobody to point the tree at — the engine never asks (#51).
+  assertEquals(gw.rootWrites, []);
+  assertEquals(gw.defaultRootPersonId, null);
+});
+
+Deno.test("completion sets an unset default root to the first INDI (#51)", async () => {
+  const gw = new FakeGateway();
+
+  await runImport({ jobId: JOB_ID, gateway: gw, ...NO_YIELD });
+
+  const first = gw.rows("person").find((r) => r.gedcom_xref === "@I1@");
+  assert(first !== undefined, "@I1@ should have been imported");
+  assertEquals(gw.rootWrites, [first.id]);
+  assertEquals(gw.defaultRootPersonId, first.id);
+});
+
+Deno.test("a preset default root is still offered once — the gateway keeps it (#51)", async () => {
+  const chosen = "11111111-1111-4111-8111-111111111111";
+  const gw = new FakeGateway({ defaultRootPersonId: chosen });
+
+  await runImport({ jobId: JOB_ID, gateway: gw, ...NO_YIELD });
+
+  // The engine's contract is "always ask on finish"; the conditional write in
+  // the gateway (`… IS NULL`) is what leaves an admin's choice alone.
+  const first = gw.rows("person").find((r) => r.gedcom_xref === "@I1@");
+  assertEquals(gw.rootWrites, [first?.id]);
+  assertEquals(gw.defaultRootPersonId, chosen);
+});
+
+Deno.test("a finish that lost the race to an overlapping invocation sets nothing (#51)", async () => {
+  const gw = new FakeGateway({ completedBeforeGuard: true });
+
+  const outcome = await runImport({ jobId: JOB_ID, gateway: gw, ...NO_YIELD });
+
+  // The finish guard saw `completed` and skipped the whole block: no root
+  // write, no second notification.
+  assertEquals(outcome.status, "completed");
+  assertEquals(gw.rootWrites, []);
+  assertEquals(gw.notifications.length, 0);
 });

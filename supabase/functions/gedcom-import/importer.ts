@@ -10,6 +10,12 @@
  * re-running a batch after a timeout upserts the same rows rather than
  * duplicating them. The only state carried across invocations is
  * `import_job.cursor` — `{ phase, offset }` — plus `processed_records`.
+ *
+ * Default root (SPEC §7, issue #51): when the import completes and
+ * `tree_settings.default_root_person_id` is still null, it is set to the
+ * **first `INDI` record in file order**. Most GEDCOM exporters write the home
+ * person first, and the rule needs no extra pass over the tree. A root that is
+ * already set is never overwritten; the gateway's write is conditional.
  */
 
 import { normalizePlaceName, readGedcom } from "@rootward/gedcom";
@@ -91,6 +97,12 @@ export interface ImportGateway {
     type: NotificationType,
     payload: Record<string, unknown>,
   ): Promise<void>;
+  /**
+   * Set `tree_settings.default_root_person_id` only when it is still null
+   * (issue #51). A no-op when a root is already set, so a re-invoked finish
+   * never moves a root the admin chose.
+   */
+  setDefaultRootPersonIfUnset(personId: string): Promise<void>;
 }
 
 // --- cursor and stats ----------------------------------------------------
@@ -293,6 +305,16 @@ async function ingest(
   // marked done.
   const current = await gateway.loadJob(jobId);
   if (current.status !== "completed") {
+    // Before `completed`, so a failed root write leaves the job re-runnable
+    // (cursor is already at `done`; a retry only redoes this finish step).
+    // The trade-off: that failure reports a fully loaded tree as `failed`
+    // until the retry — chosen over "completed" with a 404 on `/`.
+    const firstPerson = parsed.persons[0];
+    if (firstPerson !== undefined) {
+      await gateway.setDefaultRootPersonIfUnset(
+        await id(jobId, firstPerson.gedcom_xref),
+      );
+    }
     await gateway.updateJob(jobId, {
       status: "completed",
       processed_records: processed,

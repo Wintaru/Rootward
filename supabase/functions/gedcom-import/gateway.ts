@@ -99,6 +99,20 @@ export function createSupabaseGateway(supabase: SupabaseClient): ImportGateway {
         throw new Error(`create ${type} notification: ${error.message}`);
       }
     },
+
+    async setDefaultRootPersonIfUnset(personId: string): Promise<void> {
+      // The `is('default_root_person_id', null)` filter makes the write
+      // conditional in one round trip: zero rows match once a root exists.
+      // `tree_settings` is a singleton (CHECK `id = 1`, migration #7), so
+      // that filter alone addresses the one row.
+      const { error } = await supabase
+        .from("tree_settings")
+        .update({ default_root_person_id: personId })
+        .is("default_root_person_id", null);
+      if (error !== null) {
+        throw new Error(`set default root person: ${error.message}`);
+      }
+    },
   };
 }
 

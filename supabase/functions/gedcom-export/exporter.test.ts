@@ -59,6 +59,9 @@ class FakeImportGateway implements ImportGateway {
   createNotification(): Promise<void> {
     return Promise.resolve();
   }
+  setDefaultRootPersonIfUnset(): Promise<void> {
+    return Promise.resolve();
+  }
   rows(table: TableName): Row[] {
     return [...(this.tables.get(table)?.values() ?? [])];
   }
