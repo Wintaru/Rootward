@@ -23,6 +23,28 @@ Run from `supabase/functions/`:
 
 CI runs all four in the `functions` job (`.github/workflows/ci.yml`).
 
+## Serving locally
+
+`supabase start` bakes an edge runtime that mounts only this directory. The
+`@rootward/*` entries in `deno.json` point at `../../packages/*/src/`, so that
+runtime cannot load `gedcom-import` or `gedcom-export` (its log shows
+`Module not found …/packages/gedcom/src/index.ts`). Run the functions with the
+import map named explicitly instead — the CLI then binds each mapped directory
+into the container:
+
+```sh
+supabase functions serve --import-map supabase/functions/deno.json
+```
+
+The directory entries (`"@rootward/gedcom/"`, `"@rootward/shared/"`) exist for
+that bind. A bare file entry binds only `index.ts`, and its sibling modules do
+not resolve.
+
+Known gap: the edge runtime does not honour `sloppy-imports`, so the
+extensionless relative imports inside `packages/*` (`from "./reader"`) still
+fail to load there. Until those imports carry `.ts` extensions, the two GEDCOM
+functions boot only under the Deno CLI (tests) — issue #86.
+
 ## Layout of a function
 
 Each function splits the portable engine from the Deno shell so the engine is
