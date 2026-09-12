@@ -175,4 +175,28 @@ describe("personCardHtml", () => {
     );
     expect(html).not.toContain("<script>");
   });
+
+  it("carries the person id on the card and an open-profile button", () => {
+    const html = personCardHtml(PERSON_ID, card());
+    expect(html).toContain(
+      `class="rw-card rw-card--male" data-person-id="${PERSON_ID}"`,
+    );
+    expect(html).toContain('class="rw-card__profile"');
+    expect(html).toContain(`data-open-profile="${PERSON_ID}"`);
+    expect(html).toContain('aria-label="Open profile"');
+  });
+
+  it("omits the person id and the profile button for a placeholder node", () => {
+    const html = personCardHtml("", card());
+    expect(html).not.toContain("data-person-id");
+    expect(html).not.toContain("rw-card__profile");
+    expect(html).not.toContain("data-open-profile");
+  });
+
+  it("escapes an id used on the card root and the profile button", () => {
+    const html = personCardHtml('"><script>x</script>', card());
+    expect(html).not.toContain("<script>");
+    expect(html).toContain('data-person-id="&quot;&gt;&lt;script&gt;');
+    expect(html).toContain('data-open-profile="&quot;&gt;&lt;script&gt;');
+  });
 });
