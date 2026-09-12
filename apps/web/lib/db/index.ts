@@ -34,6 +34,7 @@ export type {
   TreeSettings,
   TreeSettingsPatch,
 } from "./tree-settings";
+export { getFallbackRootPersonId } from "./root-person";
 export {
   DEFAULT_GENERATIONS_DOWN,
   DEFAULT_GENERATIONS_UP,

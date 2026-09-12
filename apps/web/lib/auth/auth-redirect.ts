@@ -54,9 +54,8 @@ export interface HomeDestinationInput {
 /**
  * Where `/` sends a visitor (SPEC §8.1). An approved member lands on the tree;
  * anyone signed-in-but-not-approved goes to onboarding; no session goes to
- * login. `/onboarding` and `/tree/*` do not exist until issues #19 / #21 — the
- * redirect target is correct ahead of the page, the same way `/import` already
- * points at `/login`.
+ * login. With no default root set the destination is the `/tree` index (#51),
+ * which falls back to a deterministic person or shows the empty state.
  */
 export function resolveHomeDestination(input: HomeDestinationInput): string {
   if (!input.signedIn) {

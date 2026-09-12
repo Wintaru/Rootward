@@ -5,10 +5,10 @@ the relevant `docs/SPEC.md` section.
 
 ## Current state
 
-**Next issue: #51, then #52–#54 in order (all `ready`).** **#50 (header) is
-done this session, staged on `feat/header-nav-signout` — see below. #64 was
-already merged to `main` (`5709d17`) but left open — closed by hand this
-session, same stale-issue pattern as before.** A 2026-09-12 audit
+**Next issue: #52, then #73 (the `/settings` 500 — before #53, which builds
+on `/settings`), then #53, #54 in order (all `ready` but #73).** **#51
+(`/tree` index) is done this session, staged on `feat/tree-index-route` — see
+below. #50 (header) is merged to `main` (`b825745`), closed.** A 2026-09-12 audit
 found that every §10 item is built but the app is not usable: no sign-out, no
 navigation to `/import` / `/moderation` / `/settings`, no way to open a
 profile from the tree, a 404 on a fresh deploy, and no way to create a person
@@ -22,8 +22,56 @@ WAYFINDER decision 36 + the new **Journeys** section. After #54, label #55
 before). #40 (README) waits until Phase 9 lands, so the screenshots show a
 usable app. The audit itself is in `GAP-AUDIT-HANDOFF.md` (gitignored).
 
-**Issue #50 — Header: sign-out, role-gated nav, My record: done, staged on
-`feat/header-nav-signout`.** SPEC §8.1 "Global chrome", audit items A1 + A2 +
+**Issue #51 — `/tree` index route: empty state, root fallback, import sets
+the default root: done, staged on `feat/tree-index-route`.** SPEC §8.1 route
+table + §7, audit item A4. No migration.
+
+- **`app/tree/page.tsx`** (new) — approved-only, same guard as
+  `/tree/[personId]`. Three branches: root set → `/tree/<root>`; root unset
+  but people visible → `/tree/<fallback>`; nobody visible → the empty state.
+  The auth check and the settings read run in one `Promise.all`; the fallback
+  query runs only when the root is null.
+- **`lib/db/root-person.ts`** (new) — `getFallbackRootPersonId`: earliest
+  `created_at`, then lowest `id`, under the caller's RLS. **Not** "oldest by
+  `date_sort_key`" as the issue text suggested — that column is on `event`,
+  needs a join, and undated people have no order. Read-only: it never
+  persists the fallback (an admin-only `tree_settings` write). See
+  `DECISIONS.md`.
+- **`app/tree/TreeEmptyState.tsx`** (new) — moderator+ sees **Import a
+  GEDCOM** (`/import`); a viewer sees a plain "a moderator can import" line.
+  **"Add the first person" is deliberately absent** until `/person/new`
+  exists (#55) — SPEC §8.1 still lists it as part of the empty state; add it
+  in #55, not as a gap here.
+- **`gedcom-import`** — `ImportGateway.setDefaultRootPersonIfUnset(id)`:
+  a conditional `UPDATE tree_settings … WHERE default_root_person_id IS
+NULL` (one round trip, no `id = 1` filter — singleton). The engine calls
+  it at finish, inside the not-yet-completed guard and **before**
+  `status = completed`, with the id of the file's **first `INDI`** (rule
+  documented in the engine's header comment). A failed root write reports
+  the job `failed` and re-runnable rather than `completed` with a 404 on
+  `/`. 3 new Deno tests (root set to `@I1@`; a preset root is offered once
+  and kept by the gateway; a finish that lost the race to an overlapping
+  invocation writes nothing). The `gedcom-export` test fake gained the
+  method too. **Not tested at DB level:** the gateway's `.is(null)` filter —
+  PostgREST maps it to `IS NULL`, checked by reading, not by a pgTAP case.
+- `resolveHomeDestination`'s contract unchanged; its stale doc comment
+  ("`/tree/*` does not exist until #19 / #21") updated.
+- **Verified live** on the shared dev stack as the demo admin: `/tree` →
+  `/tree/…0009` (seed root); root nulled by hand → `/` → `/tree` →
+  `/tree/…0001` (Cornelius Ashby, first inserted); `person_select` policy
+  swapped to `using (false)` for ten seconds → `/` → `/tree` rendered the
+  empty state with the Import link. Policy and root restored after.
+- **Found in review, filed as #82, not fixed here (out of diff):** `/` and
+  `/tree` redirect to the stored root without checking the viewer can see
+  it, so a non-moderator whose root is hidden gets a 404 with no way in.
+- Code review (foreground): no correctness findings; two test-strength
+  advisories applied (record root writes in the fake; exercise the finish
+  guard for real), plus wording nits and the `Promise.all`. Deno gate green
+  (**81** tests, +3); full pnpm gate green (**598** tests, unchanged — the
+  route has no pure logic to unit-test).
+
+**Issue #50 — Header: sign-out, role-gated nav, My record: done, merged to
+`main` (`b825745`), closed.** SPEC §8.1 "Global chrome", audit items A1 + A2 +
 D2. No migration.
 
 - **`lib/auth/header-nav.ts`** (new, pure, tested) — `resolveHeaderNav`
