@@ -40,3 +40,6 @@ coverage/
 DECISIONS.md
 *-HANDOFF.md
 *-CHECKLIST.md
+
+# Playwright MCP browser-session scratch
+.playwright-mcp/
