@@ -5,10 +5,13 @@ the relevant `docs/SPEC.md` section.
 
 ## Current state
 
-**Next issue: #52, then #73 (the `/settings` 500 — before #53, which builds
-on `/settings`), then #53, #54 in order (all `ready` but #73).** **#51
-(`/tree` index) is done this session, staged on `feat/tree-index-route` — see
-below. #50 (header) is merged to `main` (`b825745`), closed.** A 2026-09-12 audit
+**Next issue: #53, then #54 (both `ready`).** **#73 (the `/settings` and
+`/moderation` 500) is done this session, staged on
+`fix/account-person-embed` — see below. #52 (tree card → profile) is
+committed on `feat/tree-card-open-profile` (`682df99`, cut from the same
+`origin/main`, so the two branches each add a PROGRESS block — keep both when
+merging). #51 (`/tree` index) is merged to `main` (`3d902db`), closed. #50
+(header) is merged to `main` (`b825745`), closed.** A 2026-09-12 audit
 found that every §10 item is built but the app is not usable: no sign-out, no
 navigation to `/import` / `/moderation` / `/settings`, no way to open a
 profile from the tree, a 404 on a fresh deploy, and no way to create a person
@@ -22,9 +25,37 @@ WAYFINDER decision 36 + the new **Journeys** section. After #54, label #55
 before). #40 (README) waits until Phase 9 lands, so the screenshots show a
 usable app. The audit itself is in `GAP-AUDIT-HANDOFF.md` (gitignored).
 
+**Issue #73 — `/settings` and `/moderation` 500: `account → person` embeds
+are ambiguous: done, staged on `fix/account-person-embed`.** Not a SPEC
+item — found live while verifying #50. No migration.
+
+- **Cause:** three FK constraints join `account` and `person` in the two
+  directions (`account.person_id`, `person.created_by`, `person.updated_by`),
+  so PostgREST rejects a bare `person(given_name, surname)` embed from
+  `account` as ambiguous. postgrest-js's compile-time ambiguity check only
+  sees several FKs from one table to the same target, not this
+  cross-direction case, so it type-checked and failed live.
+- **`lib/db/accounts.ts`** — one exported `ACCOUNT_SUMMARY_COLUMNS` with the
+  `person!account_person_id_fkey(...)` hint (the `ACCESS_REQUEST_COLUMNS`
+  pattern from `moderation.ts`); `listAllAccounts` and
+  **`lib/db/moderation.ts`** `listLinkedAccounts` both select it, so the embed
+  cannot drift between the two sites again (review advisory, applied). The
+  `isOneToOne` relationship keeps the embed typed as a single object.
+  `invitations.ts`'s `invitation → person` embed has one FK path and stays
+  bare — confirmed live.
+- **Verified live** on the shared dev stack as the demo admin: both routes
+  500'd before the fix and render after; with the admin temporarily linked
+  to Samuel Ashby, both lists showed the name as a `/person/…` link, and a
+  temporary invitation showed "John Ashby" on `/moderation`. Link,
+  invitation, and their `audit_log` rows removed after.
+- Code review (foreground): no correctness findings; the shared-constant
+  advisory and a comment-wording nit applied. Full pnpm gate green (**598**
+  tests, unchanged — the fix is a select string; no unit seam without a
+  PostgREST). Deno gate not run — `supabase/functions/` untouched.
+
 **Issue #51 — `/tree` index route: empty state, root fallback, import sets
-the default root: done, staged on `feat/tree-index-route`.** SPEC §8.1 route
-table + §7, audit item A4. No migration.
+the default root: done, merged to `main` (`3d902db`, `4ed4214`), closed.**
+SPEC §8.1 route table + §7, audit item A4. No migration.
 
 - **`app/tree/page.tsx`** (new) — approved-only, same guard as
   `/tree/[personId]`. Three branches: root set → `/tree/<root>`; root unset

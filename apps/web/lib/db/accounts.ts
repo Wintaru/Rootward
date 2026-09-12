@@ -44,6 +44,18 @@ export function isAccountRole(value: string): value is AccountRole {
 const ACCOUNT_LIMIT = 200;
 
 /**
+ * The `account` row plus its linked person's name, shared with
+ * `lib/db/moderation.ts`'s `listLinkedAccounts` so the embed cannot drift
+ * between the two. `person!account_person_id_fkey` disambiguates it: three
+ * FK constraints join `account` and `person` in the two directions
+ * (`account.person_id`, `person.created_by`, `person.updated_by`), so a bare
+ * `person(...)` is ambiguous to PostgREST — a live 500, not a type error
+ * (#73).
+ */
+export const ACCOUNT_SUMMARY_COLUMNS =
+  "id, display_name, role, status, person_id, updated_at, person!account_person_id_fkey(given_name, surname)";
+
+/**
  * Every account on the tree, most recently changed first. Capped at
  * {@link ACCOUNT_LIMIT} — same "family-tree sized, not the person tree
  * itself" reasoning as `listLinkedAccounts`. Unlike that list, this is not
@@ -55,9 +67,7 @@ export async function listAllAccounts(
 ): Promise<readonly AccountSummary[]> {
   const { data, error } = await client
     .from("account")
-    .select(
-      "id, display_name, role, status, person_id, updated_at, person(given_name, surname)",
-    )
+    .select(ACCOUNT_SUMMARY_COLUMNS)
     .order("updated_at", { ascending: false })
     .limit(ACCOUNT_LIMIT);
 

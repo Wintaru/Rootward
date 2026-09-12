@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { ACCOUNT_SUMMARY_COLUMNS } from "./accounts";
 import { personName } from "./invitations";
 import { escapeLikePattern } from "./place";
 import type { Database } from "./database.types";
@@ -225,9 +226,7 @@ export async function listLinkedAccounts(
 ): Promise<readonly LinkedAccount[]> {
   const { data, error } = await client
     .from("account")
-    .select(
-      "id, display_name, role, status, person_id, updated_at, person(given_name, surname)",
-    )
+    .select(ACCOUNT_SUMMARY_COLUMNS)
     .not("person_id", "is", null)
     .order("updated_at", { ascending: false })
     .limit(LINKED_ACCOUNT_LIMIT);
