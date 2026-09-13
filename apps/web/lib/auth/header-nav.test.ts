@@ -45,13 +45,13 @@ describe("resolveHeaderNav", () => {
     expect(links[1]?.href).toBe(`/person/${PERSON_ID}`);
   });
 
-  it("adds Import / Export and Moderation, but not Settings, for a moderator", () => {
+  it("adds New person, Import / Export, and Moderation, but not Settings, for a moderator", () => {
     expect(
       labels({
         account: { role: "moderator", status: "active" },
         personId: null,
       }),
-    ).toEqual(["Home", "Import / Export", "Moderation"]);
+    ).toEqual(["Home", "New person", "Import / Export", "Moderation"]);
   });
 
   it("adds Settings for an admin, after the moderator links", () => {
@@ -63,6 +63,7 @@ describe("resolveHeaderNav", () => {
     ).toEqual([
       "Home",
       "My record",
+      "New person",
       "Import / Export",
       "Moderation",
       "Settings",

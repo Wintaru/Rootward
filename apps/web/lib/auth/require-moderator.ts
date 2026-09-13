@@ -92,7 +92,8 @@ export async function resolveImportAccess(): Promise<ImportAccess> {
 }
 
 /** Outcome of resolving access to the edit-view save actions
- * (`app/person/[personId]/edit/actions.ts`) — the same moderator+ gate the
+ * (`app/person/[personId]/edit/actions.ts`) and to `/person/new` (#55, which
+ * redirects into the edit view on success) — the same moderator+ gate the
  * route itself uses (`isActiveModerator`, documented there as covering "the
  * edit view"), re-checked server-side rather than trusted from the client. */
 export type EditAccess =

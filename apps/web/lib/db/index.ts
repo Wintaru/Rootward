@@ -9,6 +9,7 @@ export { Constants } from "./database.types";
 export * from "./types";
 export * from "./genealogy-date";
 export * from "./person";
+export * from "./person-create";
 export * from "./person-edit";
 export * from "./event-edit";
 export * from "./fact-edit";

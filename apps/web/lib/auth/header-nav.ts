@@ -37,6 +37,7 @@ export function resolveHeaderNav({
     links.push({ href: `/person/${personId}`, label: "My record" });
   }
   if (isActiveModerator(account)) {
+    links.push({ href: "/person/new", label: "New person" });
     links.push({ href: "/import", label: "Import / Export" });
     links.push({ href: "/moderation", label: "Moderation" });
   }

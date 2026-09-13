@@ -11,8 +11,9 @@ interface TreeEmptyStateProps {
  * from this viewer (RLS decides, so the two cases look the same here — never
  * leak which).
  *
- * "Add the first person" is deliberately absent until `/person/new` exists
- * (#55); a link to a 404 would be the exact defect this route fixes.
+ * "Add the first person" (#55) links to `/person/new`; a moderator who adds
+ * one this way still has no default root until an admin sets one in
+ * Settings, or a later import does.
  */
 export function TreeEmptyState({ canImport }: TreeEmptyStateProps) {
   return (
@@ -23,16 +24,24 @@ export function TreeEmptyState({ canImport }: TreeEmptyStateProps) {
       {canImport ? (
         <>
           <p className="text-muted-foreground text-lg">
-            Import a GEDCOM file to fill it. The first person in the file
-            becomes the root the tree opens on — an admin can change that later
-            in Settings.
+            Import a GEDCOM file to fill it, or add the first person yourself. A
+            GEDCOM&apos;s first person becomes the root the tree opens on — an
+            admin can change that later in Settings.
           </p>
-          <Link
-            href="/import"
-            className="bg-primary text-primary-foreground w-fit rounded-md px-4 py-2 text-sm font-medium"
-          >
-            Import a GEDCOM
-          </Link>
+          <div className="flex gap-3">
+            <Link
+              href="/import"
+              className="bg-primary text-primary-foreground w-fit rounded-md px-4 py-2 text-sm font-medium"
+            >
+              Import a GEDCOM
+            </Link>
+            <Link
+              href="/person/new"
+              className="border-border w-fit rounded-md border px-4 py-2 text-sm font-medium"
+            >
+              Add the first person
+            </Link>
+          </div>
         </>
       ) : (
         <p className="text-muted-foreground text-lg">

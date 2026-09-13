@@ -5,26 +5,53 @@ the relevant `docs/SPEC.md` section.
 
 ## Current state
 
-**Next issue: #55 (label it `ready` first), then #56 → #57.** **#54
-(GEDCOM export UI) is done this session, staged on `feat/gedcom-export-ui`
-— see below; it filed #86, which blocks a real served-function run of both
-GEDCOM functions. #53 (root person by name) is merged to `main`. #73
-(the `/settings` and `/moderation` 500) is merged to `main` (`23a2b1c`).
-#52 (tree card → profile) is merged to `main` (`d2cbf2a`). #51 (`/tree`
-index) is merged to `main` (`3d902db`), closed. #50
-(header) is merged to `main` (`b825745`), closed.** A 2026-09-12 audit
-found that every §10 item is built but the app is not usable: no sign-out, no
-navigation to `/import` / `/moderation` / `/settings`, no way to open a
-profile from the tree, a 404 on a fresh deploy, and no way to create a person
-or a relationship without a GEDCOM. Milestone **Phase 9 — Gap closure**
-(#50–#65, label `phase:9`) holds the fixes, and a second product-lens pass
-added #66–#72 to the Post-MVP milestone. **#64 (docs) is done this session,
-staged on `docs/phase-9-spec-wayfinder` — see below.** The build contract for
-Phase 9 is now `docs/SPEC.md` §10 "Phase 9" plus §8.1 / §8.3 / §7, and
-WAYFINDER decision 36 + the new **Journeys** section. After #54, label #55
-`ready` and take #55 → #56 → #57 in that order (each depends on the one
-before). #40 (README) waits until Phase 9 lands, so the screenshots show a
-usable app. The audit itself is in `GAP-AUDIT-HANDOFF.md` (gitignored).
+**Next issue: #56 (depends on #55, done below), then #57 → #58 → … → #65 in
+§10 Phase 9 order.** #64 (docs), #50 (header), #51 (`/tree` index), #52 (tree
+card → profile), #53 (root person by name), #54 (GEDCOM export UI), and #73
+(the `/settings` and `/moderation` 500) are all merged to `main`. **#55
+(create a person in-app) is done this session, staged on
+`feat/create-person` — see below.** A 2026-09-12 audit found that every §10
+item was built but the app was not usable: no sign-out, no navigation, no way
+to open a profile from the tree, a 404 on a fresh deploy, and no way to
+create a person or a relationship without a GEDCOM. Milestone **Phase 9 —
+Gap closure** (#50–#65, label `phase:9`) holds the fixes, and a second
+product-lens pass added #66–#72 to the Post-MVP milestone. The build
+contract for Phase 9 is `docs/SPEC.md` §10 "Phase 9" plus §8.1 / §8.3 / §7,
+and WAYFINDER decision 36 + the **Journeys** section. #40 (README) waits
+until Phase 9 lands, so the screenshots show a usable app. The audit itself
+is in `GAP-AUDIT-HANDOFF.md` (gitignored).
+
+**Issue #55 — Create a person in-app (no GEDCOM): done, staged on
+`feat/create-person`.** SPEC §8.1 (`/person/new`), §8.3 ("Create"), audit
+item B1. No migration — `person_insert` RLS already allowed moderators, and
+`supabase/tests/rls_test.sql:449-464` already covered viewer-denied /
+moderator-allowed, so no new pgTAP test was needed.
+
+- **`lib/db/person-create.ts`** — `createPerson(client, { givenName, surname,
+sex })`, an explicit-column insert returning the new id. `gedcom_xref`
+  stays null (export assigns one, §4.2); `created_by`/`updated_by` are left
+  unset, matching the existing gap in `person-edit.ts`/`event-edit.ts` (not
+  fixed here — out of this diff's scope).
+- **`app/person/new/`** — `page.tsx` (moderator+ via `resolveEditAccess`,
+  mirrors `/import`'s access-check shape), `actions.ts`
+  (`createPersonAction`, re-checks access, `normalizeText`s the two name
+  fields to null, validates `sex` with the existing `isSex` guard, defaults
+  to `unknown`), `NewPersonForm.tsx` (client component modeled on
+  `InviteToClaimForm.tsx` — given name / surname / sex, all optional, redirect
+  to `/person/<id>/edit` on success via `router.push`, not a server-side
+  `redirect()`, so the ok/error discriminated result stays clean), and
+  `NewPersonForbidden.tsx`.
+- **Two entry points**, both moderator+: a **New person** link in the header
+  nav (`header-nav.ts` + updated test), and an **Add the first person**
+  button on the `/tree` empty state (`TreeEmptyState.tsx`) alongside
+  **Import a GEDCOM** — that empty state's own doc comment had flagged this
+  link as deliberately missing until this issue landed.
+- Code review (foreground): no findings. Full pnpm gate green (typecheck,
+  lint, format, build, **621** vitest), Deno gate green (typecheck, lint,
+  format, 81 tests). Spot-checked `supabase test db`: `rls_test.sql` passes;
+  one unrelated pre-existing failure in `exports_bucket_test.sql` (a stray
+  row count from prior export testing on the shared local Supabase stack) —
+  not part of the required verify gate and untouched by this diff.
 
 **Issue #54 — GEDCOM export UI: button, `export_job`, signed download:
 done, staged on `feat/gedcom-export-ui`.** SPEC §8.1 (`/import` is now
