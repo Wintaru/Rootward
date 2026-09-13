@@ -60,10 +60,17 @@ every `/otp` call with "converting NULL to string is unsupported" — the
 seeded admin could never actually sign in through `/login`. Fixed by adding
 `email_change` to the insert; verified with `supabase db reset` + a real
 Playwright sign-in through Mailpit, plus `supabase test db` (252 pgTAP
-tests, unaffected). Also noted but not fixed: the README/seed.sql comment
-describe a password sign-in path at `/login` that `LoginForm.tsx` doesn't
-actually have (magic link + Google only) — worth a docs fix or a deliberate
-decision, separately.
+tests, unaffected). Same bug class as #48 (2026-09-01, commit `f0d144d`) —
+that fix covered every `*_token` column it named but missed `email_change`,
+which isn't a `*_token` column; #97 cross-links #48.
+
+Second commit on the same branch: README.md's "Demo data" section and
+`seed.sql`'s comment both claimed "Sign in at /login with: email /
+password" for the demo admin, but `LoginForm.tsx` has no password field at
+all (magic link + Google only, decision 11). Rewrote both to describe the
+real flow (magic link via Mailpit) and reframed the seeded password as
+script/API-only, with a verified `curl` example against GoTrue's password
+grant endpoint.
 
 **Issue #57 — Family events (marriage, divorce, engagement, annulment) in
 the edit view: done, merged to `main` (commit 13361b6), issue closed.**

@@ -26,11 +26,14 @@
 -- ===========================================================================
 -- 1. Demo admin
 -- ===========================================================================
--- Local dev only. Sign in at /login with:
+-- Local dev only. Sign in at /login (magic link only — no password field
+-- there) as admin@rootward.test, then open the link Mailpit captures. The
+-- password below is not a product feature (decision 11 is magic link +
+-- Google) — it only works against GoTrue's own token endpoint directly
+-- (see README.md's "Demo data" section), as the quickest way for a script
+-- to get an active admin session on a local box.
 --   email:    admin@rootward.test
 --   password: rootward-admin
--- Password sign-in is not a product feature (decision 11 is magic link + Google)
--- — it is just the quickest way to get an active admin session on a local box.
 -- `on_auth_user_created` (#17) creates the matching `public.account` row; the
 -- upsert below promotes it to an active admin. In a real deployment the
 -- ADMIN_EMAIL bootstrap in the web tier does this instead (SPEC §9.1).

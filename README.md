@@ -61,15 +61,21 @@ Both restart the Supabase stack, so run them only when nothing else on the
 machine is using it.
 
 **Demo data.** `supabase db reset` (and the first `supabase start`) load
-`supabase/seed.sql` — a demo family tree and an admin account. Sign in at
-`/login`:
+`supabase/seed.sql` — a demo family tree and an admin account,
+`admin@rootward.test`. `/login` only offers magic link and Google (the
+product has no password sign-in — decision 11), so sign in with that email
+there and open the link from Mailpit at http://127.0.0.1:57324.
 
-- email: `admin@rootward.test`
-- password: `rootward-admin`
+The account also has a local-dev-only password, `rootward-admin`, for
+scripts and API calls — there is no password field in the app to type it
+into. Get a session with it directly against GoTrue:
 
-Password sign-in is local-dev only; the product uses magic link + Google. A
-magic link for the same address also works — it appears in Mailpit at
-http://127.0.0.1:57324.
+```sh
+curl -X POST "http://127.0.0.1:57321/auth/v1/token?grant_type=password" \
+  -H "apikey: $NEXT_PUBLIC_SUPABASE_ANON_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@rootward.test","password":"rootward-admin"}'
+```
 
 After the stack is up, `supabase status -o env` prints the local keys as
 `ANON_KEY` / `SERVICE_ROLE_KEY` — copy those two values into
