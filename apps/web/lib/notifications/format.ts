@@ -54,19 +54,42 @@ export function describeNotification(notification: NotificationRow): string {
   }
 }
 
+/** Notification types whose payload names a `person_id` the queue can link
+ * through to (§10 item 25, issue #61). Every other type's payload names an
+ * account, an import job, or nothing resolvable to a person. */
+const PERSON_LINKED_TYPES: ReadonlySet<NotificationType> = new Set([
+  "self_claim_linked",
+  "hide_request",
+]);
+
 /**
- * The person a notification's payload points at, when it has one
- * (`self_claim_linked`) -- lets the queue link through to that profile. Every
- * other type's payload names an account, an import job, or nothing
- * resolvable to a person.
+ * The person a notification's payload points at, when it has one. `null` for
+ * every type not in {@link PERSON_LINKED_TYPES}, even if its payload happens
+ * to carry a `person_id`-shaped field.
  */
 export function notificationPersonId(
   notification: NotificationRow,
 ): string | null {
-  if (notification.type !== "self_claim_linked") {
+  if (!PERSON_LINKED_TYPES.has(notification.type)) {
     return null;
   }
   return stringField(notification.payload, "person_id");
+}
+
+/**
+ * Where clicking a notification should go. `hide_request` resolves onto the
+ * person's edit view (§10 item 25, issue #61) -- "resolving should link to
+ * the person's edit view so the moderator can set the flag" (#58) -- every
+ * other person-linked type goes to the read-only profile.
+ */
+export function notificationHref(notification: NotificationRow): string | null {
+  const personId = notificationPersonId(notification);
+  if (personId === null) {
+    return null;
+  }
+  return notification.type === "hide_request"
+    ? `/person/${personId}/edit`
+    : `/person/${personId}`;
 }
 
 function assertNever(value: never): never {

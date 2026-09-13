@@ -23,6 +23,11 @@ export const metadata: Metadata = {
  * (never leak which). The "Edit" link is shown to moderators+ only, matching the
  * `/person/[personId]/edit` route's own gate.
  *
+ * `canRequestHide` (issue #61) reuses `view.parents`, already fetched for the
+ * Relationships section, rather than a second query — the "ask a moderator to
+ * hide this record" button is shown to the linked viewer themselves or a
+ * linked parent (decision 14); `request_hide`'s own check is the real gate.
+ *
  * The gallery's thumbnails need one extra step (#34): `getSignedMediaUrls`
  * runs under the service role, since the `media` bucket's `storage.objects`
  * policy is moderator-only and even an approved member's own session can't
@@ -52,10 +57,17 @@ export default async function PersonPage({
     data.media.map((item) => item.storagePathThumb),
   );
 
+  const view = buildPersonProfileView(data, thumbUrls);
+  const canRequestHide =
+    current.personId !== null &&
+    (current.personId === view.id ||
+      view.parents.some((parent) => parent.id === current.personId));
+
   return (
     <PersonProfile
-      view={buildPersonProfileView(data, thumbUrls)}
+      view={view}
       canEdit={isActiveModerator(current.account)}
+      canRequestHide={canRequestHide}
     />
   );
 }

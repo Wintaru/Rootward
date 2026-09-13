@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import type { NotificationRow } from "@/lib/db/notifications";
 
-import { describeNotification, notificationPersonId } from "./format";
+import {
+  describeNotification,
+  notificationHref,
+  notificationPersonId,
+} from "./format";
 
 function row(
   type: NotificationRow["type"],
@@ -71,6 +75,12 @@ describe("notificationPersonId", () => {
     ).toBe("p1");
   });
 
+  it("reads person_id off a hide_request payload", () => {
+    expect(notificationPersonId(row("hide_request", { person_id: "p1" }))).toBe(
+      "p1",
+    );
+  });
+
   it("is null for every other type, even if payload has a person_id-shaped field", () => {
     expect(
       notificationPersonId(row("access_requested", { person_id: "p1" })),
@@ -81,6 +91,26 @@ describe("notificationPersonId", () => {
     expect(notificationPersonId(row("self_claim_linked", {}))).toBeNull();
     expect(
       notificationPersonId(row("self_claim_linked", { person_id: 42 })),
+    ).toBeNull();
+  });
+});
+
+describe("notificationHref", () => {
+  it("links self_claim_linked to the read-only profile", () => {
+    expect(
+      notificationHref(row("self_claim_linked", { person_id: "p1" })),
+    ).toBe("/person/p1");
+  });
+
+  it("links hide_request to the edit view, so a moderator can set the flag", () => {
+    expect(notificationHref(row("hide_request", { person_id: "p1" }))).toBe(
+      "/person/p1/edit",
+    );
+  });
+
+  it("is null for a type with no linked person", () => {
+    expect(
+      notificationHref(row("access_requested", { person_id: "p1" })),
     ).toBeNull();
   });
 });

@@ -27,6 +27,7 @@ export * from "./onboarding";
 export * from "./notifications";
 export * from "./accounts";
 export * from "./wipe-tree";
+export * from "./hide-request";
 export {
   getAllowSelfSignup,
   getDefaultGenerations,

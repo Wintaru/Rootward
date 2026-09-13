@@ -5,16 +5,16 @@ the relevant `docs/SPEC.md` section.
 
 ## Current state
 
-**Next issue: #61, then #62 → … → #65 in §10 Phase 9 order.** #64
+**Next issue: #62, then #63 → #65 in §10 Phase 9 order.** #64
 (docs), #50 (header), #51 (`/tree` index), #52 (tree card → profile), #53
 (root person by name), #54 (GEDCOM export UI), #55 (create a person in-app),
 #56 (Relationships section), #57 (family events), #58 (person visibility +
-living override), #59 (delete a person), and #73 (the `/settings` and
-`/moderation` 500) are all merged to `main` and closed — confirmed `#59`
-landed as commit `220a957` on `origin/main`. #60 (wipe tree + block import on
-a non-empty tree) is done and staged on branch `feat/wipe-tree`, not yet
-merged — the next session should confirm it landed on `origin/main` before
-starting #61. A 2026-09-12
+living override), #59 (delete a person), #60 (wipe tree + block import on a
+non-empty tree), and #73 (the `/settings` and `/moderation` 500) are all
+merged to `main` and closed — confirmed `#60` landed as commit `96f69ce` on
+`origin/main`. #61 ("hide my record" request) is done and staged on branch
+`feat/hide-record-request`, not yet merged — the next session should confirm
+it landed on `origin/main` before starting #62. A 2026-09-12
 audit found that every §10 item was built but the app was not usable: no
 sign-out, no navigation, no way to open a profile from the tree, a 404 on a
 fresh deploy, and no way to create a person or a relationship without a
@@ -25,6 +25,54 @@ plus §8.1 / §8.3 / §7, and WAYFINDER decision 36 + the **Journeys** section.
 #40 (README) waits
 until Phase 9 lands, so the screenshots show a usable app. The audit itself
 is in `GAP-AUDIT-HANDOFF.md` (gitignored).
+
+**Issue #61 — "Hide my record" request from a linked viewer: done, staged on
+branch `feat/hide-record-request`, issue closed.** SPEC §5/§7, WAYFINDER
+decisions 7/14/27. New migration `20260913193000_request_hide.sql` and new
+pgTAP test `request_hide_test.sql` (15 assertions).
+
+- **`request_hide(p_person_id, p_reason)`** is a `SECURITY DEFINER` function
+  (unlike `delete_person`/`wipe_tree`'s `SECURITY INVOKER`): `notification`
+  has no client INSERT policy at all (SPEC §5), so this is the moderator-queue
+  write path for `hide_request`, the RPC equivalent of the
+  `notify_access_requested` trigger. It re-derives the caller's linked person
+  itself (`is_approved()` + `auth_account()`) rather than trusting RLS, then
+  requires either `caller_person_id = p_person_id` (asking to hide your own
+  record) or that the caller is a parent of `p_person_id` via
+  `family_child`/`family.partner*_id` (decision 14's "hide my child") —
+  otherwise raises `insufficient_privilege` (42501). Deduped like
+  `notify_access_requested`: an already-open `hide_request` for the same
+  person is a silent no-op, not a second row.
+- Payload is `{person_id, requested_by, message}` — deliberately `message`,
+  not `reason`, matching the field `describeNotification` (`format.ts`)
+  already reads uniformly across `claim_attempt_cap`/`import_finished`/
+  `import_failed`/`hide_request`.
+- `notificationPersonId` (`format.ts`) now also recognizes `hide_request`,
+  and a new `notificationHref` sends `hide_request` to the person's **edit**
+  view (`/person/{id}/edit`) rather than the read-only profile every other
+  linked type uses — the issue's "resolving should link to the person's edit
+  view so the moderator can set the flag" (#58). `NotificationBell.tsx` now
+  calls `notificationHref` instead of hardcoding `/person/${id}`. Resolving
+  itself needed no new code: `resolveNotification` was already fully generic.
+- **`PersonProfile.tsx`** shows "Ask a moderator to hide this record"
+  (`HideRequestButton.tsx`, a new client component) when `canRequestHide` is
+  true. `page.tsx` computes that by reusing `view.parents` — already fetched
+  for the Relationships section — rather than a second query:
+  `current.personId === view.id || view.parents.some(p => p.id === current.personId)`.
+- Caught during manual DB verification (docker exec'd `psql` against the
+  local stack, not just reading the SQL): the function's `INSERT` genuinely
+  works — a debugging session first made it look like RLS was silently
+  swallowing the insert, but that was the **verification query** running as
+  an unprivileged `authenticated`/viewer role (RLS on `notification` is
+  `is_moderator()`-only for SELECT), not the function. Fixed by adding
+  `set local role postgres;` before each verification `select` in the pgTAP
+  test, matching the existing pattern in `access_request_notify_test.sql`.
+- Applied non-destructively against the already-running shared local stack
+  (`supabase migration up --local`, `supabase test db --local`,
+  `pnpm gen:types`) rather than `dev:reset` — this repo's CLAUDE.md reserves
+  stack-restarting commands for Josh since other sessions may share it.
+- Verify gate green (typecheck/lint/format/build/test, plus the Deno gate);
+  full pgTAP suite green (310 assertions, 16 files).
 
 **Issue #60 — Wipe tree (admin) + block import on a non-empty tree: done,
 staged on branch `feat/wipe-tree`, issue closed.** SPEC §7, §8.1, WAYFINDER

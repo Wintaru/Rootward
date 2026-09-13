@@ -6,18 +6,23 @@ import type {
   RelationLine,
   TimelineEntry,
 } from "@/lib/person/view-model";
+import { HideRequestButton } from "./HideRequestButton";
 
 /**
  * Presentational read-only profile (SPEC §8.1 `/person/[personId]`, §10 item
  * 25). Every string is prepared by `buildPersonProfileView` — this file only
- * lays them out. A server component: no state, no effects.
+ * lays them out. A server component: no state, no effects (the one
+ * interactive piece, `HideRequestButton`, is its own client component).
  */
 export function PersonProfile({
   view,
   canEdit,
+  canRequestHide,
 }: {
   readonly view: PersonProfileView;
   readonly canEdit: boolean;
+  /** Issue #61: this viewer is linked to `view.id`, or to one of its parents. */
+  readonly canRequestHide: boolean;
 }) {
   const subtitle = [
     view.sexLabel,
@@ -54,6 +59,7 @@ export function PersonProfile({
             </Link>
           )}
         </div>
+        {canRequestHide && <HideRequestButton personId={view.id} />}
       </header>
 
       {view.names.length > 0 && (

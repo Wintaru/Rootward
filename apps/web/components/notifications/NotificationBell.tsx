@@ -14,7 +14,7 @@ import {
 } from "@/lib/db/notifications";
 import {
   describeNotification,
-  notificationPersonId,
+  notificationHref,
 } from "@/lib/notifications/format";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
@@ -269,13 +269,13 @@ function NotificationItem({
   readonly notification: NotificationRow;
   readonly onResolve: () => void;
 }) {
-  const personId = notificationPersonId(notification);
+  const href = notificationHref(notification);
 
   return (
     <li className="flex flex-col gap-1 p-3 text-sm">
       <p>
-        {personId !== null ? (
-          <Link href={`/person/${personId}`} className="hover:underline">
+        {href !== null ? (
+          <Link href={href} className="hover:underline">
             {describeNotification(notification)}
           </Link>
         ) : (
