@@ -34,13 +34,22 @@ the issues and fix `PROGRESS.md`.
 
 | File | Role | Who edits it |
 | --- | --- | --- |
-| `docs/WAYFINDER.md` | The decision map. 35 settled decisions, numbered. | Only via the `wayfinder` skill, and only when a decision genuinely changes. Mark superseded entries in place, never delete. |
+| `docs/WAYFINDER.md` | The decision map. Settled decisions, numbered. | Only via the `wayfinder` skill, and only when a decision genuinely changes. Mark superseded entries in place, never delete. |
 | `docs/SPEC.md` | The build contract derived from WAYFINDER. | Update when an issue reveals the spec was wrong or thin. Keep it in step with WAYFINDER — WAYFINDER wins on conflict. |
 | `PROGRESS.md` | Where the build is right now. | Every session, at the end. |
 | `DECISIONS.md` | Build-time decision log (gitignored). | As consequential forks happen. |
 
 ## Conventions
 
+- **Hosted multi-tenancy is a planned future phase, not current work.**
+  WAYFINDER decision 37 and the "Hosted Multi-Tenancy (Post-MVP)" milestone
+  track the plan for offering Rootward as a subdomain-per-family hosted
+  service. Don't pick up any of its issues until Josh says so — but while
+  doing ordinary single-tenant work, keep RLS checks behind shared helper
+  functions (not repeated inline), keep new storage buckets/policies gated
+  the same way as the existing ones, and don't hardcode this deployment's
+  domain in new code. None of that is multi-tenant work; it just keeps the
+  later retrofit mechanical instead of a rewrite.
 - **Branch before work.** `git switch -c <type>/<slug> origin/main` (fetch first).
   Types: `feat`, `fix`, `chore`, `refactor`, `docs`, `test`.
 - **Stage, do not commit.** Josh runs every commit and push himself. Hand him the

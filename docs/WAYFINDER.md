@@ -485,6 +485,62 @@ that every numbered §10 item was built and the app was still not usable.
       reverse / repair, ordinary complaints) runs before a spec and again
       against the issue list.
 
+## Decisions so far — hosted multi-tenancy planning
+
+Settled 2026-09-13, prompted by Josh asking whether he could also run
+Rootward as a hosted service (his own tree at `donner.rootward.family`,
+other families on other subdomains he owns) alongside the open-source
+self-host story.
+
+37. **Hosted multi-tenancy is a real future phase, deliberately not started
+    now.** Decision 17 stays in force for the current build: single-tenant,
+    no `tree_id`, self-host is the only distribution model until the MVP
+    (Phase 9 gap closure plus the remaining SPEC items) ships. Nothing here
+    changes that.
+    - **Why wait.** Nothing is deployed yet, so waiting costs nothing —
+      there is no live data to migrate across tenants, which is normally the
+      hard part of a multi-tenant retrofit. Starting it now would also mean
+      every Phase 9 issue has to think about tenants on top of the
+      usability gaps the 2026-09-12 audit already found, which is the wrong
+      thing to be optimizing for while the single-tenant app still isn't
+      fully usable.
+    - **Why it's real, not just an idea.** It touches every table and every
+      RLS policy (a retrofit decision 17 already anticipated as "known"),
+      plus things that don't exist at all today: subdomain routing, tenant
+      provisioning, and a legal/ops footing for hosting someone else's
+      family data. That is a phase's worth of design work, not a follow-on
+      issue.
+    - **Tracking.** Milestone "Hosted Multi-Tenancy (Post-MVP)" on the
+      `Wintaru/Rootward` repo, label `multi-tenant`. Eight frontier
+      questions are open there, none to be worked until this phase starts:
+      the tenant/account model (#89), unifying vs. diverging the self-host
+      and hosted schema (#90 — the highest-leverage fork of the phase), the
+      subdomain routing mechanism (#91), tenant provisioning/signup (#92),
+      cross-tenant platform-operator access (#93), storage/signed-URL
+      scoping (#94), tenant offboarding and deletion (#95), and legal/ops
+      groundwork (#96, a checklist rather than a design question).
+    - **Guidance for ongoing single-tenant work in the meantime.** Cheap,
+      already-consistent-with-current-practice habits that keep the
+      eventual retrofit mechanical instead of a rewrite — none of this is
+      multi-tenant work, just not actively making it harder:
+      - Keep RLS checks behind shared SQL helper functions (already the
+        pattern — `is_moderator()` and siblings) rather than repeating
+        boolean logic inline in each policy, so adding a tenant filter
+        later is a change in a few places, not a search-and-replace across
+        every policy.
+      - Storage bucket policies today gate on `bucket_id = '<name>' and
+        public.is_moderator()` — bucket plus role, no path scoping (see
+        `imports`/`exports`/`media` bucket migrations). Don't add a bucket
+        or policy that departs from that one shared shape, so a later
+        per-tenant scheme can compose a tenant check onto the existing
+        role check uniformly instead of special-casing an outlier.
+      - Don't hardcode the deployment's domain in new code (redirect URLs,
+        links in generated text) — read it from config/env. A hosted
+        deployment has one domain per tenant, not one fixed host.
+    - **Out of scope for this decision.** Any actual schema, routing, or
+      provisioning work — this decision only commits to a tracked plan, per
+      Josh's instruction to plan and ticket the phase without doing it.
+
 ## Journeys
 
 Added 2026-09-12 by decision 36. One line per thing a role must be able to do
@@ -551,7 +607,7 @@ The spec (`docs/SPEC.md`) is derived from this list plus the decisions.
 
 - Reaches `/settings` from the header (#50).
 - Picks the default root person by name (#53).
-- Manages roles. Suspends and reactivates an account (built, 37).
+- Manages roles. Suspends and reactivates an account (built, #37).
 - Deletes a person (#59).
 - Wipes the tree, with a backup export first, then re-imports (#60).
 
@@ -565,11 +621,15 @@ The spec (`docs/SPEC.md`) is derived from this list plus the decisions.
 
 ## Status
 
-All frontier items are resolved (2026-08-30). Decisions 1–35 are the full plan.
-**2026-09-12:** decision 36 amended the destination and decision 21 after a gap
-audit. The Journeys section above is now the second input to the spec. Phase 9
-(`docs/SPEC.md` §10, issues #50–#65) builds the missing journeys. No open
-frontier items.
+All frontier items for the current build are resolved (2026-08-30). Decisions
+1–35 are the full plan. **2026-09-12:** decision 36 amended the destination
+and decision 21 after a gap audit. The Journeys section above is now the
+second input to the spec. Phase 9 (`docs/SPEC.md` §10, issues #50–#65) builds
+the missing journeys. No open frontier items block the current build.
+**2026-09-13:** decision 37 opened a separate, future frontier for hosted
+multi-tenancy (issues #89–#96, milestone "Hosted Multi-Tenancy (Post-MVP)") —
+deliberately not started, tracked so it isn't lost and so ongoing work stays
+aware of it.
 
 Next step per the wayfinder pattern: turn this map into a spec, then break the
 spec into GitHub issues on `Wintaru/Rootward`, then build. Decisions 1–28 cover
@@ -582,7 +642,9 @@ Josh chose GitHub for this project, 2026-08-30). Session workflow: `CLAUDE.md`.
 ## Out of scope
 
 - **Two-way GEDCOM sync / merge engine.** Explicitly ruled out for this effort.
-- **Multi-tenant hosting / hosted SaaS.** Single-tenant only.
+- **Multi-tenant hosting / hosted SaaS.** Single-tenant only for the current
+  build. **2026-09-13:** no longer ruled out permanently — planned as a
+  distinct future phase, see decision 37.
 - **Email notifications of any kind** beyond auth magic links.
 - **Passwords for v1.**
 - **A separate C# backend service** — deferred, not being built now; importer
