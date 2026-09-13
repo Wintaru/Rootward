@@ -9,8 +9,7 @@ the relevant `docs/SPEC.md` section.
 (docs), #50 (header), #51 (`/tree` index), #52 (tree card → profile), #53
 (root person by name), #54 (GEDCOM export UI), #55 (create a person in-app),
 #56 (Relationships section), and #73 (the `/settings` and `/moderation` 500)
-are all done — staged on `feat/relationships-section` for #56, merged to
-`main` and closed for the rest. A 2026-09-12 audit found that every §10
+are all merged to `main` and closed. A 2026-09-12 audit found that every §10
 item was built but the app was not usable: no sign-out, no navigation, no way
 to open a profile from the tree, a 404 on a fresh deploy, and no way to
 create a person or a relationship without a GEDCOM. Milestone **Phase 9 —
@@ -22,7 +21,7 @@ until Phase 9 lands, so the screenshots show a usable app. The audit itself
 is in `GAP-AUDIT-HANDOFF.md` (gitignored).
 
 **Issue #56 — Relationships section: add parent / partner / child: done,
-staged on `feat/relationships-section`.** SPEC §8.3 ("Relationships"),
+merged to `main` (commit 373f7c8), issue closed.** SPEC §8.3 ("Relationships"),
 WAYFINDER decision 36, audit item B2. No migration — `family_write` /
 `family_child_write` RLS already allowed moderators, and
 `supabase/tests/rls_test.sql`'s `genealogy_write_probe` already covered
