@@ -5,20 +5,54 @@ the relevant `docs/SPEC.md` section.
 
 ## Current state
 
-**Next issue: #57, then #58 → … → #65 in §10 Phase 9 order.** #64
+**Next issue: #58, then #59 → … → #65 in §10 Phase 9 order.** #64
 (docs), #50 (header), #51 (`/tree` index), #52 (tree card → profile), #53
 (root person by name), #54 (GEDCOM export UI), #55 (create a person in-app),
-#56 (Relationships section), and #73 (the `/settings` and `/moderation` 500)
-are all merged to `main` and closed. A 2026-09-12 audit found that every §10
-item was built but the app was not usable: no sign-out, no navigation, no way
-to open a profile from the tree, a 404 on a fresh deploy, and no way to
-create a person or a relationship without a GEDCOM. Milestone **Phase 9 —
-Gap closure** (#50–#65, label `phase:9`) holds the fixes, and a second
-product-lens pass added #66–#72 to the Post-MVP milestone. The build
-contract for Phase 9 is `docs/SPEC.md` §10 "Phase 9" plus §8.1 / §8.3 / §7,
+#56 (Relationships section), #57 (family events), and #73 (the `/settings`
+and `/moderation` 500) are all merged to `main` and closed. A 2026-09-12
+audit found that every §10 item was built but the app was not usable: no
+sign-out, no navigation, no way to open a profile from the tree, a 404 on a
+fresh deploy, and no way to create a person or a relationship without a
+GEDCOM. Milestone **Phase 9 — Gap closure** (#50–#65, label `phase:9`) holds
+the fixes, and a second product-lens pass added #66–#72 to the Post-MVP
+milestone. The build contract for Phase 9 is `docs/SPEC.md` §10 "Phase 9"
+plus §8.1 / §8.3 / §7,
 and WAYFINDER decision 36 + the **Journeys** section. #40 (README) waits
 until Phase 9 lands, so the screenshots show a usable app. The audit itself
 is in `GAP-AUDIT-HANDOFF.md` (gitignored).
+
+**Issue #57 — Family events (marriage, divorce, engagement, annulment) in
+the edit view: done, staged on `feat/family-events`, issue open pending
+merge.** SPEC §8.3 ("Family events"), WAYFINDER decision 21 as amended by 36. No migration and no new RLS test — `event_write`/`event_select` and the
+`event` table's own check constraint already supported `owner_type =
+'family'` rows before any UI wrote them, and `genealogy_write_probe` already
+covers `event` INSERT allow/deny generically (same representative-table
+posture as #56's note on `family`/`family_child`).
+
+- **`lib/db/event-edit.ts`** — generalized from person-only to a shared
+  `EventOwnerRef` (`{kind:"person",...}` / `{kind:"family",...}`) threaded
+  through one internal `saveEventsForOwner`; `saveEvents`/`getPersonEvents`
+  and the new `saveFamilyEvents`/`getFamilyEventsForFamilies` are thin
+  owner-specific wrappers over the same CRUD/version-check machinery.
+  `getFamilyEventsForFamilies` is batched (one query for every union, not
+  one per union) — the first version of this was a per-union round trip in
+  `page.tsx`, caught and fixed in code review.
+- **`lib/db/family-edit.ts`** — extracted `UnionFamilySummary` /
+  `getUnionFamilySummaries` (the union query minus the children fetch) out
+  of `getRelationshipsEditData`, so the Events section gets partner names
+  without paying for `family_child`.
+- **`components/person/edit/EventsSection.tsx`** — the CRUD/diff/conflict
+  state machine is lifted into an internal `EventsEditor` parameterized by a
+  `save` callback; `EventsSection` renders one for the person's own events
+  plus one per union family, headed "Union with `<partner>`" via
+  `lib/edit/relationships.ts`'s new `unionPartnerLabel`.
+- **Read-only profile** (`lib/db/person.ts`, `lib/person/relatives.ts`,
+  `lib/person/view-model.ts`) — "both partners' profiles show it" is done by
+  appending the union's headline event (a `marriage` row wins over other
+  types, else earliest by `sortKey`) to the existing partner-line `detail`
+  text, e.g. `"Married — 1950, Springfield"`, rather than a new profile
+  section. One extra round trip in `getPersonProfile`, skipped for a person
+  with no partners.
 
 **Issue #56 — Relationships section: add parent / partner / child: done,
 merged to `main` (commit 373f7c8), issue closed.** SPEC §8.3 ("Relationships"),

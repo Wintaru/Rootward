@@ -16,6 +16,7 @@ import {
   searchPlaces as searchPlacesDb,
   saveCitations as persistCitations,
   saveEvents as persistEvents,
+  saveFamilyEvents as persistFamilyEvents,
   saveFacts as persistFacts,
   saveNotes as persistNotes,
   saveRepositories as persistRepositories,
@@ -196,6 +197,48 @@ export async function saveEvents(input: {
 
   const supabase = await createSupabaseServerClient();
   const result = await persistEvents(supabase, input);
+
+  revalidatePath(`/person/${input.personId}/edit`);
+  revalidatePath(`/person/${input.personId}`);
+  return { status: "saved", result };
+}
+
+/** One union family's events group under the Events section (SPEC §8.3,
+ * issue #57) — `personId` is only the page being edited (for access-checking
+ * and revalidation), the write itself is scoped to `familyId`; `event_write`
+ * RLS (`is_moderator()`) is the real boundary regardless. */
+export async function saveFamilyEvents(input: {
+  readonly personId: string;
+  readonly familyId: string;
+  readonly inserts: readonly EventInsertInput[];
+  readonly updates: readonly EventUpdateInput[];
+  readonly deletes: readonly EventDeleteInput[];
+}): Promise<SaveEventsActionResult> {
+  const access = await resolveEditAccess();
+  if (access.kind !== "allowed") {
+    return {
+      status: "error",
+      message: "You do not have permission to edit this person.",
+    };
+  }
+  if (!isUuid(input.personId) || !isUuid(input.familyId)) {
+    return { status: "error", message: "Invalid request." };
+  }
+  if (
+    input.inserts.length === 0 &&
+    input.updates.length === 0 &&
+    input.deletes.length === 0
+  ) {
+    return { status: "error", message: "Nothing to save." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const result = await persistFamilyEvents(supabase, {
+    familyId: input.familyId,
+    inserts: input.inserts,
+    updates: input.updates,
+    deletes: input.deletes,
+  });
 
   revalidatePath(`/person/${input.personId}/edit`);
   revalidatePath(`/person/${input.personId}`);

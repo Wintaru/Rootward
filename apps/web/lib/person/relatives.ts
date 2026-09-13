@@ -52,6 +52,7 @@ export interface ResolvedRelationships {
   readonly siblings: NeighborhoodPerson[];
   readonly partners: {
     readonly person: NeighborhoodPerson;
+    readonly familyId: string;
     readonly unionType: string | null;
   }[];
   readonly children: NeighborhoodPerson[];
@@ -83,8 +84,11 @@ export function resolveRelationships(
   // Two families with the same partner (an earlier and a later marriage to the
   // same person) collapse to one entry — deliberate for a v1 read-only view;
   // only the first union's label is kept.
-  const partners: { person: NeighborhoodPerson; unionType: string | null }[] =
-    [];
+  const partners: {
+    person: NeighborhoodPerson;
+    familyId: string;
+    unionType: string | null;
+  }[] = [];
   const seenPartners = new Set<string>();
   const childIds = new Set<string>();
   for (const family of neighborhood.families) {
@@ -98,6 +102,7 @@ export function resolveRelationships(
       seenPartners.add(other.id);
       partners.push({
         person: other,
+        familyId: family.id,
         unionType: unionTypeLabel(family.relationship_type),
       });
     }

@@ -1,6 +1,24 @@
+import type { UnionFamilySummary } from "@/lib/db/family-edit";
 import { describe, expect, it } from "vitest";
 
-import { defaultPartnerRoleForSex, toPersonRef } from "./relationships";
+import {
+  defaultPartnerRoleForSex,
+  toPersonRef,
+  unionPartnerLabel,
+} from "./relationships";
+
+function union(
+  overrides: Partial<UnionFamilySummary> = {},
+): UnionFamilySummary {
+  return {
+    familyId: "fam-1",
+    familyUpdatedAt: "2020-01-01T00:00:00Z",
+    partner1: { id: "p1", name: "Jane Doe", role: "wife" },
+    partner2: { id: "p2", name: "John Smith", role: "husband" },
+    relationshipType: "married",
+    ...overrides,
+  };
+}
 
 describe("defaultPartnerRoleForSex", () => {
   it("maps male to husband", () => {
@@ -51,5 +69,19 @@ describe("toPersonRef", () => {
       surname: "Lovelace",
       sex: "female",
     });
+  });
+});
+
+describe("unionPartnerLabel", () => {
+  it("names the other partner when the focus is partner1", () => {
+    expect(unionPartnerLabel(union(), "p1")).toBe("Union with John Smith");
+  });
+
+  it("names the other partner when the focus is partner2", () => {
+    expect(unionPartnerLabel(union(), "p2")).toBe("Union with Jane Doe");
+  });
+
+  it("falls back to a bare label for a single-known-parent family", () => {
+    expect(unionPartnerLabel(union({ partner2: null }), "p1")).toBe("Union");
   });
 });

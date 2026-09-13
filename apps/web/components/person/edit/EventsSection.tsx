@@ -2,7 +2,11 @@
 
 import { useId, useReducer, useState } from "react";
 
-import { saveEvents } from "@/app/person/[personId]/edit/actions";
+import {
+  saveEvents,
+  saveFamilyEvents,
+  type SaveEventsActionResult,
+} from "@/app/person/[personId]/edit/actions";
 import { Constants } from "@/lib/db";
 import type { RowConflict } from "@/lib/db/conflict";
 import type { EventEditRow } from "@/lib/db/event-edit";
@@ -26,14 +30,71 @@ import { DateInput } from "./DateInput";
 import { Field, inputClass, SaveBar } from "./form";
 import { PlaceInput } from "./PlaceInput";
 
+/** One union family's events group, as loaded by the edit page — everything
+ * `EventsSection` needs to render its "Union with <partner>" heading (SPEC
+ * §8.3, issue #57) without knowing how that label or the family's events were
+ * fetched. */
+export interface UnionEventsGroup {
+  readonly familyId: string;
+  readonly partnerLabel: string;
+  readonly events: readonly EventEditRow[];
+}
+
 /**
- * Events (SPEC §8.3, §4.1, §4.2, §10 item 28) — CRUD over person-owned
- * `event` rows: type, date (via `DateInput`), place (via `PlaceInput`),
- * value, and age. Add and delete are local state; Save sends only the
- * resulting diff, each row version-checked against the `updated_at` it was
- * loaded at (WAYFINDER decision 26). The list re-sorts by `sort_key` after a
- * save — that column is server-trigger-computed, not client-ordered, so
- * there is no manual reorder control here (unlike Additional Names).
+ * Events (SPEC §8.3, §4.1, §4.2, §10 item 28), plus — as of issue #57 — each
+ * union family's own events grouped underneath, one "Union with <partner>"
+ * heading per family `personId` partners in. A person's own events and a
+ * family's union events are both CRUD over `event` rows with the exact same
+ * shape and save lifecycle (`lib/edit/events.ts`'s diff/reducer helpers carry
+ * no owner information at all — only the save call does), so both lists
+ * share one `EventsEditor` below; only the save function passed in differs
+ * (`saveEvents` vs. `saveFamilyEvents`).
+ */
+export function EventsSection({
+  personId,
+  loaded,
+  unions,
+}: {
+  readonly personId: string;
+  readonly loaded: readonly EventEditRow[];
+  readonly unions: readonly UnionEventsGroup[];
+}) {
+  return (
+    <div className="flex flex-col gap-8">
+      <EventsEditor
+        loaded={loaded}
+        emptyLabel="No events recorded."
+        save={(diff) => saveEvents({ personId, ...diff })}
+      />
+
+      {unions.map((union) => (
+        <div
+          key={union.familyId}
+          className="border-border flex flex-col gap-4 border-t pt-6"
+        >
+          <h3 className="text-sm font-semibold tracking-tight">
+            {union.partnerLabel}
+          </h3>
+          <EventsEditor
+            loaded={union.events}
+            emptyLabel="No union events recorded."
+            save={(diff) =>
+              saveFamilyEvents({ personId, familyId: union.familyId, ...diff })
+            }
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * One events list's full CRUD lifecycle: add / edit / delete rows locally,
+ * diff against the loaded baseline, save (whichever owner `save` targets),
+ * and resolve conflicts through the shared `ConflictDialog` (#31). Lifted out
+ * of `EventsSection` itself so a person's own events and each union family's
+ * events (issue #57) are the exact same component with a different `save`
+ * callback, rather than two copies of this state machine drifting apart.
  *
  * A conflicted row surfaces through the shared `ConflictDialog` (#31): "keep
  * mine" re-sends that one row's original patch against the row's fresh
@@ -44,12 +105,14 @@ import { PlaceInput } from "./PlaceInput";
  * `reconcileEventsAfterSave` only ever touches rows present in the result it
  * is given, so every other row's local state is untouched either way.
  */
-export function EventsSection({
-  personId,
+function EventsEditor({
   loaded,
+  emptyLabel,
+  save,
 }: {
-  readonly personId: string;
   readonly loaded: readonly EventEditRow[];
+  readonly emptyLabel: string;
+  readonly save: (diff: EventsDiff) => Promise<SaveEventsActionResult>;
 }) {
   const [baseline, setBaseline] = useState(loaded);
   const [rows, dispatch] = useReducer(eventsReducer, loaded, eventsFromLoaded);
@@ -90,7 +153,7 @@ export function EventsSection({
     setStatus("saving");
     setError(null);
     try {
-      const outcome = await saveEvents({ personId, ...diffToSend });
+      const outcome = await save(diffToSend);
       if (outcome.status !== "saved") {
         setError(outcome.message);
         setStatus("error");
@@ -133,7 +196,7 @@ export function EventsSection({
     }
   }
 
-  async function save() {
+  async function saveDirty() {
     if (!dirty || status === "saving") {
       return;
     }
@@ -230,7 +293,7 @@ export function EventsSection({
           />
         ))}
         {rows.length === 0 && (
-          <li className="text-muted-foreground text-sm">No events recorded.</li>
+          <li className="text-muted-foreground text-sm">{emptyLabel}</li>
         )}
       </ul>
 
@@ -247,7 +310,7 @@ export function EventsSection({
         dirty={dirty}
         status={status}
         error={error}
-        onSave={save}
+        onSave={saveDirty}
         conflictMessage="Some events changed elsewhere and were not saved; the rest were."
       />
     </div>

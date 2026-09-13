@@ -8,6 +8,7 @@ import { getCurrentAccount } from "@/lib/auth/current-account";
 import { getAccountDisplayName } from "@/lib/db/account-lookup";
 import type { Database } from "@/lib/db/database.types";
 import {
+  getFamilyEventsForFamilies,
   getPersonEditShell,
   getPersonEvents,
   getPersonFacts,
@@ -16,12 +17,14 @@ import {
   getPersonReferenceNumbers,
   getRelationshipsEditData,
   getSourcesSectionData,
+  getUnionFamilySummaries,
 } from "@/lib/db";
 import { getPersonMedia } from "@/lib/db/media-edit";
 import { getSignedMediaUrls } from "@/lib/db/media-urls";
 import type { PersonEditShellData } from "@/lib/db/person";
 import { resolveEditSection, type EditSectionSlug } from "@/lib/edit/sections";
 import type { NameGenderFields } from "@/lib/edit/person-fields";
+import { unionPartnerLabel } from "@/lib/edit/relationships";
 import { buildEditShellView } from "@/lib/edit/view-model";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { AdditionalNamesSection } from "@/components/person/edit/AdditionalNamesSection";
@@ -167,8 +170,26 @@ async function loadSectionContent(
     }
 
     case "events": {
-      const events = await getPersonEvents(supabase, personId);
-      return <EventsSection personId={personId} loaded={events} />;
+      const [events, unions] = await Promise.all([
+        getPersonEvents(supabase, personId),
+        getUnionFamilySummaries(supabase, personId),
+      ]);
+      const eventsByFamily = await getFamilyEventsForFamilies(
+        supabase,
+        unions.map((union) => union.familyId),
+      );
+      const unionGroups = unions.map((union) => ({
+        familyId: union.familyId,
+        partnerLabel: unionPartnerLabel(union, personId),
+        events: eventsByFamily.get(union.familyId) ?? [],
+      }));
+      return (
+        <EventsSection
+          personId={personId}
+          loaded={events}
+          unions={unionGroups}
+        />
+      );
     }
 
     case "facts": {

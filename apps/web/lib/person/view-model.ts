@@ -4,6 +4,7 @@ import type {
   ProfileCitation,
   ProfileEvent,
   ProfileFact,
+  ProfileFamilyEvent,
   ProfileName,
 } from "@/lib/db/person";
 import type { NeighborhoodPerson } from "@/lib/db/types";
@@ -118,6 +119,7 @@ export function buildPersonProfileView(
   const focus =
     data.relationships.persons.find((p) => p.id === data.person.id) ?? null;
   const rel = resolveRelationships(data.relationships, data.person.id);
+  const familyEventsById = groupFamilyEvents(data.familyEvents);
 
   return {
     id: data.person.id,
@@ -138,7 +140,10 @@ export function buildPersonProfileView(
     parents: rel.parents.map((p) => toRelationLine(p)),
     siblings: rel.siblings.map((p) => toRelationLine(p)),
     partners: rel.partners.map((entry) =>
-      toRelationLine(entry.person, entry.unionType),
+      toRelationLine(
+        entry.person,
+        unionDetail(entry.unionType, familyEventsById.get(entry.familyId)),
+      ),
     ),
     children: rel.children.map((p) => toRelationLine(p)),
     media: data.media.map((m) => ({
@@ -211,6 +216,60 @@ function eventDetail(event: ProfileEvent): string | null {
 function formatAge(ageText: string | null): string {
   const age = ageText?.trim();
   return age === undefined || age === "" ? "" : `age ${age}`;
+}
+
+// --- union events (SPEC §8.3, issue #57) ------------------------------
+
+function groupFamilyEvents(
+  events: readonly ProfileFamilyEvent[],
+): ReadonlyMap<string, readonly ProfileFamilyEvent[]> {
+  const byFamily = new Map<string, ProfileFamilyEvent[]>();
+  for (const event of events) {
+    const list = byFamily.get(event.familyId) ?? [];
+    list.push(event);
+    byFamily.set(event.familyId, list);
+  }
+  return byFamily;
+}
+
+/** The partner line's `detail` (SPEC §8.3, issue #57's "both partners'
+ * profiles show it"): the union type plus its one most relevant event's date
+ * and place, e.g. `"Married — 12 Jun 1990, Springfield"`. A recorded
+ * `marriage` event wins over any other type (engagement, divorce, …) as the
+ * headline date for a v1 glance line; ties broken by `sortKey` (undated
+ * last) — the full set is still every partner's own Events section, this is
+ * only the profile's one-line summary. */
+function unionDetail(
+  unionType: string | null,
+  events: readonly ProfileFamilyEvent[] | undefined,
+): string | null {
+  const headline = pickHeadlineUnionEvent(events ?? []);
+  const dateAndPlace =
+    headline === undefined
+      ? null
+      : [formatRowDate(headline.date) || null, headline.placeName]
+          .filter((part): part is string => part !== null && part !== "")
+          .join(", ") || null;
+
+  const parts = [unionType, dateAndPlace].filter(
+    (part): part is string => part !== null,
+  );
+  return parts.length === 0 ? null : parts.join(" — ");
+}
+
+function pickHeadlineUnionEvent(
+  events: readonly ProfileFamilyEvent[],
+): ProfileFamilyEvent | undefined {
+  const marriage = events.find((event) => event.type === "marriage");
+  if (marriage !== undefined) {
+    return marriage;
+  }
+  return [...events].sort((a, b) => {
+    if (a.sortKey === b.sortKey) return 0;
+    if (a.sortKey === null) return 1;
+    if (b.sortKey === null) return -1;
+    return a.sortKey < b.sortKey ? -1 : 1;
+  })[0];
 }
 
 // --- facts ----------------------------------------------------------

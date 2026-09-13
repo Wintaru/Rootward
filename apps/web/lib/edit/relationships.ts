@@ -1,4 +1,4 @@
-import type { PersonRef } from "@/lib/db/family-edit";
+import type { PersonRef, UnionFamilySummary } from "@/lib/db/family-edit";
 import type { PartnerRole, Sex } from "@/lib/db/types";
 
 import { normalizeText } from "./diff";
@@ -46,4 +46,17 @@ export function toPersonRef(input: PersonRefInput): PersonRef {
     surname: normalizeText(input.surname),
     sex: input.sex,
   };
+}
+
+/** "Union with Jane Doe" for the Events section's per-family group heading
+ * (SPEC §8.3, issue #57) — the *other* partner relative to `focusPersonId`,
+ * falling back to a bare "Union" for a single-known-parent family with no
+ * second partner yet (SPEC §8.3's #56 note on single-parent families). */
+export function unionPartnerLabel(
+  union: UnionFamilySummary,
+  focusPersonId: string,
+): string {
+  const other =
+    union.partner1?.id === focusPersonId ? union.partner2 : union.partner1;
+  return other === null ? "Union" : `Union with ${other.name}`;
 }

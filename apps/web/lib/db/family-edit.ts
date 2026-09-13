@@ -67,13 +67,20 @@ export interface ParentFamilyEditRow {
   readonly relationToPartner2: ChildRelation | null;
 }
 
-/** One family `personId` is a partner in — a union, with its children. */
-export interface UnionFamilyEditRow {
+/** One family `personId` is a partner in — a union — without its children.
+ * Everything the Events section needs to group family events under a "Union
+ * with <partner>" heading (SPEC §8.3, issue #57); the Relationships section's
+ * {@link UnionFamilyEditRow} adds `children` on top for its own fuller view. */
+export interface UnionFamilySummary {
   readonly familyId: string;
   readonly familyUpdatedAt: string;
   readonly partner1: FamilyEditPartner | null;
   readonly partner2: FamilyEditPartner | null;
   readonly relationshipType: UnionType | null;
+}
+
+/** One family `personId` is a partner in — a union, with its children. */
+export interface UnionFamilyEditRow extends UnionFamilySummary {
   readonly children: readonly FamilyChildEditRow[];
 }
 
@@ -169,39 +176,56 @@ function mapFamilyChild(row: FamilyChildDbRow): FamilyChildEditRow {
   };
 }
 
+/** The union families `personId` partners in, without their children — see
+ * {@link UnionFamilySummary}'s doc for why this is split out from
+ * {@link getRelationshipsEditData}. */
+export async function getUnionFamilySummaries(
+  client: Db,
+  personId: string,
+): Promise<readonly UnionFamilySummary[]> {
+  const { data, error } = await client
+    .from("family")
+    .select(UNION_FAMILY_COLUMNS)
+    .or(`partner1_id.eq.${personId},partner2_id.eq.${personId}`)
+    .order("created_at", { ascending: true });
+
+  if (error !== null) {
+    throw new Error(`getUnionFamilySummaries: ${error.message}`);
+  }
+
+  return (data as unknown as UnionFamilyDbRow[]).map((row) => ({
+    familyId: row.id,
+    familyUpdatedAt: row.updated_at,
+    partner1: toPartner(row.partner1_id, row.partner1_role, row.partner1),
+    partner2: toPartner(row.partner2_id, row.partner2_role, row.partner2),
+    relationshipType: row.relationship_type,
+  }));
+}
+
 /** Every family `personId` is a child in or a partner in, with each union's
  * children — everything the Relationships section shows (SPEC §8.3, issue
  * #56). Three round trips: parent families (with their partners embedded),
- * union families (with their partners embedded), then every child of every
- * union family in one batched fetch — genealogy-sized data, not worth
- * collapsing further. Runs under the caller's identity; RLS (`family_select`
- * / `family_child_select`) is the boundary, same as every other section's
- * read. */
+ * union families (with their partners embedded, via
+ * {@link getUnionFamilySummaries}), then every child of every union family in
+ * one batched fetch — genealogy-sized data, not worth collapsing further.
+ * Runs under the caller's identity; RLS (`family_select` / `family_child_select`)
+ * is the boundary, same as every other section's read. */
 export async function getRelationshipsEditData(
   client: Db,
   personId: string,
 ): Promise<RelationshipsEditData> {
-  const [parentRes, unionRes] = await Promise.all([
+  const [parentRes, unionFamilySummaries] = await Promise.all([
     client
       .from("family_child")
       .select(PARENT_FAMILY_COLUMNS)
       .eq("person_id", personId)
       .order("created_at", { ascending: true }),
-    client
-      .from("family")
-      .select(UNION_FAMILY_COLUMNS)
-      .or(`partner1_id.eq.${personId},partner2_id.eq.${personId}`)
-      .order("created_at", { ascending: true }),
+    getUnionFamilySummaries(client, personId),
   ]);
 
   if (parentRes.error !== null) {
     throw new Error(
       `getRelationshipsEditData: parent families: ${parentRes.error.message}`,
-    );
-  }
-  if (unionRes.error !== null) {
-    throw new Error(
-      `getRelationshipsEditData: union families: ${unionRes.error.message}`,
     );
   }
 
@@ -234,8 +258,7 @@ export async function getRelationshipsEditData(
       relationToPartner2: row.relation_to_partner2,
     }));
 
-  const unionRows = unionRes.data as unknown as UnionFamilyDbRow[];
-  const unionFamilyIds = unionRows.map((row) => row.id);
+  const unionFamilyIds = unionFamilySummaries.map((row) => row.familyId);
 
   const childrenByFamily = new Map<string, FamilyChildEditRow[]>();
   if (unionFamilyIds.length > 0) {
@@ -258,14 +281,12 @@ export async function getRelationshipsEditData(
     }
   }
 
-  const unionFamilies: UnionFamilyEditRow[] = unionRows.map((row) => ({
-    familyId: row.id,
-    familyUpdatedAt: row.updated_at,
-    partner1: toPartner(row.partner1_id, row.partner1_role, row.partner1),
-    partner2: toPartner(row.partner2_id, row.partner2_role, row.partner2),
-    relationshipType: row.relationship_type,
-    children: childrenByFamily.get(row.id) ?? [],
-  }));
+  const unionFamilies: UnionFamilyEditRow[] = unionFamilySummaries.map(
+    (summary) => ({
+      ...summary,
+      children: childrenByFamily.get(summary.familyId) ?? [],
+    }),
+  );
 
   return { parentFamilies, unionFamilies };
 }

@@ -28,9 +28,10 @@ type Db = SupabaseClient<Database>;
  * in parallel; the relationship strip reuses the one-round-trip
  * `get_neighborhood` at one generation each way.
  *
- * The timeline is this person's own events. Union events (marriage, divorce)
- * hang off `family` and are surfaced through the relationship strip's union
- * label, not the timeline — see `DECISIONS.md`.
+ * The timeline is this person's own events. Union events (marriage, divorce
+ * — issue #57) hang off `family` and are surfaced through the relationship
+ * strip's partner line instead, as `familyEvents` below — see
+ * `view-model.ts`'s `unionDetail`.
  */
 
 // --- returned shape ------------------------------------------------------
@@ -65,6 +66,14 @@ export interface ProfileEvent {
   readonly sortKey: string | null;
   readonly placeName: string | null;
   readonly date: GenealogyDateColumns;
+}
+
+/** A family-owned event (marriage, divorce, engagement, annulment) belonging
+ * to one of `personId`'s unions (SPEC §8.3, issue #57) — `familyId` says
+ * which, so `view-model.ts` can group these back onto the right partner
+ * line. */
+export interface ProfileFamilyEvent extends ProfileEvent {
+  readonly familyId: string;
 }
 
 export interface ProfileFact {
@@ -109,6 +118,7 @@ export interface PersonProfileData {
   readonly person: ProfilePersonCore;
   readonly names: readonly ProfileName[];
   readonly events: readonly ProfileEvent[];
+  readonly familyEvents: readonly ProfileFamilyEvent[];
   readonly facts: readonly ProfileFact[];
   readonly media: readonly ProfileMedia[];
   readonly citations: readonly ProfileCitation[];
@@ -251,6 +261,52 @@ export async function getPersonProfile(
 
   const relationships = await getNeighborhood(client, personId, 1, 1);
 
+  // Union events (marriage, divorce, …, issue #57) hang off `family`, not
+  // this person, so they are only reachable once the neighborhood names
+  // which families `personId` partners in — hence the extra round trip after
+  // `relationships` rather than alongside the `Promise.all` above. Skipped
+  // entirely for a person with no partners, the common case for a leaf node.
+  const unionFamilyIds = relationships.families
+    .filter((f) => f.partner1_id === personId || f.partner2_id === personId)
+    .map((f) => f.id);
+
+  let familyEvents: ProfileFamilyEvent[] = [];
+  if (unionFamilyIds.length > 0) {
+    const familyEventsRes = await client
+      .from("event")
+      .select(
+        "id, family_id, type, type_other, value, age_text, sort_key, date_value_raw, date_kind, date_year1, date_month1, date_day1, date_year2, date_month2, date_day2, date_calendar, date_dual_year, date_phrase, place:place_id(name)",
+      )
+      .eq("owner_type", "family")
+      .in("family_id", unionFamilyIds)
+      .order("sort_key", { ascending: true, nullsFirst: false })
+      .order("id", { ascending: true });
+
+    throwOnError("event (family)", familyEventsRes.error);
+    // `family_id` is nullable on `event`'s row type only because a
+    // person-owned event has none — the `.eq("owner_type", "family")` filter
+    // above guarantees every row here has one (the table's own check
+    // constraint enforces it); this filter is the type-level acknowledgment
+    // of that same invariant `family-edit.ts`'s `ParentFamilyDbRow` filter
+    // makes for its own nullable embed.
+    familyEvents = (familyEventsRes.data ?? [])
+      .filter(
+        (row): row is typeof row & { family_id: string } =>
+          row.family_id !== null,
+      )
+      .map((row) => ({
+        id: row.id,
+        familyId: row.family_id,
+        type: row.type,
+        typeOther: row.type_other,
+        value: row.value,
+        ageText: row.age_text,
+        sortKey: row.sort_key,
+        placeName: placeName(row.place),
+        date: pickDateColumns(row),
+      }));
+  }
+
   return {
     person: mapPersonCore(personRes.data),
     names: (namesRes.data ?? []).map((row) => ({
@@ -272,6 +328,7 @@ export async function getPersonProfile(
       placeName: placeName(row.place),
       date: pickDateColumns(row),
     })),
+    familyEvents,
     facts: (factsRes.data ?? []).map((row) => ({
       id: row.id,
       type: row.type,

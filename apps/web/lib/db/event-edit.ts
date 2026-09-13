@@ -9,17 +9,28 @@ import type { GenealogyDateColumns } from "./genealogy-date";
 
 type Db = SupabaseClient<Database>;
 
+/** Which row an event save targets — a person's own record, or the union a
+ * family represents (issue #57). Mirrors the `event` table's own
+ * `owner_type` + `person_id` xor `family_id` check constraint. */
+export type EventOwnerRef =
+  | { readonly kind: "person"; readonly personId: string }
+  | { readonly kind: "family"; readonly familyId: string };
+
 /**
  * The write side of the edit view's Events section (SPEC §8.3, §4.2, §10 item
- * 28). Reads run under the caller's identity (RLS `event_select`); writes go
- * through `event_write` (`is_moderator()`) — the server action re-checks
- * before calling in, but RLS is the real boundary, same posture as
- * `person-edit.ts`.
+ * 28), plus family-owned union events — marriage, divorce, engagement,
+ * annulment — added by issue #57. Reads run under the caller's identity (RLS
+ * `event_select`); writes go through `event_write` (`is_moderator()`) — the
+ * server action re-checks before calling in, but RLS is the real boundary,
+ * same posture as `person-edit.ts`.
  *
- * Only person-owned events (`owner_type = 'person'`) are in scope — a
- * family's union events (marriage, divorce) are not edited from a person's
- * edit view (SPEC §8.3 lists no such affordance; the read-only profile made
- * the same call for its timeline, see `person.ts`'s doc comment).
+ * Person events and family events share every column, every version-check
+ * rule, and every helper below — they differ only in which owner column is
+ * populated (`owner_type` plus `person_id` xor `family_id`, per the `event`
+ * table's own check constraint), captured as {@link EventOwnerRef} and
+ * threaded through the shared `saveEventsForOwner`. `getPersonEvents` /
+ * `saveEvents` and `getFamilyEventsForFamilies` / `saveFamilyEvents` are the thin,
+ * owner-specific entry points the two edit-view components call.
  *
  * Every write is version-checked the same way as #27's `person`/`person_name`
  * writes (WAYFINDER decision 26): `UPDATE/DELETE … WHERE id = $1 AND
@@ -96,6 +107,54 @@ export async function getPersonEvents(
   return (data ?? []).map(mapEventEditRow);
 }
 
+/** Every family-owned `event` row for each of `familyIds`, grouped by which
+ * family it belongs to — marriage, divorce, engagement, annulment recorded
+ * against a union rather than a person (SPEC §8.3, issue #57), one group per
+ * "Union with <partner>" heading in the Events section. One batched fetch
+ * for every union the caller is loading events for, same "N sibling
+ * families, one query" shape as `family-edit.ts`'s `childrenByFamily` — the
+ * Events section otherwise pays for a chatty per-union round trip. */
+export async function getFamilyEventsForFamilies(
+  client: Db,
+  familyIds: readonly string[],
+): Promise<ReadonlyMap<string, readonly EventEditRow[]>> {
+  const byFamily = new Map<string, readonly EventEditRow[]>();
+  if (familyIds.length === 0) {
+    return byFamily;
+  }
+
+  const { data, error } = await client
+    .from("event")
+    .select(`${EVENT_EDIT_COLUMNS}, family_id`)
+    .eq("owner_type", "family")
+    .in("family_id", familyIds)
+    .order("sort_key", { ascending: true, nullsFirst: false })
+    .order("id", { ascending: true });
+
+  if (error !== null) {
+    throw new Error(`getFamilyEventsForFamilies: ${error.message}`);
+  }
+
+  // `family_id` is nullable on `event`'s row type only because a
+  // person-owned event has none — the `.eq("owner_type", "family")` filter
+  // above guarantees every row here has one (the table's own check
+  // constraint enforces it), same invariant `person.ts`'s equivalent filter
+  // makes explicit at the type level.
+  const grouped = new Map<string, EventEditRow[]>();
+  for (const row of data ?? []) {
+    if (row.family_id === null) {
+      continue;
+    }
+    const list = grouped.get(row.family_id) ?? [];
+    list.push(mapEventEditRow(row));
+    grouped.set(row.family_id, list);
+  }
+  for (const [familyId, rows] of grouped) {
+    byFamily.set(familyId, rows);
+  }
+  return byFamily;
+}
+
 /** The fields one event row's insert/update patch may carry. `date` is always
  * the full column set together (it is derived from one raw string —
  * `dateColumnsFromRaw` in `lib/edit/events.ts` — so there is no per-column
@@ -142,15 +201,15 @@ type EventUpdateRow = Database["public"]["Tables"]["event"]["Update"];
 
 async function buildEventInsertRow(
   client: Db,
-  personId: string,
+  owner: EventOwnerRef,
   input: EventInsertInput,
 ): Promise<EventInsertRow> {
   const placeId = await findOrCreatePlaceId(client, input.placeName);
   return {
     id: input.id,
-    owner_type: "person",
-    person_id: personId,
-    family_id: null,
+    owner_type: owner.kind,
+    person_id: owner.kind === "person" ? owner.personId : null,
+    family_id: owner.kind === "family" ? owner.familyId : null,
     type: input.type,
     type_other: input.typeOther,
     value: input.value,
@@ -187,27 +246,29 @@ async function buildEventPatchRow(
 }
 
 /**
- * Apply the Events diff for one person: insert new rows, apply each
- * version-checked update, apply each version-checked delete. Same shape as
- * `saveAdditionalNames` — one bulk insert (no concurrency question, the rows
- * do not exist yet), one round trip per update/delete (decision 26 — a
- * mismatch rejects only that row) — and not transactional across the three
- * legs for the same reason documented there. Place resolution
- * (`findOrCreatePlaceId`) runs per row alongside the writes; its own
- * `23505` retry keeps two rows saving the same new place from creating two
- * `place` rows.
+ * Apply an Events diff for one owner (a person, or a family's union): insert
+ * new rows, apply each version-checked update, apply each version-checked
+ * delete. Same shape as `saveAdditionalNames` — one bulk insert (no
+ * concurrency question, the rows do not exist yet), one round trip per
+ * update/delete (decision 26 — a mismatch rejects only that row) — and not
+ * transactional across the three legs for the same reason documented there.
+ * Place resolution (`findOrCreatePlaceId`) runs per row alongside the writes;
+ * its own `23505` retry keeps two rows saving the same new place from
+ * creating two `place` rows. `applyEventUpdate` / `applyEventDelete` need no
+ * owner — an update/delete targets a row by id, and `event`'s owner columns
+ * are immutable once set — so only the insert path is owner-parameterized.
  */
-export async function saveEvents(
+async function saveEventsForOwner(
   client: Db,
+  owner: EventOwnerRef,
   args: {
-    readonly personId: string;
     readonly inserts: readonly EventInsertInput[];
     readonly updates: readonly EventUpdateInput[];
     readonly deletes: readonly EventDeleteInput[];
   },
 ): Promise<SaveEventsResult> {
   const [inserted, updateResults, deleteResults] = await Promise.all([
-    insertEvents(client, args.personId, args.inserts),
+    insertEvents(client, owner, args.inserts),
     Promise.all(args.updates.map((input) => applyEventUpdate(client, input))),
     Promise.all(args.deletes.map((input) => applyEventDelete(client, input))),
   ]);
@@ -234,16 +295,51 @@ export async function saveEvents(
   return { inserted, updated, deletedIds, conflicts };
 }
 
+/** Save the Events section's diff for a person (SPEC §10 item 28). */
+export async function saveEvents(
+  client: Db,
+  args: {
+    readonly personId: string;
+    readonly inserts: readonly EventInsertInput[];
+    readonly updates: readonly EventUpdateInput[];
+    readonly deletes: readonly EventDeleteInput[];
+  },
+): Promise<SaveEventsResult> {
+  return saveEventsForOwner(
+    client,
+    { kind: "person", personId: args.personId },
+    args,
+  );
+}
+
+/** Save one union family's events diff — marriage, divorce, engagement,
+ * annulment under its "Union with <partner>" group (SPEC §8.3, issue #57). */
+export async function saveFamilyEvents(
+  client: Db,
+  args: {
+    readonly familyId: string;
+    readonly inserts: readonly EventInsertInput[];
+    readonly updates: readonly EventUpdateInput[];
+    readonly deletes: readonly EventDeleteInput[];
+  },
+): Promise<SaveEventsResult> {
+  return saveEventsForOwner(
+    client,
+    { kind: "family", familyId: args.familyId },
+    args,
+  );
+}
+
 async function insertEvents(
   client: Db,
-  personId: string,
+  owner: EventOwnerRef,
   inserts: readonly EventInsertInput[],
 ): Promise<readonly EventEditRow[]> {
   if (inserts.length === 0) {
     return [];
   }
   const rows = await Promise.all(
-    inserts.map((input) => buildEventInsertRow(client, personId, input)),
+    inserts.map((input) => buildEventInsertRow(client, owner, input)),
   );
 
   const { data, error } = await client

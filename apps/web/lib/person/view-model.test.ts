@@ -183,6 +183,7 @@ function fixtureData(
     },
     names: [],
     events: [],
+    familyEvents: [],
     facts: [],
     media: [],
     citations: [],
@@ -348,6 +349,61 @@ describe("buildPersonProfileView", () => {
       "Carl Smith",
       "Bea Smith",
     ]);
+  });
+
+  it("appends a union's marriage date and place to the partner line", () => {
+    const view = buildPersonProfileView(
+      fixtureData({
+        familyEvents: [
+          {
+            id: "fe-marriage",
+            familyId: "fam-own",
+            type: "marriage",
+            typeOther: null,
+            value: null,
+            ageText: null,
+            sortKey: "1950",
+            placeName: "Springfield",
+            date: exactDate(1950),
+          },
+        ],
+      }),
+    );
+
+    expect(view.partners[0]?.detail).toBe("Married — 1950, Springfield");
+  });
+
+  it("prefers a marriage event over other union events for the partner line", () => {
+    const view = buildPersonProfileView(
+      fixtureData({
+        familyEvents: [
+          {
+            id: "fe-divorce",
+            familyId: "fam-own",
+            type: "divorce",
+            typeOther: null,
+            value: null,
+            ageText: null,
+            sortKey: "1960",
+            placeName: "Elsewhere",
+            date: exactDate(1960),
+          },
+          {
+            id: "fe-marriage",
+            familyId: "fam-own",
+            type: "marriage",
+            typeOther: null,
+            value: null,
+            ageText: null,
+            sortKey: "1950",
+            placeName: "Springfield",
+            date: exactDate(1950),
+          },
+        ],
+      }),
+    );
+
+    expect(view.partners[0]?.detail).toBe("Married — 1950, Springfield");
   });
 
   it("maps media, sources, and notes", () => {
