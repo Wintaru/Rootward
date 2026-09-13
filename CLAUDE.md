@@ -21,8 +21,13 @@ to keep context small. There is no parallel work. To pick up:
    - **If issues exist but none is `ready`**, follow `docs/SPEC.md` §10 order and
      pick the next unstarted item.
 4. Do that one issue. Do not pull scope forward from later issues.
-5. When done: update `PROGRESS.md`, stage the work, hand Josh the commit message,
-   then stop.
+5. When done: update `PROGRESS.md`, stage the work, close the GitHub issue
+   for it (comment naming the branch — Josh commits and pushes himself right
+   after, so there is no merge commit to cite yet), then hand Josh the
+   commit message, then stop. Trust that the commit lands — don't wait for
+   him to confirm before closing. A quick sanity check at the start of the
+   next session (e.g. is the branch's work actually on `origin/main`?) is
+   fine, but the default assumption is that it already is.
 
 If a §11 open question blocks the issue you picked, stop and ask Josh — do not
 guess past it.

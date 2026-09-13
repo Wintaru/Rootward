@@ -16,14 +16,15 @@ fresh deploy, and no way to create a person or a relationship without a
 GEDCOM. Milestone **Phase 9 — Gap closure** (#50–#65, label `phase:9`) holds
 the fixes, and a second product-lens pass added #66–#72 to the Post-MVP
 milestone. The build contract for Phase 9 is `docs/SPEC.md` §10 "Phase 9"
-plus §8.1 / §8.3 / §7,
-and WAYFINDER decision 36 + the **Journeys** section. #40 (README) waits
+plus §8.1 / §8.3 / §7, and WAYFINDER decision 36 + the **Journeys** section.
+#40 (README) waits
 until Phase 9 lands, so the screenshots show a usable app. The audit itself
 is in `GAP-AUDIT-HANDOFF.md` (gitignored).
 
 **Issue #57 — Family events (marriage, divorce, engagement, annulment) in
-the edit view: done, staged on `feat/family-events`, issue open pending
-merge.** SPEC §8.3 ("Family events"), WAYFINDER decision 21 as amended by 36. No migration and no new RLS test — `event_write`/`event_select` and the
+the edit view: done, merged to `main` (commit 13361b6), issue closed.**
+SPEC §8.3 ("Family events"), WAYFINDER decision 21 as amended by 36. No
+migration and no new RLS test — `event_write`/`event_select` and the
 `event` table's own check constraint already supported `owner_type =
 'family'` rows before any UI wrote them, and `genealogy_write_probe` already
 covers `event` INSERT allow/deny generically (same representative-table
