@@ -8,6 +8,7 @@ import { getCurrentAccount } from "@/lib/auth/current-account";
 import { getAccountDisplayName } from "@/lib/db/account-lookup";
 import type { Database } from "@/lib/db/database.types";
 import {
+  getComputedIsLiving,
   getFamilyEventsForFamilies,
   getPersonEditShell,
   getPersonEvents,
@@ -59,10 +60,14 @@ export const metadata: Metadata = {
  *
  * Only the active section's own data is fetched (fetch only what you need) —
  * `?section=additional-names` never pays for the Reference Numbers columns,
- * and Name & Gender pays for no query at all beyond the shell's own: its
- * fields are exactly the shell's person-core columns plus `updated_at`, which
- * `getPersonEditShell` already fetched, so `loadSectionContent` builds that
- * section's data straight from `data` rather than re-querying `person`.
+ * and Name & Gender pays for no `person` re-query beyond the shell's own: its
+ * fields are exactly the shell's person-core columns plus `updated_at` and
+ * `visibility`, which `getPersonEditShell` already fetched, so
+ * `loadSectionContent` builds most of that section's data straight from
+ * `data` rather than re-querying `person`. It does pay for one extra query —
+ * `getComputedIsLiving` (#58), for the Living control's "computes to" hint —
+ * since that reads `event`/`tree_settings`, not `person`, and only a
+ * moderator viewing this one section needs it.
  *
  * `selfDisplayName` (#32) resolves the caller's own `account.display_name`
  * for the `PresenceBanner` every other moderator editing this person sees —
@@ -142,8 +147,17 @@ async function loadSectionContent(
         nameSuffix: shell.person.nameSuffix,
         nickname: shell.person.nickname,
         sex: shell.person.sex,
+        visibility: shell.personVisibility,
+        isLiving: shell.person.isLiving,
       };
-      return <NameGenderSection personId={personId} loaded={fields} />;
+      const computedIsLiving = await getComputedIsLiving(supabase, personId);
+      return (
+        <NameGenderSection
+          personId={personId}
+          loaded={fields}
+          computedIsLiving={computedIsLiving}
+        />
+      );
     }
 
     case "reference-numbers": {

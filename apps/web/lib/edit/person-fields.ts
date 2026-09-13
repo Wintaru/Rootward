@@ -5,7 +5,7 @@ import type {
   PersonFieldPatch,
   PersonReferenceNumberFields,
 } from "@/lib/db/person-edit";
-import type { Sex } from "@/lib/db/types";
+import type { PersonVisibility, Sex } from "@/lib/db/types";
 
 import type { ConflictItem } from "./conflict";
 import { normalizeText } from "./diff";
@@ -40,6 +40,8 @@ export type NameGenderFields = Pick<
   | "nameSuffix"
   | "nickname"
   | "sex"
+  | "visibility"
+  | "isLiving"
 >;
 
 export interface NameGenderDraft {
@@ -49,6 +51,10 @@ export interface NameGenderDraft {
   readonly nameSuffix: string;
   readonly nickname: string;
   readonly sex: Sex | null;
+  readonly visibility: PersonVisibility;
+  /** `null` = Computed, otherwise an explicit override — same tri-state as
+   * {@link PersonEditFields.isLiving}. */
+  readonly isLiving: boolean | null;
 }
 
 export interface ReferenceNumbersDraft {
@@ -65,6 +71,8 @@ export function nameGenderDraft(loaded: NameGenderFields): NameGenderDraft {
     nameSuffix: loaded.nameSuffix ?? "",
     nickname: loaded.nickname ?? "",
     sex: loaded.sex,
+    visibility: loaded.visibility,
+    isLiving: loaded.isLiving,
   };
 }
 
@@ -96,6 +104,10 @@ export function nameGenderPatch(
     ...(nameSuffix !== loaded.nameSuffix ? { nameSuffix } : {}),
     ...(nickname !== loaded.nickname ? { nickname } : {}),
     ...(draft.sex !== loaded.sex ? { sex: draft.sex } : {}),
+    ...(draft.visibility !== loaded.visibility
+      ? { visibility: draft.visibility }
+      : {}),
+    ...(draft.isLiving !== loaded.isLiving ? { isLiving: draft.isLiving } : {}),
   };
 
   return Object.keys(patch).length === 0 ? null : patch;
@@ -128,6 +140,21 @@ export function isSex(value: string): value is Sex {
   return (Constants.public.Enums.sex as readonly string[]).includes(value);
 }
 
+/** The visibility values the edit view's `<select>` offers (SPEC §5, decision
+ * 7). `close_family` is a valid `person_visibility` value (post-MVP, #43) but
+ * deliberately excluded — the MVP UI never lets a moderator choose it. */
+export const EDITABLE_PERSON_VISIBILITIES: readonly PersonVisibility[] = [
+  "everyone_approved",
+  "moderators_only",
+  "hidden",
+];
+
+export function isEditablePersonVisibility(
+  value: string,
+): value is PersonVisibility {
+  return (EDITABLE_PERSON_VISIBILITIES as readonly string[]).includes(value);
+}
+
 // --- conflict description ---------------------------------------------
 
 const PERSON_FIELD_LABELS: Readonly<Record<keyof PersonFieldPatch, string>> = {
@@ -137,12 +164,25 @@ const PERSON_FIELD_LABELS: Readonly<Record<keyof PersonFieldPatch, string>> = {
   nameSuffix: "Suffix",
   nickname: "Nickname",
   sex: "Sex",
+  visibility: "Visibility",
+  isLiving: "Living",
   familysearchId: "FamilySearch ID",
   ancestralFileNumber: "Ancestral File Number",
   userReferenceNumber: "User Reference Number",
 };
 
-function fieldToText(value: string | Sex | null | undefined): string {
+/** `key` distinguishes `isLiving`'s `null` (Computed — a real, chosen state)
+ * from every other field's `null` (cleared — shown blank, same as always). */
+function fieldToText(
+  key: keyof PersonFieldPatch,
+  value: string | Sex | PersonVisibility | boolean | null | undefined,
+): string {
+  if (typeof value === "boolean") {
+    return value ? "Living" : "Deceased";
+  }
+  if (key === "isLiving") {
+    return "Computed";
+  }
   return value ?? "";
 }
 
@@ -169,8 +209,8 @@ export function describePersonFieldsConflict(
         ? []
         : (Object.keys(patch) as (keyof PersonFieldPatch)[]).map((key) => ({
             label: PERSON_FIELD_LABELS[key],
-            yours: fieldToText(patch[key]),
-            theirs: fieldToText(conflict.theirs![key]),
+            yours: fieldToText(key, patch[key]),
+            theirs: fieldToText(key, conflict.theirs![key]),
           })),
   };
 }

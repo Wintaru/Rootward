@@ -5,11 +5,15 @@ the relevant `docs/SPEC.md` section.
 
 ## Current state
 
-**Next issue: #58, then #59 → … → #65 in §10 Phase 9 order.** #64
+**Next issue: #59, then #60 → … → #65 in §10 Phase 9 order.** #64
 (docs), #50 (header), #51 (`/tree` index), #52 (tree card → profile), #53
 (root person by name), #54 (GEDCOM export UI), #55 (create a person in-app),
 #56 (Relationships section), #57 (family events), and #73 (the `/settings`
-and `/moderation` 500) are all merged to `main` and closed. A 2026-09-12
+and `/moderation` 500) are all merged to `main` and closed. #58 (person
+visibility + living override) is done, staged on branch
+`feat/person-visibility-living`, issue closed — awaiting Josh's commit/push;
+confirm it's on `origin/main` before starting #59 (see the workflow note in
+`CLAUDE.md`). A 2026-09-12
 audit found that every §10 item was built but the app was not usable: no
 sign-out, no navigation, no way to open a profile from the tree, a 404 on a
 fresh deploy, and no way to create a person or a relationship without a
@@ -20,6 +24,33 @@ plus §8.1 / §8.3 / §7, and WAYFINDER decision 36 + the **Journeys** section.
 #40 (README) waits
 until Phase 9 lands, so the screenshots show a usable app. The audit itself
 is in `GAP-AUDIT-HANDOFF.md` (gitignored).
+
+**Issue #58 — Person visibility and `is_living` override in the edit view:
+done, staged on branch `feat/person-visibility-living`, issue closed.** SPEC
+§5, §8.3, decisions 6/7. No migration, no new RLS test — `person_update` /
+`person_select` already honored `visibility`/`is_living` before any UI wrote
+them (issue text), and the read-side RLS test already exists in
+`supabase/tests/rls_test.sql`.
+
+- Added **Visibility** (`everyone_approved` / `moderators_only` / `hidden` —
+  `close_family` excluded from the MVP `<select>`, per SPEC, but a row
+  already carrying it is shown disabled rather than silently downgraded, same
+  pattern as `FactsSection`'s `visibilityInScope`) and **Living**
+  (three-state: Computed / Living / Deceased, with the computed value shown
+  next to it) to the existing Name & Gender section
+  (`NameGenderSection.tsx`) — same patch/save/conflict machinery as every
+  other field there.
+- The "Computed (…)" hint is a new `computeIsLivingFallback` pure function
+  (`lib/db/person-edit.ts`) that mirrors `person_is_living()`'s no-override
+  SQL formula in TypeScript, fed by a lean `getComputedIsLiving` query
+  (`event` birth/death rows + a new `getLivingThresholdYears` getter in
+  `tree-settings.ts`). No RPC calls the SQL function directly — see
+  `DECISIONS.md`'s 2026-09-13 13:32 entry for why (a broad grant would leak
+  living status past the visibility boundary; #58 carries no `area:db`
+  label).
+- `PersonEditShellData` gained a `personVisibility` field, sibling to
+  `person`/`personUpdatedAt` rather than added to the shared
+  `ProfilePersonCore` — the read-only profile route doesn't need it.
 
 **Issue #57 — Family events (marriage, divorce, engagement, annulment) in
 the edit view: done, merged to `main` (commit 13361b6), issue closed.**

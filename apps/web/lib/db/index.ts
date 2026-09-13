@@ -29,6 +29,7 @@ export {
   getAllowSelfSignup,
   getDefaultGenerations,
   getDefaultRootPersonId,
+  getLivingThresholdYears,
   getTreeSettings,
   updateTreeSettings,
 } from "./tree-settings";

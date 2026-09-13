@@ -9,6 +9,7 @@ import type {
   FactVisibility,
   NameType,
   Neighborhood,
+  PersonVisibility,
   Sex,
 } from "./types";
 import { isUuid } from "./uuid";
@@ -130,13 +131,18 @@ export interface PersonProfileData {
  * parents / partners / children strip. The individual sections (#27–#32) fetch
  * their own data — the shell has no reason to fan out to `event` / `fact` /
  * `media_link` / `citation` / `note` the way {@link getPersonProfile} does.
- * `personUpdatedAt` piggybacks on this same row read so the Name & Gender
- * section (#27) — whose fields are exactly {@link ProfilePersonCore}'s, plus
- * this timestamp — never needs a second `person` fetch for data the shell
- * already has in hand. */
+ * `personUpdatedAt` and `personVisibility` piggyback on this same row read so
+ * the Name & Gender section (#27, plus `visibility`/`is_living` as of #58) —
+ * whose fields are exactly {@link ProfilePersonCore}'s, plus these two — never
+ * needs a second `person` fetch for data the shell already has in hand.
+ * `visibility` sits beside `person` rather than inside it, same as
+ * `personUpdatedAt`: it is edit-only (the read-only profile has no use for
+ * it), so it stays out of {@link ProfilePersonCore}, which `getPersonProfile`
+ * also selects. */
 export interface PersonEditShellData {
   readonly person: ProfilePersonCore;
   readonly personUpdatedAt: string;
+  readonly personVisibility: PersonVisibility;
   readonly relationships: Neighborhood;
 }
 
@@ -379,7 +385,7 @@ export async function getPersonEditShell(
 
   const personRes = await client
     .from("person")
-    .select(`${PERSON_CORE_COLUMNS}, updated_at`)
+    .select(`${PERSON_CORE_COLUMNS}, updated_at, visibility`)
     .eq("id", personId)
     .maybeSingle();
 
@@ -393,6 +399,7 @@ export async function getPersonEditShell(
   return {
     person: mapPersonCore(personRes.data),
     personUpdatedAt: personRes.data.updated_at,
+    personVisibility: personRes.data.visibility,
     relationships,
   };
 }

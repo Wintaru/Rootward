@@ -5,6 +5,7 @@ import type { PersonEditFields } from "@/lib/db/person-edit";
 
 import {
   describePersonFieldsConflict,
+  isEditablePersonVisibility,
   isSex,
   nameGenderDraft,
   nameGenderPatch,
@@ -21,6 +22,8 @@ const LOADED: PersonEditFields = {
   nameSuffix: null,
   nickname: null,
   sex: "female",
+  visibility: "everyone_approved",
+  isLiving: null,
   familysearchId: "FS-1",
   ancestralFileNumber: null,
   userReferenceNumber: null,
@@ -69,6 +72,28 @@ describe("nameGenderDraft / nameGenderPatch", () => {
     const patch = nameGenderPatch(LOADED, { ...draft, givenName: "Augusta" });
     expect(patch).not.toHaveProperty("familysearchId");
   });
+
+  it("diffs a changed visibility value", () => {
+    const draft = nameGenderDraft(LOADED);
+    const patch = nameGenderPatch(LOADED, {
+      ...draft,
+      visibility: "hidden",
+    });
+    expect(patch).toEqual({ visibility: "hidden" });
+  });
+
+  it("diffs the living override from computed to an explicit value", () => {
+    const draft = nameGenderDraft(LOADED);
+    const patch = nameGenderPatch(LOADED, { ...draft, isLiving: false });
+    expect(patch).toEqual({ isLiving: false });
+  });
+
+  it("diffs the living override back to computed", () => {
+    const loaded: PersonEditFields = { ...LOADED, isLiving: true };
+    const draft = nameGenderDraft(loaded);
+    const patch = nameGenderPatch(loaded, { ...draft, isLiving: null });
+    expect(patch).toEqual({ isLiving: null });
+  });
 });
 
 describe("referenceNumbersDraft / referenceNumbersPatch", () => {
@@ -110,6 +135,22 @@ describe("isSex", () => {
   });
 });
 
+describe("isEditablePersonVisibility", () => {
+  it("accepts the MVP's offered values", () => {
+    expect(isEditablePersonVisibility("everyone_approved")).toBe(true);
+    expect(isEditablePersonVisibility("moderators_only")).toBe(true);
+    expect(isEditablePersonVisibility("hidden")).toBe(true);
+  });
+
+  it("rejects the post-MVP close_family value", () => {
+    expect(isEditablePersonVisibility("close_family")).toBe(false);
+  });
+
+  it("rejects an unrecognised value", () => {
+    expect(isEditablePersonVisibility("")).toBe(false);
+  });
+});
+
 describe("describePersonFieldsConflict", () => {
   it("shows every patched field against the row's current value", () => {
     const conflict: RowConflict<PersonEditFields> = {
@@ -142,5 +183,37 @@ describe("describePersonFieldsConflict", () => {
     );
     expect(item.deleted).toBe(true);
     expect(item.fields).toEqual([]);
+  });
+
+  it("shows a boolean living override as Living / Deceased, not true/false", () => {
+    const conflict: RowConflict<PersonEditFields> = {
+      id: "p1",
+      theirs: { ...LOADED, isLiving: true },
+      changedBy: "Alex",
+    };
+    const item = describePersonFieldsConflict(
+      "p1",
+      { isLiving: false },
+      conflict,
+    );
+    expect(item.fields).toEqual([
+      { label: "Living", yours: "Deceased", theirs: "Living" },
+    ]);
+  });
+
+  it("shows a null living override as Computed, not blank", () => {
+    const conflict: RowConflict<PersonEditFields> = {
+      id: "p1",
+      theirs: { ...LOADED, isLiving: true },
+      changedBy: "Alex",
+    };
+    const item = describePersonFieldsConflict(
+      "p1",
+      { isLiving: null },
+      conflict,
+    );
+    expect(item.fields).toEqual([
+      { label: "Living", yours: "Computed", theirs: "Living" },
+    ]);
   });
 });

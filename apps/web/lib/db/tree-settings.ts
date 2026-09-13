@@ -89,6 +89,23 @@ export async function getAllowSelfSignup(client: Db): Promise<boolean> {
   return data?.allow_self_signup ?? true;
 }
 
+/** The threshold `person_is_living()` (SPEC §5, §4.2) weighs an undated-death
+ * person's birth year against — the Living control's "computes to" hint
+ * (#58) needs this same number to agree with what RLS actually applies.
+ * Falls back to the column default if the row is somehow missing. */
+export async function getLivingThresholdYears(client: Db): Promise<number> {
+  const { data, error } = await client
+    .from("tree_settings")
+    .select("living_threshold_years")
+    .eq("id", TREE_SETTINGS_ID)
+    .maybeSingle();
+
+  if (error !== null) {
+    throw new Error(`getLivingThresholdYears: ${error.message}`);
+  }
+  return data?.living_threshold_years ?? 100;
+}
+
 /** The full editable `tree_settings` row for the `/settings` admin form
  * (SPEC §4.6, §10 item 37). Post-MVP columns (`backup_*`) are left out —
  * the form hides that section entirely (decision 29 is not built yet). */

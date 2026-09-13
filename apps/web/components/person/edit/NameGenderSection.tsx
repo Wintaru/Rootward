@@ -9,21 +9,25 @@ import type { PersonEditFields, PersonFieldPatch } from "@/lib/db/person-edit";
 import type { Sex } from "@/lib/db/types";
 import type { ConflictResolution } from "@/lib/edit/conflict";
 import {
+  EDITABLE_PERSON_VISIBILITIES,
   type NameGenderDraft,
   type NameGenderFields,
   describePersonFieldsConflict,
+  isEditablePersonVisibility,
   isSex,
   nameGenderDraft,
   nameGenderPatch,
 } from "@/lib/edit/person-fields";
-import { sexLabel } from "@/lib/person/labels";
+import { enumTokenLabel, sexLabel } from "@/lib/person/labels";
 
 import { ConflictDialog } from "./ConflictDialog";
 import { Field, inputClass, SaveBar } from "./form";
 
 /**
  * Name & Gender (SPEC §8.3, §4.2, §10 item 27) — the primary name parts and
- * `sex` on the `person` row itself (additional names are their own section).
+ * `sex` on the `person` row itself (additional names are their own section),
+ * plus Visibility and Living (SPEC §5, decisions 6/7, #58): who can see this
+ * person, and the living/deceased override RLS uses to hide sensitive facts.
  * Save sends only the changed columns, guarded on the row's `updated_at` as
  * loaded (WAYFINDER decision 26); a lost version check surfaces the
  * `ConflictDialog` (#31) rather than silently overwriting.
@@ -31,9 +35,14 @@ import { Field, inputClass, SaveBar } from "./form";
 export function NameGenderSection({
   personId,
   loaded,
+  computedIsLiving,
 }: {
   readonly personId: string;
   readonly loaded: NameGenderFields;
+  /** What the Living control's Computed option currently resolves to (SPEC
+   * §5, §4.2, #58) — always fetched so switching the override back to
+   * Computed shows the right value without a round trip. */
+  readonly computedIsLiving: boolean;
 }) {
   const [baseline, setBaseline] = useState(loaded);
   const [draft, setDraft] = useState<NameGenderDraft>(() =>
@@ -57,6 +66,8 @@ export function NameGenderSection({
   const suffixId = useId();
   const nicknameId = useId();
   const sexId = useId();
+  const visibilityId = useId();
+  const livingId = useId();
 
   const patch = nameGenderPatch(baseline, draft);
   const dirty = patch !== null;
@@ -72,6 +83,26 @@ export function NameGenderSection({
     setDraft((prev) => ({
       ...prev,
       sex: value === "" ? null : parseSex(value),
+    }));
+    if (status !== "saving") {
+      setStatus("idle");
+    }
+  }
+
+  function setVisibility(value: string) {
+    if (!isEditablePersonVisibility(value)) {
+      return;
+    }
+    setDraft((prev) => ({ ...prev, visibility: value }));
+    if (status !== "saving") {
+      setStatus("idle");
+    }
+  }
+
+  function setLiving(value: string) {
+    setDraft((prev) => ({
+      ...prev,
+      isLiving: value === "computed" ? null : value === "living",
     }));
     if (status !== "saving") {
       setStatus("idle");
@@ -216,6 +247,56 @@ export function NameGenderSection({
                 {sexLabel(value)}
               </option>
             ))}
+          </select>
+        </Field>
+        <Field label="Visibility" htmlFor={visibilityId}>
+          <select
+            id={visibilityId}
+            value={draft.visibility}
+            // A person loaded with `close_family` (post-MVP, #43 — not
+            // reachable through this MVP UI, but reachable by GEDCOM import
+            // or direct SQL) has no matching option below. A plain bound
+            // `<select>` would silently fall back to displaying the first
+            // option while `draft.visibility` stayed `close_family`
+            // underneath — touching the control at all would then silently
+            // downgrade it on save. Disabling it and adding a non-selectable
+            // option for the true value keeps the display honest and makes
+            // that downgrade unreachable from here (same pattern as
+            // `FactsSection`'s `visibilityInScope`).
+            disabled={!isEditablePersonVisibility(draft.visibility)}
+            onChange={(e) => setVisibility(e.target.value)}
+            className={inputClass}
+          >
+            {!isEditablePersonVisibility(draft.visibility) && (
+              <option value={draft.visibility} disabled>
+                {enumTokenLabel(draft.visibility)}
+              </option>
+            )}
+            {EDITABLE_PERSON_VISIBILITIES.map((value) => (
+              <option key={value} value={value}>
+                {enumTokenLabel(value)}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Living" htmlFor={livingId}>
+          <select
+            id={livingId}
+            value={
+              draft.isLiving === null
+                ? "computed"
+                : draft.isLiving
+                  ? "living"
+                  : "deceased"
+            }
+            onChange={(e) => setLiving(e.target.value)}
+            className={inputClass}
+          >
+            <option value="computed">
+              Computed ({computedIsLiving ? "Living" : "Deceased"})
+            </option>
+            <option value="living">Living</option>
+            <option value="deceased">Deceased</option>
           </select>
         </Field>
       </div>

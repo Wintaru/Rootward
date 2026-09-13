@@ -3,7 +3,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { getAccountDisplayName } from "./account-lookup";
 import type { Database } from "./database.types";
 import type { RowConflict } from "./conflict";
-import type { NameType, Sex } from "./types";
+import { getLivingThresholdYears } from "./tree-settings";
+import type { NameType, PersonVisibility, Sex } from "./types";
 import { isUuid } from "./uuid";
 
 type Db = SupabaseClient<Database>;
@@ -29,7 +30,7 @@ type Db = SupabaseClient<Database>;
 // --- Name & Gender / Reference Numbers (one `person` row) ---------------
 
 const PERSON_EDIT_COLUMNS =
-  "id, given_name, surname, name_prefix, name_suffix, nickname, sex, familysearch_id, ancestral_file_number, user_reference_number, updated_at";
+  "id, given_name, surname, name_prefix, name_suffix, nickname, sex, visibility, is_living, familysearch_id, ancestral_file_number, user_reference_number, updated_at";
 
 type PersonEditRow = {
   id: string;
@@ -39,6 +40,8 @@ type PersonEditRow = {
   name_suffix: string | null;
   nickname: string | null;
   sex: Sex | null;
+  visibility: PersonVisibility;
+  is_living: boolean | null;
   familysearch_id: string | null;
   ancestral_file_number: string | null;
   user_reference_number: string | null;
@@ -54,6 +57,12 @@ export interface PersonEditFields {
   readonly nameSuffix: string | null;
   readonly nickname: string | null;
   readonly sex: Sex | null;
+  /** SPEC §5, §8.3, decision 7, #58. `close_family` is a valid row value
+   * (post-MVP, #43) but never one the edit view's `<select>` offers. */
+  readonly visibility: PersonVisibility;
+  /** `null` = computed (SPEC §4.2's `person_is_living()`); `true`/`false` is
+   * an explicit override. */
+  readonly isLiving: boolean | null;
   readonly familysearchId: string | null;
   readonly ancestralFileNumber: string | null;
   readonly userReferenceNumber: string | null;
@@ -75,6 +84,8 @@ function mapPersonEditFields(row: PersonEditRow): PersonEditFields {
     nameSuffix: row.name_suffix,
     nickname: row.nickname,
     sex: row.sex,
+    visibility: row.visibility,
+    isLiving: row.is_living,
     familysearchId: row.familysearch_id,
     ancestralFileNumber: row.ancestral_file_number,
     userReferenceNumber: row.user_reference_number,
@@ -90,6 +101,8 @@ const PATCH_COLUMN_NAMES: Readonly<
   nameSuffix: "name_suffix",
   nickname: "nickname",
   sex: "sex",
+  visibility: "visibility",
+  isLiving: "is_living",
   familysearchId: "familysearch_id",
   ancestralFileNumber: "ancestral_file_number",
   userReferenceNumber: "user_reference_number",
@@ -225,6 +238,70 @@ export async function updatePersonFields(
     ok: false,
     conflict: await resolvePersonFieldsConflict(client, args.personId),
   };
+}
+
+// --- Computed "living" hint (SPEC §5, §4.2, #58) -------------------------
+
+/**
+ * Mirrors `person_is_living()`'s no-override branch
+ * (`supabase/migrations/20260830174012_rls_policies.sql`) — no death event
+ * AND (no birth year OR birth year within the threshold). The Living
+ * control shows this next to the tri-state override so a moderator can see
+ * what leaving it as Computed actually resolves to. No read-side RPC calls
+ * the SQL function directly (issue #58 carries no `area:db` work), so this
+ * duplicates its formula in TypeScript — keep the two in step if it ever
+ * changes.
+ */
+export function computeIsLivingFallback(args: {
+  readonly hasDeathEvent: boolean;
+  readonly earliestBirthYear: number | null;
+  readonly livingThresholdYears: number;
+  readonly currentYear: number;
+}): boolean {
+  if (args.hasDeathEvent) {
+    return false;
+  }
+  if (args.earliestBirthYear === null) {
+    return true;
+  }
+  return args.earliestBirthYear > args.currentYear - args.livingThresholdYears;
+}
+
+const LIVING_EVENT_COLUMNS = "type, date_year1";
+
+/** What {@link computeIsLivingFallback} currently resolves to for `personId`
+ * — fetched unconditionally by the Living control so switching the override
+ * back to Computed shows the right value without a re-fetch. */
+export async function getComputedIsLiving(
+  client: Db,
+  personId: string,
+): Promise<boolean> {
+  const [eventsRes, livingThresholdYears] = await Promise.all([
+    client
+      .from("event")
+      .select(LIVING_EVENT_COLUMNS)
+      .eq("owner_type", "person")
+      .eq("person_id", personId)
+      .in("type", ["birth", "death"]),
+    getLivingThresholdYears(client),
+  ]);
+
+  if (eventsRes.error !== null) {
+    throw new Error(`getComputedIsLiving: ${eventsRes.error.message}`);
+  }
+
+  const rows = eventsRes.data ?? [];
+  const hasDeathEvent = rows.some((row) => row.type === "death");
+  const birthYears = rows
+    .map((row) => (row.type === "birth" ? row.date_year1 : null))
+    .filter((year): year is number => year !== null);
+
+  return computeIsLivingFallback({
+    hasDeathEvent,
+    earliestBirthYear: birthYears.length === 0 ? null : Math.min(...birthYears),
+    livingThresholdYears,
+    currentYear: new Date().getFullYear(),
+  });
 }
 
 // --- Additional Names (`person_name`, many rows) -------------------------
