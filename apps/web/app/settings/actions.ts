@@ -10,7 +10,7 @@ import {
   personExists,
   type PersonSearchOption,
   removeMediaStorageObjects,
-  searchPersonsForModeration,
+  searchPersons,
   setAccountStatus,
   updateTreeSettings,
   wipeTree,
@@ -68,7 +68,7 @@ export async function searchSettingsPersons(
     return [];
   }
   const server = await createSupabaseServerClient();
-  return searchPersonsForModeration(server, query);
+  return searchPersons(server, query);
 }
 
 /** Change an account's role. Admin-only, and never the caller's own account

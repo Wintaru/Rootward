@@ -5,16 +5,17 @@ the relevant `docs/SPEC.md` section.
 
 ## Current state
 
-**Next issue: #62, then #63 → #65 in §10 Phase 9 order.** #64
+**Next issue: #63, then #65 in §10 Phase 9 order.** #64
 (docs), #50 (header), #51 (`/tree` index), #52 (tree card → profile), #53
 (root person by name), #54 (GEDCOM export UI), #55 (create a person in-app),
 #56 (Relationships section), #57 (family events), #58 (person visibility +
 living override), #59 (delete a person), #60 (wipe tree + block import on a
-non-empty tree), and #73 (the `/settings` and `/moderation` 500) are all
-merged to `main` and closed — confirmed `#60` landed as commit `96f69ce` on
-`origin/main`. #61 ("hide my record" request) is done and staged on branch
-`feat/hide-record-request`, not yet merged — the next session should confirm
-it landed on `origin/main` before starting #62. A 2026-09-12
+non-empty tree), #61 ("hide my record" request), and #73 (the `/settings`
+and `/moderation` 500) are all merged to `main` and closed — confirmed `#61`
+landed as commit `b868592` on `origin/main`. #62 (person search + `/people`)
+is done and staged on branch `feat/person-search`, not yet merged — the next
+session should confirm it landed on `origin/main` before starting #63. A
+2026-09-12
 audit found that every §10 item was built but the app was not usable: no
 sign-out, no navigation, no way to open a profile from the tree, a 404 on a
 fresh deploy, and no way to create a person or a relationship without a
@@ -25,6 +26,51 @@ plus §8.1 / §8.3 / §7, and WAYFINDER decision 36 + the **Journeys** section.
 #40 (README) waits
 until Phase 9 lands, so the screenshots show a usable app. The audit itself
 is in `GAP-AUDIT-HANDOFF.md` (gitignored).
+
+**Issue #62 — Person search in the header + `/people` index: done, staged on
+branch `feat/person-search`, issue closed.** SPEC §8.1. No migrations — a
+pure frontend/`lib/db` change.
+
+- **`searchPersonsForModeration` (`moderation.ts`) moved and renamed to
+  `searchPersons` (new `lib/db/person-search.ts`)**, generalized to also match
+  `person_name` (maiden/AKA/nickname-as-variant rows), not just `person`'s
+  primary name — SPEC #62 explicitly calls for "person + person_name". All
+  four existing `PersonPicker` call sites (`/moderation`'s two pickers,
+  `/settings`' default root, the edit view's Relationships section) were
+  repointed at the new module and benefit from the wider match for free.
+- **The header search box (`components/layout/PersonSearchBox.tsx`)** queries
+  Supabase directly from the browser — no server action — the same posture
+  `NotificationBell` already uses, since RLS (`person_select` /
+  `person_name_select`, both `person_is_visible()`) is the real boundary and
+  every approved member has the same access here (unlike the `PersonPicker`
+  routes, whose _access_ differs by page). Debounced, capped at 20
+  (`HEADER_SEARCH_LIMIT`), each result showing a birth–death year range via a
+  new `getPersonLifespans` batch query (one query for the whole result page,
+  not per-row). "See all results" / Enter goes to `/people?q=`.
+- **`/people` (`app/people/page.tsx`)**: approved-only (same gate as `/tree`),
+  sorted by surname then given name, paginated at the source via `.range()`
+  (50/page, `PEOPLE_PAGE_SIZE`), with a name filter box prefilled from the
+  header's `?q=`. A page requested past the end (a stale link, a hand-edited
+  URL) redirects to the last real page instead of rendering an empty list
+  under a nav that says otherwise.
+- **Found and fixed during manual browser verification** (not just the test
+  suite): the header dropdown and `/people`'s list disagreed on result sets
+  for the same query, because only the dropdown matched `person_name`. Fixed
+  by extracting `resolveMatchingPersonIds` (unlimited person+person_name id
+  lookup, used by both `searchPersons`'s capped dropdown and `listPersons`'s
+  paginated browse) so the two surfaces are always consistent.
+- **Code review caught two real bugs**, both fixed and verified live against
+  the local Supabase stack before staging: (1) the `.or()` filter string
+  passed a name pattern to PostgREST unquoted, so any name containing a comma
+  or parenthesis (PostgREST's combinator-grammar characters) 400'd the
+  request — fixed with a `quotePostgrestValue` helper, confirmed with a
+  before/after curl repro against `person_select`; (2) the merged
+  primary+`person_name` result list was re-sorted with `surname ?? ""`,
+  which put every nickname-only person first instead of last — fixed with a
+  null-safe `compareBySurnameThenGiven` (also added as the tie-break
+  `searchPersons` was missing). Both are covered by new unit tests.
+- Verify gate green (typecheck/lint/format/build/test, including the Deno
+  gate — untouched since this issue has no edge-function surface).
 
 **Issue #61 — "Hide my record" request from a linked viewer: done, staged on
 branch `feat/hide-record-request`, issue closed.** SPEC §5/§7, WAYFINDER

@@ -12,7 +12,7 @@ import {
   personExists,
   reassignAccount,
   rejectAccessRequest,
-  searchPersonsForModeration,
+  searchPersons,
   unlinkAccount,
 } from "@/lib/db";
 import { isUuid } from "@/lib/db/uuid";
@@ -244,7 +244,7 @@ export async function searchModerationPersons(
     return [];
   }
   const server = await createSupabaseServerClient();
-  return searchPersonsForModeration(server, query);
+  return searchPersons(server, query);
 }
 
 /**

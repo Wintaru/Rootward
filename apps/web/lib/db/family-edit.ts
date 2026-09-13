@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database } from "./database.types";
-import { personSearchLabel } from "./moderation";
+import { personSearchLabel } from "./person-search";
 import { createPerson } from "./person-create";
 import type { ChildRelation, PartnerRole, Sex, UnionType } from "./types";
 

@@ -2,20 +2,20 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { ACCOUNT_SUMMARY_COLUMNS } from "./accounts";
 import { personName } from "./invitations";
-import { escapeLikePattern } from "./place";
 import type { Database } from "./database.types";
-import type { AccountRole, AccountStatus, Sex } from "./types";
+import type { AccountRole, AccountStatus } from "./types";
 
 type Db = SupabaseClient<Database>;
 
 /**
  * The `/moderation` full queue (SPEC §8.1 `/moderation`, §9.2–§9.4, §10 item
- * 36, WAYFINDER decisions 12, 13, 18). Three surfaces:
+ * 36, WAYFINDER decisions 12, 13, 18). Two surfaces:
  *
  * - Pending `access_request` rows — approve (link + activate) or reject.
  * - Linked accounts — reassign or unlink a wrong self-claim or invite link
  *   (decision 12: "Moderators can reassign or unlink a wrong claim").
- * - Person search, backing the picker both of the above need.
+ *
+ * The picker both of the above need is `searchPersons` (`person-search.ts`).
  *
  * `access_request` reads/writes run under the caller's own identity: RLS
  * (`access_request_select` / `access_request_update`, both `is_moderator()`)
@@ -320,72 +320,5 @@ export async function unlinkAccount(
   return { ok: true };
 }
 
-// --- person search (the shared `PersonPicker`) -------------------------------
-
-export interface PersonSearchOption {
-  readonly id: string;
-  readonly name: string;
-  /** Carried through so a `PersonPicker` caller that needs it (the
-   * Relationships section's role default, decision 36, issue #56) doesn't pay
-   * a second round trip — every other caller just ignores it. */
-  readonly sex: Sex | null;
-}
-
-const PERSON_SEARCH_LIMIT = 8;
-
-/** The name a `PersonSearchOption` carries — given + surname, else nickname.
- * Shared with `tree-settings.ts` so the stored default root reads exactly as
- * the picker's options do (issue #53). */
-export function personSearchLabel(row: {
-  given_name: string | null;
-  surname: string | null;
-  nickname: string | null;
-}): string {
-  const full = [row.given_name, row.surname]
-    .map((part) => part?.trim() ?? "")
-    .filter((part) => part !== "")
-    .join(" ");
-  return full || row.nickname?.trim() || "Unnamed person";
-}
-
-/**
- * Name search behind every `PersonPicker` — `/moderation`'s approve /
- * reassign (a moderator has only the requester's submitted name/birth info
- * to go on, not a person id, unlike the invite form's `?personId=` prefill)
- * and `/settings`' default root (issue #53). Each route wraps it in its own
- * access-gated server action; the name keeps the original home for the
- * call sites. Case-insensitive substring match on given name, surname, or
- * nickname — `personSearchLabel` below falls back to nickname when neither
- * name part is set, so the search has to cover it too, or a
- * nickname-only person (common for an infant or an unidentified relative)
- * would be unreachable through this picker. Empty query → no round trip, no
- * results.
- */
-export async function searchPersonsForModeration(
-  client: Db,
-  query: string,
-): Promise<readonly PersonSearchOption[]> {
-  const trimmed = query.trim();
-  if (trimmed === "") {
-    return [];
-  }
-  const pattern = `%${escapeLikePattern(trimmed)}%`;
-
-  const { data, error } = await client
-    .from("person")
-    .select("id, given_name, surname, nickname, sex")
-    .or(
-      `given_name.ilike.${pattern},surname.ilike.${pattern},nickname.ilike.${pattern}`,
-    )
-    .order("surname", { ascending: true, nullsFirst: false })
-    .limit(PERSON_SEARCH_LIMIT);
-
-  if (error !== null) {
-    throw new Error(`searchPersonsForModeration: ${error.message}`);
-  }
-  return (data ?? []).map((row) => ({
-    id: row.id,
-    name: personSearchLabel(row),
-    sex: row.sex,
-  }));
-}
+// Person search (the shared `PersonPicker`) lives in `person-search.ts`,
+// generalized for the header search box and `/people` (issue #62).

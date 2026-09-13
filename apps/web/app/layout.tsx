@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import "./globals.css";
 
+import { PersonSearchBox } from "@/components/layout/PersonSearchBox";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { isActiveModerator } from "@/lib/auth/access";
 import { getCurrentAccount } from "@/lib/auth/current-account";
@@ -20,13 +21,16 @@ export const metadata: Metadata = {
  * Global chrome for a signed-in visitor (SPEC §8.1, #50): the role-gated
  * links `resolveHeaderNav` decides ("Home", "My record", "Import / Export",
  * "Moderation", "Settings" — empty for a pending member, who still needs the
- * sign-out), the notification bell for a moderator+ (SPEC §8.5: "moderators
- * subscribe app-wide"), and a sign-out form. A signed-out visitor gets no
- * header at all, no layout shift — they can reach only `/login` and the
- * `/auth/*` handlers.
+ * sign-out), a person search box for any approved member (#62 — gated on the
+ * same "at least one nav link" signal `resolveHeaderNav` already computes,
+ * rather than a second approval check), the notification bell for a
+ * moderator+ (SPEC §8.5: "moderators subscribe app-wide"), and a sign-out
+ * form. A signed-out visitor gets no header at all, no layout shift — they
+ * can reach only `/login` and the `/auth/*` handlers.
  */
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   const current = await getCurrentAccount();
+  const navLinks = current !== null ? resolveHeaderNav(current) : [];
   const showBell = current !== null && isActiveModerator(current.account);
   const unreadCount = showBell
     ? await getUnreadNotificationCount(
@@ -39,9 +43,9 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
     <html lang="en" className="h-full antialiased">
       <body className="bg-background text-foreground flex min-h-full flex-col">
         {current !== null && (
-          <header className="border-border flex items-center justify-between gap-4 border-b px-4 py-2">
+          <header className="border-border flex flex-wrap items-center justify-between gap-4 border-b px-4 py-2">
             <nav aria-label="Main" className="flex flex-wrap gap-x-4 gap-y-1">
-              {resolveHeaderNav(current).map((link) => (
+              {navLinks.map((link) => (
                 <Link
                   key={link.href}
                   href={link.href}
@@ -51,6 +55,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
                 </Link>
               ))}
             </nav>
+            {navLinks.length > 0 && <PersonSearchBox />}
             <div className="flex items-center gap-4">
               {showBell && (
                 <NotificationBell

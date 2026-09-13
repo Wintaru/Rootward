@@ -23,6 +23,7 @@ export * from "./import-jobs";
 export * from "./export-jobs";
 export * from "./invitations";
 export * from "./moderation";
+export * from "./person-search";
 export * from "./onboarding";
 export * from "./notifications";
 export * from "./accounts";

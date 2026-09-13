@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database } from "./database.types";
-import { type PersonSearchOption, personSearchLabel } from "./moderation";
+import { type PersonSearchOption, personSearchLabel } from "./person-search";
 import {
   DEFAULT_GENERATIONS_DOWN,
   DEFAULT_GENERATIONS_UP,

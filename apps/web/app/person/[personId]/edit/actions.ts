@@ -13,7 +13,7 @@ import {
   removeFamilyChild,
   removePartnerFromFamily,
   reorderFamilyChildren,
-  searchPersonsForModeration,
+  searchPersons,
   searchPlaces as searchPlacesDb,
   saveCitations as persistCitations,
   saveEvents as persistEvents,
@@ -637,7 +637,7 @@ function toRelationshipActionResult(
 }
 
 /** Name search behind `PersonPickerOrCreate` on this page — same underlying
- * query as `/moderation` and `/settings`' pickers (`searchPersonsForModeration`),
+ * query as `/moderation` and `/settings`' pickers (`searchPersons`),
  * gated here by `resolveEditAccess` instead of `resolveModerationAccess` /
  * `resolveSettingsAccess` since this route is the caller. */
 export async function searchRelationshipPersons(
@@ -648,7 +648,7 @@ export async function searchRelationshipPersons(
     return [];
   }
   const supabase = await createSupabaseServerClient();
-  return searchPersonsForModeration(supabase, query);
+  return searchPersons(supabase, query);
 }
 
 export async function addParentAction(input: {
