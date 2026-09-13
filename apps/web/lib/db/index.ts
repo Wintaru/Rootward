@@ -11,6 +11,7 @@ export * from "./genealogy-date";
 export * from "./person";
 export * from "./person-create";
 export * from "./person-edit";
+export * from "./family-edit";
 export * from "./event-edit";
 export * from "./fact-edit";
 export * from "./note-edit";

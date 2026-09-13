@@ -1,4 +1,12 @@
-import type { EventType, FactType, NameType, Sex, UnionType } from "@/lib/db";
+import type {
+  ChildRelation,
+  EventType,
+  FactType,
+  NameType,
+  PartnerRole,
+  Sex,
+  UnionType,
+} from "@/lib/db";
 
 /**
  * Display labels for the genealogy enums the read-only profile shows. Most
@@ -41,6 +49,19 @@ export function nameTypeLabel(type: NameType | null): string {
 
 export function unionTypeLabel(type: UnionType | null): string | null {
   return type === null || type === "unknown" ? null : enumTokenLabel(type);
+}
+
+/** Unlike {@link unionTypeLabel}, `unknown` gets its own label here rather
+ * than collapsing to `null` — the Relationships section's role and relation
+ * `<select>`s (issue #56) show every enum value including `unknown` as an
+ * explicit, chosen state, distinct from "not set yet" (`null`, shown as
+ * "Unspecified"). */
+export function partnerRoleLabel(role: PartnerRole | null): string {
+  return role === null ? "Unspecified" : enumTokenLabel(role);
+}
+
+export function childRelationLabel(relation: ChildRelation | null): string {
+  return relation === null ? "Unspecified" : enumTokenLabel(relation);
 }
 
 /**

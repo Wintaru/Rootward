@@ -8,6 +8,7 @@
 export const EDIT_SECTIONS = [
   { slug: "name-gender", label: "Name & Gender" },
   { slug: "additional-names", label: "Additional Names" },
+  { slug: "relationships", label: "Relationships" },
   { slug: "events", label: "Events" },
   { slug: "facts", label: "Facts" },
   { slug: "media", label: "Media" },

@@ -116,7 +116,7 @@ export interface TreeSettings {
 // today, but #73 is what an unhinted embed costs the day a second path
 // appears.
 const TREE_SETTINGS_COLUMNS =
-  "tree_name, tree_description, allow_self_signup, living_threshold_years, default_root_person_id, default_root_person:person!tree_settings_default_root_person_id_fkey(id, given_name, surname, nickname), default_generations_up, default_generations_down, media_max_bytes, media_allowed_mime, strip_exif_gps, updated_at";
+  "tree_name, tree_description, allow_self_signup, living_threshold_years, default_root_person_id, default_root_person:person!tree_settings_default_root_person_id_fkey(id, given_name, surname, nickname, sex), default_generations_up, default_generations_down, media_max_bytes, media_allowed_mime, strip_exif_gps, updated_at";
 
 /** A validated set of `tree_settings` field values, ready to write —
  * {@link TreeSettings} minus `updatedAt` (server-set on every write, never
@@ -164,6 +164,7 @@ export async function getTreeSettings(client: Db): Promise<TreeSettings> {
         : {
             id: data.default_root_person.id,
             name: personSearchLabel(data.default_root_person),
+            sex: data.default_root_person.sex,
           },
     defaultGenerationsUp: data.default_generations_up,
     defaultGenerationsDown: data.default_generations_down,

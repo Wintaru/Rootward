@@ -4,7 +4,7 @@ import { ACCOUNT_SUMMARY_COLUMNS } from "./accounts";
 import { personName } from "./invitations";
 import { escapeLikePattern } from "./place";
 import type { Database } from "./database.types";
-import type { AccountRole, AccountStatus } from "./types";
+import type { AccountRole, AccountStatus, Sex } from "./types";
 
 type Db = SupabaseClient<Database>;
 
@@ -325,6 +325,10 @@ export async function unlinkAccount(
 export interface PersonSearchOption {
   readonly id: string;
   readonly name: string;
+  /** Carried through so a `PersonPicker` caller that needs it (the
+   * Relationships section's role default, decision 36, issue #56) doesn't pay
+   * a second round trip — every other caller just ignores it. */
+  readonly sex: Sex | null;
 }
 
 const PERSON_SEARCH_LIMIT = 8;
@@ -369,7 +373,7 @@ export async function searchPersonsForModeration(
 
   const { data, error } = await client
     .from("person")
-    .select("id, given_name, surname, nickname")
+    .select("id, given_name, surname, nickname, sex")
     .or(
       `given_name.ilike.${pattern},surname.ilike.${pattern},nickname.ilike.${pattern}`,
     )
@@ -382,5 +386,6 @@ export async function searchPersonsForModeration(
   return (data ?? []).map((row) => ({
     id: row.id,
     name: personSearchLabel(row),
+    sex: row.sex,
   }));
 }

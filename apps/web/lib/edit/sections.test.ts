@@ -57,6 +57,7 @@ describe("EDIT_SECTIONS", () => {
     expect(EDIT_SECTIONS.map((section) => section.label)).toEqual([
       "Name & Gender",
       "Additional Names",
+      "Relationships",
       "Events",
       "Facts",
       "Media",

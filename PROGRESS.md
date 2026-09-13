@@ -5,12 +5,12 @@ the relevant `docs/SPEC.md` section.
 
 ## Current state
 
-**Next issue: #56 (depends on #55, done below), then #57 → #58 → … → #65 in
-§10 Phase 9 order.** #64 (docs), #50 (header), #51 (`/tree` index), #52 (tree
-card → profile), #53 (root person by name), #54 (GEDCOM export UI), and #73
-(the `/settings` and `/moderation` 500) are all merged to `main`. **#55
-(create a person in-app) is done this session, staged on
-`feat/create-person` — see below.** A 2026-09-12 audit found that every §10
+**Next issue: #57, then #58 → … → #65 in §10 Phase 9 order.** #64
+(docs), #50 (header), #51 (`/tree` index), #52 (tree card → profile), #53
+(root person by name), #54 (GEDCOM export UI), #55 (create a person in-app),
+#56 (Relationships section), and #73 (the `/settings` and `/moderation` 500)
+are all done — staged on `feat/relationships-section` for #56, merged to
+`main` and closed for the rest. A 2026-09-12 audit found that every §10
 item was built but the app was not usable: no sign-out, no navigation, no way
 to open a profile from the tree, a 404 on a fresh deploy, and no way to
 create a person or a relationship without a GEDCOM. Milestone **Phase 9 —
@@ -21,8 +21,88 @@ and WAYFINDER decision 36 + the **Journeys** section. #40 (README) waits
 until Phase 9 lands, so the screenshots show a usable app. The audit itself
 is in `GAP-AUDIT-HANDOFF.md` (gitignored).
 
-**Issue #55 — Create a person in-app (no GEDCOM): done, staged on
-`feat/create-person`.** SPEC §8.1 (`/person/new`), §8.3 ("Create"), audit
+**Issue #56 — Relationships section: add parent / partner / child: done,
+staged on `feat/relationships-section`.** SPEC §8.3 ("Relationships"),
+WAYFINDER decision 36, audit item B2. No migration — `family_write` /
+`family_child_write` RLS already allowed moderators, and
+`supabase/tests/rls_test.sql`'s `genealogy_write_probe` already covered
+viewer-denied / moderator-allowed INSERT on both tables plus the shared
+UPDATE/DELETE policy shape (representative-table coverage, same posture as
+#55's note on this) — confirmed with a live `supabase test db` run, no new
+pgTAP test needed.
+
+- **`lib/db/family-edit.ts`** — the whole write side. Structurally unlike
+  every other section (`event-edit.ts`, `person-edit.ts`): a relationship
+  change spans `family` and `family_child` together and sometimes creates or
+  deletes a `family` row, so there is no single row's diff to batch into a
+  Save button. Each action (`addParent`, `addPartner`,
+  `fillFamilyPartnerSlot`, `removePartnerFromFamily`, `addChildToFamily`,
+  `removeFamilyChild`, `updateFamilyRelationshipType`, `updatePartnerRole`,
+  `updateFamilyChildRelation`, `reorderFamilyChildren`) is immediate and
+  version-checked (decision 26's `WHERE id = $1 AND updated_at = $2`), not a
+  dirty-draft-then-Save flow. `addParent` reuses a person's single
+  parents-family and fills its empty slot rather than creating a second one
+  (decision 36's explicit rule); `removeFamilyChild` /
+  `removePartnerFromFamily` delete the family row once it has no partners and
+  no children left — `event`/`fact` cascade on `family_id` already, so no
+  extra cleanup. `getRelationshipsEditData` is the read side: parent
+  families and union families (with their children), three round trips,
+  RLS-scoped.
+- **`lib/edit/relationships.ts`** — pure and unit-tested:
+  `defaultPartnerRoleForSex` (male → husband, female → wife, else →
+  partner — decision 36's "derive from sex, editable") and `toPersonRef`
+  (normalizes a picker's choice into `family-edit.ts`'s `PersonRef`).
+- **`components/person/edit/PersonPickerOrCreate.tsx`** — `PersonPicker`
+  plus an inline "or create a new person" mini-form (reuses #55's shape),
+  shared by every action that names a person. Reports the resolved person's
+  `sex` back so the caller can default a role `<select>` without a second
+  round trip — `PersonSearchOption` gained a `sex` field for exactly this
+  (`lib/db/moderation.ts`; `/moderation` and `/settings`'s pickers ignore it).
+- **`components/person/edit/RelationshipsSection.tsx`** — Parents panel (0
+  or 1 family in this UI, per decision 36) and Partners & children panel (N
+  unions, each with role/union-type selects, a reorderable children list, and
+  add/remove). Every action calls `router.refresh()` on success rather than
+  reconciling local state — the same pattern `ExportPanel.tsx` already uses
+  for its own multi-entity flow — and shows a plain "changed elsewhere,
+  reload" message on a lost version check rather than the shared
+  `ConflictDialog`, which is built for a batch of field diffs on one row, not
+  an add/remove action across a small graph of rows.
+- Registered as the third section (`lib/edit/sections.ts`, between
+  Additional Names and Events, matching SPEC §8.3's ordering) and wired into
+  `page.tsx`'s `loadSectionContent` switch — `assertNeverSection` forced this
+  before it would compile.
+- **Verified live** against the shared local Supabase stack (service-role
+  smoke scripts, not committed): every PostgREST embed shape
+  (`person!family_partner1_id_fkey` / `family_partner2_id_fkey` disambiguating
+  the two `family → person` FKs) resolves correctly, and the full write path
+  — create/fill/remove a parent, create/fill/remove a partner, add/reorder/
+  remove children, the version-check conflict path, and the empty-family
+  delete — all behave as designed. `gedcom-export`'s exporter already builds
+  `FAM` records generically from whatever `family`/`family_child` rows exist
+  (`supabase/functions/gedcom-export/exporter.ts`), so the round-trip
+  criterion holds without change; running the export itself end-to-end is
+  still blocked by the pre-existing #86 (edge runtime boot), unrelated to
+  this issue.
+- Code review (foreground): 2 must-fix, 2 should-fix, 1 nit, all applied —
+  `reorderFamilyChildren`'s doc comment overclaimed atomicity it didn't have
+  (fixed the comment and made the client always refresh after a conflict, not
+  just a clean save, so a partial reorder still shows the true state);
+  `addParent` / `fillFamilyPartnerSlot` could orphan a just-created person if
+  the version-checked link then lost its race (added
+  `compensateIfNewPerson`, deleting the ghost on that path); `deleteFamilyIfEmpty`
+  trusted a stale partner snapshot (the delete itself is now conditional on
+  `partner1_id`/`partner2_id` still being null); "Start a new union" hardcoded
+  the focus person's own role to `unknown` instead of deriving it from their
+  `sex` like the new partner's role already did; one orphaned doc comment
+  removed. Both fixes to the write paths re-verified live against the local
+  Supabase stack. Full pnpm gate green (typecheck, lint, format, build,
+  **627** vitest), Deno gate green (typecheck, lint, format, 81 tests),
+  `supabase test db` green on `rls_test.sql` (the one unrelated failure is
+  the same pre-existing `exports_bucket_test.sql` stray row count #55 and #54
+  already noted).
+
+**Issue #55 — Create a person in-app (no GEDCOM): done, merged to `main`
+(commit 03f7d59), issue closed.** SPEC §8.1 (`/person/new`), §8.3 ("Create"), audit
 item B1. No migration — `person_insert` RLS already allowed moderators, and
 `supabase/tests/rls_test.sql:449-464` already covered viewer-denied /
 moderator-allowed, so no new pgTAP test was needed.

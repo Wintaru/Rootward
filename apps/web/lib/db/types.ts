@@ -12,6 +12,7 @@ export type FactRow = Database["public"]["Tables"]["fact"]["Row"];
 export type Sex = Database["public"]["Enums"]["sex"];
 export type PartnerRole = Database["public"]["Enums"]["partner_role"];
 export type UnionType = Database["public"]["Enums"]["union_type"];
+export type ChildRelation = Database["public"]["Enums"]["child_relation"];
 export type EventType = Database["public"]["Enums"]["event_type"];
 export type FactType = Database["public"]["Enums"]["fact_type"];
 export type NameType = Database["public"]["Enums"]["name_type"];

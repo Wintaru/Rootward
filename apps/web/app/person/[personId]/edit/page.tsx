@@ -14,6 +14,7 @@ import {
   getPersonNames,
   getPersonNotes,
   getPersonReferenceNumbers,
+  getRelationshipsEditData,
   getSourcesSectionData,
 } from "@/lib/db";
 import { getPersonMedia } from "@/lib/db/media-edit";
@@ -30,6 +31,7 @@ import { MediaSection } from "@/components/person/edit/MediaSection";
 import { NameGenderSection } from "@/components/person/edit/NameGenderSection";
 import { NotesSection } from "@/components/person/edit/NotesSection";
 import { ReferenceNumbersSection } from "@/components/person/edit/ReferenceNumbersSection";
+import { RelationshipsSection } from "@/components/person/edit/RelationshipsSection";
 import { SourcesSection } from "@/components/person/edit/SourcesSection";
 import { EditShell } from "@/components/person/EditShell";
 
@@ -151,6 +153,17 @@ async function loadSectionContent(
     case "additional-names": {
       const names = await getPersonNames(supabase, personId);
       return <AdditionalNamesSection personId={personId} loaded={names} />;
+    }
+
+    case "relationships": {
+      const relationships = await getRelationshipsEditData(supabase, personId);
+      return (
+        <RelationshipsSection
+          personId={personId}
+          personSex={shell.person.sex}
+          loaded={relationships}
+        />
+      );
     }
 
     case "events": {

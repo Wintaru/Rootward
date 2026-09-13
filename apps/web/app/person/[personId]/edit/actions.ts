@@ -4,7 +4,15 @@ import { revalidatePath } from "next/cache";
 
 import { resolveEditAccess } from "@/lib/auth/require-moderator";
 import {
+  addChildToFamily,
+  addParent,
+  addPartner,
+  fillFamilyPartnerSlot,
   isUuid,
+  removeFamilyChild,
+  removePartnerFromFamily,
+  reorderFamilyChildren,
+  searchPersonsForModeration,
   searchPlaces as searchPlacesDb,
   saveCitations as persistCitations,
   saveEvents as persistEvents,
@@ -12,8 +20,12 @@ import {
   saveNotes as persistNotes,
   saveRepositories as persistRepositories,
   saveSources as persistSources,
+  updateFamilyChildRelation,
+  updateFamilyRelationshipType,
+  updatePartnerRole,
   updatePersonFields,
   saveAdditionalNames as persistAdditionalNames,
+  type ChildRelation,
   type CitationDeleteInput,
   type CitationInsertInput,
   type CitationUpdateInput,
@@ -23,14 +35,17 @@ import {
   type FactDeleteInput,
   type FactInsertInput,
   type FactUpdateInput,
+  type FamilyWriteResult,
   type NoteDeleteInput,
   type NoteInsertInput,
   type NoteUpdateInput,
+  type PartnerRole,
   type PersonEditFields,
   type PersonFieldPatch,
   type PersonNameDeleteInput,
   type PersonNameInsertInput,
   type PersonNameUpdateInput,
+  type PersonSearchOption,
   type PlaceOption,
   type RepositoryDeleteInput,
   type RepositoryInsertInput,
@@ -46,7 +61,9 @@ import {
   type SourceDeleteInput,
   type SourceInsertInput,
   type SourceUpdateInput,
+  type UnionType,
 } from "@/lib/db";
+import { toPersonRef, type PersonRefInput } from "@/lib/edit/relationships";
 import {
   saveMediaLinks as persistMediaLinks,
   setPrimaryMedia,
@@ -493,4 +510,334 @@ export async function signMediaThumbUrl(
     return null;
   }
   return getSignedMediaUrl(path);
+}
+
+/**
+ * The Relationships section's actions (SPEC §8.3, WAYFINDER decision 36,
+ * issue #56). Unlike every action above, these are immediate — no dirty
+ * draft, no batched diff — since a relationship change spans `family` and
+ * `family_child` together and sometimes creates or deletes a `family` row;
+ * see `lib/db/family-edit.ts`'s module doc for the full rationale.
+ * `RelationshipsSection.tsx` calls `router.refresh()` on a `status: "ok"`
+ * result rather than reconciling returned data, so these return only whether
+ * the write landed, not the row.
+ */
+
+export type RelationshipActionResult =
+  | { readonly status: "ok" }
+  | { readonly status: "conflict" }
+  | { readonly status: "no-empty-slot" }
+  | { readonly status: "error"; readonly message: string };
+
+function toRelationshipActionResult(
+  result: FamilyWriteResult,
+): RelationshipActionResult {
+  if (result.ok) {
+    return { status: "ok" };
+  }
+  return { status: result.reason };
+}
+
+/** Name search behind `PersonPickerOrCreate` on this page — same underlying
+ * query as `/moderation` and `/settings`' pickers (`searchPersonsForModeration`),
+ * gated here by `resolveEditAccess` instead of `resolveModerationAccess` /
+ * `resolveSettingsAccess` since this route is the caller. */
+export async function searchRelationshipPersons(
+  query: string,
+): Promise<readonly PersonSearchOption[]> {
+  const access = await resolveEditAccess();
+  if (access.kind !== "allowed") {
+    return [];
+  }
+  const supabase = await createSupabaseServerClient();
+  return searchPersonsForModeration(supabase, query);
+}
+
+export async function addParentAction(input: {
+  readonly personId: string;
+  readonly parent: PersonRefInput;
+  readonly role: PartnerRole;
+}): Promise<RelationshipActionResult> {
+  const access = await resolveEditAccess();
+  if (access.kind !== "allowed") {
+    return {
+      status: "error",
+      message: "You do not have permission to edit this person.",
+    };
+  }
+  if (!isUuid(input.personId)) {
+    return { status: "error", message: "Invalid person." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const result = await addParent(supabase, {
+    childPersonId: input.personId,
+    parent: toPersonRef(input.parent),
+    role: input.role,
+  });
+
+  revalidatePath(`/person/${input.personId}/edit`);
+  revalidatePath(`/person/${input.personId}`);
+  return toRelationshipActionResult(result);
+}
+
+export async function addPartnerAction(input: {
+  readonly personId: string;
+  readonly focusRole: PartnerRole;
+  readonly partner: PersonRefInput;
+  readonly partnerRole: PartnerRole;
+  readonly relationshipType: UnionType | null;
+}): Promise<RelationshipActionResult> {
+  const access = await resolveEditAccess();
+  if (access.kind !== "allowed") {
+    return {
+      status: "error",
+      message: "You do not have permission to edit this person.",
+    };
+  }
+  if (!isUuid(input.personId)) {
+    return { status: "error", message: "Invalid person." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const result = await addPartner(supabase, {
+    focusPersonId: input.personId,
+    focusRole: input.focusRole,
+    partner: toPersonRef(input.partner),
+    partnerRole: input.partnerRole,
+    relationshipType: input.relationshipType,
+  });
+
+  revalidatePath(`/person/${input.personId}/edit`);
+  revalidatePath(`/person/${input.personId}`);
+  return toRelationshipActionResult(result);
+}
+
+export async function fillFamilyPartnerSlotAction(input: {
+  readonly personId: string;
+  readonly familyId: string;
+  readonly expectedUpdatedAt: string;
+  readonly slot: "partner1" | "partner2";
+  readonly partner: PersonRefInput;
+  readonly role: PartnerRole;
+}): Promise<RelationshipActionResult> {
+  const access = await resolveEditAccess();
+  if (access.kind !== "allowed") {
+    return {
+      status: "error",
+      message: "You do not have permission to edit this person.",
+    };
+  }
+  if (!isUuid(input.personId) || !isUuid(input.familyId)) {
+    return { status: "error", message: "Invalid request." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const result = await fillFamilyPartnerSlot(supabase, {
+    familyId: input.familyId,
+    expectedUpdatedAt: input.expectedUpdatedAt,
+    slot: input.slot,
+    partner: toPersonRef(input.partner),
+    role: input.role,
+  });
+
+  revalidatePath(`/person/${input.personId}/edit`);
+  revalidatePath(`/person/${input.personId}`);
+  return toRelationshipActionResult(result);
+}
+
+export async function removePartnerFromFamilyAction(input: {
+  readonly personId: string;
+  readonly familyId: string;
+  readonly expectedUpdatedAt: string;
+  readonly slot: "partner1" | "partner2";
+}): Promise<RelationshipActionResult> {
+  const access = await resolveEditAccess();
+  if (access.kind !== "allowed") {
+    return {
+      status: "error",
+      message: "You do not have permission to edit this person.",
+    };
+  }
+  if (!isUuid(input.personId) || !isUuid(input.familyId)) {
+    return { status: "error", message: "Invalid request." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const result = await removePartnerFromFamily(supabase, {
+    familyId: input.familyId,
+    expectedUpdatedAt: input.expectedUpdatedAt,
+    slot: input.slot,
+  });
+
+  revalidatePath(`/person/${input.personId}/edit`);
+  revalidatePath(`/person/${input.personId}`);
+  return toRelationshipActionResult(result);
+}
+
+export async function updateFamilyRelationshipTypeAction(input: {
+  readonly personId: string;
+  readonly familyId: string;
+  readonly expectedUpdatedAt: string;
+  readonly relationshipType: UnionType | null;
+}): Promise<RelationshipActionResult> {
+  const access = await resolveEditAccess();
+  if (access.kind !== "allowed") {
+    return {
+      status: "error",
+      message: "You do not have permission to edit this person.",
+    };
+  }
+  if (!isUuid(input.personId) || !isUuid(input.familyId)) {
+    return { status: "error", message: "Invalid request." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const result = await updateFamilyRelationshipType(supabase, {
+    familyId: input.familyId,
+    expectedUpdatedAt: input.expectedUpdatedAt,
+    relationshipType: input.relationshipType,
+  });
+
+  revalidatePath(`/person/${input.personId}/edit`);
+  return toRelationshipActionResult(result);
+}
+
+export async function updatePartnerRoleAction(input: {
+  readonly personId: string;
+  readonly familyId: string;
+  readonly expectedUpdatedAt: string;
+  readonly slot: "partner1" | "partner2";
+  readonly role: PartnerRole | null;
+}): Promise<RelationshipActionResult> {
+  const access = await resolveEditAccess();
+  if (access.kind !== "allowed") {
+    return {
+      status: "error",
+      message: "You do not have permission to edit this person.",
+    };
+  }
+  if (!isUuid(input.personId) || !isUuid(input.familyId)) {
+    return { status: "error", message: "Invalid request." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const result = await updatePartnerRole(supabase, {
+    familyId: input.familyId,
+    expectedUpdatedAt: input.expectedUpdatedAt,
+    slot: input.slot,
+    role: input.role,
+  });
+
+  revalidatePath(`/person/${input.personId}/edit`);
+  return toRelationshipActionResult(result);
+}
+
+export async function addChildToFamilyAction(input: {
+  readonly personId: string;
+  readonly familyId: string;
+  readonly child: PersonRefInput;
+}): Promise<RelationshipActionResult> {
+  const access = await resolveEditAccess();
+  if (access.kind !== "allowed") {
+    return {
+      status: "error",
+      message: "You do not have permission to edit this person.",
+    };
+  }
+  if (!isUuid(input.personId) || !isUuid(input.familyId)) {
+    return { status: "error", message: "Invalid request." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const result = await addChildToFamily(supabase, {
+    familyId: input.familyId,
+    child: toPersonRef(input.child),
+  });
+
+  revalidatePath(`/person/${input.personId}/edit`);
+  return toRelationshipActionResult(result);
+}
+
+export async function removeFamilyChildAction(input: {
+  readonly personId: string;
+  readonly familyChildId: string;
+  readonly expectedUpdatedAt: string;
+}): Promise<RelationshipActionResult> {
+  const access = await resolveEditAccess();
+  if (access.kind !== "allowed") {
+    return {
+      status: "error",
+      message: "You do not have permission to edit this person.",
+    };
+  }
+  if (!isUuid(input.personId)) {
+    return { status: "error", message: "Invalid person." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const result = await removeFamilyChild(supabase, {
+    familyChildId: input.familyChildId,
+    expectedUpdatedAt: input.expectedUpdatedAt,
+  });
+
+  revalidatePath(`/person/${input.personId}/edit`);
+  revalidatePath(`/person/${input.personId}`);
+  return toRelationshipActionResult(result);
+}
+
+export async function updateFamilyChildRelationAction(input: {
+  readonly personId: string;
+  readonly familyChildId: string;
+  readonly expectedUpdatedAt: string;
+  readonly slot: "partner1" | "partner2";
+  readonly relation: ChildRelation | null;
+}): Promise<RelationshipActionResult> {
+  const access = await resolveEditAccess();
+  if (access.kind !== "allowed") {
+    return {
+      status: "error",
+      message: "You do not have permission to edit this person.",
+    };
+  }
+  if (!isUuid(input.personId)) {
+    return { status: "error", message: "Invalid person." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const result = await updateFamilyChildRelation(supabase, {
+    familyChildId: input.familyChildId,
+    expectedUpdatedAt: input.expectedUpdatedAt,
+    slot: input.slot,
+    relation: input.relation,
+  });
+
+  revalidatePath(`/person/${input.personId}/edit`);
+  return toRelationshipActionResult(result);
+}
+
+export async function reorderFamilyChildrenAction(input: {
+  readonly personId: string;
+  readonly updates: readonly {
+    readonly id: string;
+    readonly expectedUpdatedAt: string;
+    readonly sortOrder: number;
+  }[];
+}): Promise<RelationshipActionResult> {
+  const access = await resolveEditAccess();
+  if (access.kind !== "allowed") {
+    return {
+      status: "error",
+      message: "You do not have permission to edit this person.",
+    };
+  }
+  if (!isUuid(input.personId) || input.updates.length === 0) {
+    return { status: "error", message: "Nothing to reorder." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const result = await reorderFamilyChildren(supabase, input.updates);
+
+  revalidatePath(`/person/${input.personId}/edit`);
+  return toRelationshipActionResult(result);
 }
