@@ -2,12 +2,13 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { resolveSettingsAccess } from "@/lib/auth/require-moderator";
-import { getTreeSettings, listAllAccounts } from "@/lib/db";
+import { getPersonCount, getTreeSettings, listAllAccounts } from "@/lib/db";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 import { RoleManagement } from "./RoleManagement";
 import { SettingsForbidden } from "./SettingsForbidden";
 import { TreeSettingsForm } from "./TreeSettingsForm";
+import { WipeTreeSection } from "./WipeTreeSection";
 
 export const metadata: Metadata = {
   title: "Settings · Rootward",
@@ -29,9 +30,10 @@ export default async function SettingsPage() {
   }
 
   const supabase = await createSupabaseServerClient();
-  const [settings, accounts] = await Promise.all([
+  const [settings, accounts, personCount] = await Promise.all([
     getTreeSettings(supabase),
     listAllAccounts(supabase),
+    getPersonCount(supabase),
   ]);
 
   return (
@@ -46,6 +48,7 @@ export default async function SettingsPage() {
 
       <TreeSettingsForm key={settings.updatedAt} settings={settings} />
       <RoleManagement accounts={accounts} currentUserId={access.userId} />
+      <WipeTreeSection personCount={personCount} startedBy={access.userId} />
     </main>
   );
 }

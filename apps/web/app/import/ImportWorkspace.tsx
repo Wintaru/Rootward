@@ -1,6 +1,8 @@
 "use client";
 
-import { type FormEvent, useId, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { type FormEvent, useEffect, useId, useState } from "react";
 
 import type { ImportJob, ImportStats } from "@/lib/db";
 import { progressOf, type ImportFlowState } from "@/lib/import/orchestrator";
@@ -11,10 +13,34 @@ import { DeterminateBar, IndeterminateBar, StatusCard } from "./StatusCard";
 /** Matches the storage bucket's default `file_size_limit` (supabase/config.toml). */
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 
-/** The import half of `/import` (SPEC §8.1). The page owns the `<main>` and
- * the `h1`; this is one `h2` section beside `ExportPanel`. */
-export function ImportWorkspace({ startedBy }: { startedBy: string }) {
+/** The import half of `/import` (SPEC §8.1, §7, issue #60). The page owns the
+ * `<main>` and the `h1`; this is one `h2` section beside `ExportPanel`.
+ *
+ * `personCount` blocks the file picker with a clear notice on a non-empty
+ * tree instead of letting a second import run and fail on the
+ * `person_gedcom_xref_uidx` unique index (decision 33: only the first import
+ * is a straightforward load — a later one needs **Wipe tree** first). It is a
+ * server-rendered snapshot, so a completed import calls `router.refresh()`
+ * once to pick up the tree's new population before the notice can apply to
+ * the *next* "Import another file" click.
+ */
+export function ImportWorkspace({
+  startedBy,
+  personCount,
+  isAdmin,
+}: {
+  startedBy: string;
+  personCount: number;
+  isAdmin: boolean;
+}) {
+  const router = useRouter();
   const { state, start, reset } = useGedcomImport(startedBy);
+
+  useEffect(() => {
+    if (state.status === "completed") {
+      router.refresh();
+    }
+  }, [state.status, router]);
 
   return (
     <section className="flex flex-col gap-4">
@@ -27,8 +53,41 @@ export function ImportWorkspace({ startedBy }: { startedBy: string }) {
         </p>
       </div>
 
-      <ImportStage state={state} onStart={start} onReset={reset} />
+      {state.status === "idle" && personCount > 0 ? (
+        <NonEmptyTreeNotice personCount={personCount} isAdmin={isAdmin} />
+      ) : (
+        <ImportStage state={state} onStart={start} onReset={reset} />
+      )}
     </section>
+  );
+}
+
+function NonEmptyTreeNotice({
+  personCount,
+  isAdmin,
+}: {
+  personCount: number;
+  isAdmin: boolean;
+}) {
+  return (
+    <StatusCard title="This tree already has data">
+      <p className="text-sm">
+        This tree already has {personCount.toLocaleString()}{" "}
+        {personCount === 1 ? "person" : "people"}.{" "}
+        {isAdmin
+          ? "Wipe the tree first"
+          : "Ask an admin to wipe the tree first"}
+        , or wait for match-and-update (#44).
+      </p>
+      {isAdmin && (
+        <Link
+          href="/settings"
+          className="border-border w-fit rounded-md border px-4 py-2 text-sm font-medium"
+        >
+          Go to Settings to wipe the tree
+        </Link>
+      )}
+    </StatusCard>
   );
 }
 

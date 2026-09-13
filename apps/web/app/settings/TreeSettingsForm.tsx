@@ -299,9 +299,11 @@ function megabytes(bytes: string): string | null {
   return (parsed / (1024 * 1024)).toFixed(1);
 }
 
-const inputClass = "border-border rounded-md border px-3 py-2 text-sm";
+/** Shared with `WipeTreeSection.tsx` — the same field/input shape every
+ * `/settings` form uses. */
+export const inputClass = "border-border rounded-md border px-3 py-2 text-sm";
 
-function Field({
+export function Field({
   label,
   htmlFor,
   children,

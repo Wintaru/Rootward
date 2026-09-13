@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { resolveImportAccess } from "@/lib/auth/require-moderator";
-import { listExportJobs } from "@/lib/db";
+import { getPersonCount, listExportJobs } from "@/lib/db";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 import { ExportJobList } from "./ExportJobList";
@@ -31,7 +31,10 @@ export default async function ImportPage() {
   }
 
   const supabase = await createSupabaseServerClient();
-  const exportJobs = await listExportJobs(supabase);
+  const [exportJobs, personCount] = await Promise.all([
+    listExportJobs(supabase),
+    getPersonCount(supabase),
+  ]);
 
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-10 px-6 py-16">
@@ -44,7 +47,11 @@ export default async function ImportPage() {
         </p>
       </header>
 
-      <ImportWorkspace startedBy={access.userId} />
+      <ImportWorkspace
+        startedBy={access.userId}
+        personCount={personCount}
+        isAdmin={access.isAdmin}
+      />
       <ExportPanel
         startedBy={access.userId}
         jobList={<ExportJobList jobs={exportJobs} />}

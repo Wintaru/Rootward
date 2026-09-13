@@ -83,11 +83,16 @@ async function resolveModeratorGate(context: string): Promise<ModeratorGate> {
   return { kind: "allowed", userId: session.userId, account: session.account };
 }
 
-/** Resolve whether the current request may use `/import`. */
+/** Resolve whether the current request may use `/import`. `isAdmin` gates the
+ * wipe-tree link on the non-empty-tree block notice (issue #60). */
 export async function resolveImportAccess(): Promise<ImportAccess> {
   const gate = await resolveModeratorGate("resolveImportAccess");
   return gate.kind === "allowed"
-    ? { kind: "allowed", userId: gate.userId }
+    ? {
+        kind: "allowed",
+        userId: gate.userId,
+        isAdmin: gate.account?.role === "admin",
+      }
     : gate;
 }
 

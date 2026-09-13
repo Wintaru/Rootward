@@ -5,12 +5,15 @@ import { revalidatePath } from "next/cache";
 import { resolveSettingsAccess } from "@/lib/auth/require-moderator";
 import {
   changeAccountRole,
+  getAllMediaStoragePaths,
   isAccountRole,
   personExists,
   type PersonSearchOption,
+  removeMediaStorageObjects,
   searchPersonsForModeration,
   setAccountStatus,
   updateTreeSettings,
+  wipeTree,
 } from "@/lib/db";
 import {
   type RawTreeSettingsInput,
@@ -122,5 +125,43 @@ export async function setAccountStatusAction(
     return { ok: false, error: "That account no longer exists." };
   }
   revalidatePath("/settings");
+  return { ok: true };
+}
+
+/**
+ * Wipe the tree (SPEC §7, §8.1, decisions 18/33, issue #60) —
+ * `WipeTreeSection.tsx`'s confirmed danger-zone button. The caller has
+ * already run the backup export (decision 33's "automatic backup first")
+ * before reaching here. `wipe_tree`'s own `is_admin()` check
+ * (`20260913191500_wipe_tree.sql`) is the real boundary, not
+ * `resolveSettingsAccess` here.
+ */
+export async function wipeTreeAction(): Promise<SettingsActionResult> {
+  const access = await resolveSettingsAccess();
+  if (access.kind !== "allowed") {
+    return { ok: false, error: "You do not have permission to do that." };
+  }
+
+  const server = await createSupabaseServerClient();
+  try {
+    // Read the media paths, then wipe the DB, then remove storage — in that
+    // order so a failed `wipe_tree` leaves storage untouched (safe to retry)
+    // and a failed storage removal only leaves harmless orphaned objects
+    // rather than DB rows pointing at now-missing files. See
+    // `getAllMediaStoragePaths`'s doc comment in `lib/db/wipe-tree.ts`.
+    const mediaPaths = await getAllMediaStoragePaths(server);
+    await wipeTree(server);
+    await removeMediaStorageObjects(server, mediaPaths);
+  } catch (err) {
+    return {
+      ok: false,
+      error:
+        err instanceof Error ? err.message : "The tree could not be wiped.",
+    };
+  }
+
+  revalidatePath("/settings");
+  revalidatePath("/import");
+  revalidatePath("/tree");
   return { ok: true };
 }

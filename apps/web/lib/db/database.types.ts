@@ -1434,6 +1434,7 @@ export type Database = {
       }
       person_is_living: { Args: { p_person_id: string }; Returns: boolean }
       person_is_visible: { Args: { p_person_id: string }; Returns: boolean }
+      wipe_tree: { Args: never; Returns: undefined }
     }
     Enums: {
       account_role: "viewer" | "moderator" | "admin"

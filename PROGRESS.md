@@ -5,15 +5,16 @@ the relevant `docs/SPEC.md` section.
 
 ## Current state
 
-**Next issue: #60, then #61 → … → #65 in §10 Phase 9 order.** #64
+**Next issue: #61, then #62 → … → #65 in §10 Phase 9 order.** #64
 (docs), #50 (header), #51 (`/tree` index), #52 (tree card → profile), #53
 (root person by name), #54 (GEDCOM export UI), #55 (create a person in-app),
 #56 (Relationships section), #57 (family events), #58 (person visibility +
-living override), and #73 (the `/settings` and `/moderation` 500) are all
-merged to `main` and closed — confirmed `#58` landed as commit `bf4152a`
-on `origin/main`. #59 (delete a person) is done and staged on branch
-`feat/delete-person`, not yet merged — the next session should confirm it
-landed on `origin/main` before starting #60. A 2026-09-12
+living override), #59 (delete a person), and #73 (the `/settings` and
+`/moderation` 500) are all merged to `main` and closed — confirmed `#59`
+landed as commit `220a957` on `origin/main`. #60 (wipe tree + block import on
+a non-empty tree) is done and staged on branch `feat/wipe-tree`, not yet
+merged — the next session should confirm it landed on `origin/main` before
+starting #61. A 2026-09-12
 audit found that every §10 item was built but the app was not usable: no
 sign-out, no navigation, no way to open a profile from the tree, a 404 on a
 fresh deploy, and no way to create a person or a relationship without a
@@ -24,6 +25,73 @@ plus §8.1 / §8.3 / §7, and WAYFINDER decision 36 + the **Journeys** section.
 #40 (README) waits
 until Phase 9 lands, so the screenshots show a usable app. The audit itself
 is in `GAP-AUDIT-HANDOFF.md` (gitignored).
+
+**Issue #60 — Wipe tree (admin) + block import on a non-empty tree: done,
+staged on branch `feat/wipe-tree`, issue closed.** SPEC §7, §8.1, WAYFINDER
+decisions 18/33. New migration `20260913191500_wipe_tree.sql` and new pgTAP
+test `wipe_tree_test.sql` (20 assertions).
+
+- **`wipe_tree()`** is a `SECURITY INVOKER` SQL function, same posture as
+  `delete_person`: an explicit `is_admin()` check up front is the real
+  boundary (every table's own RLS already grants `is_moderator()` write
+  access). Deletes `note` and `person` first, then `family`, `source`,
+  `media`, `repository`, and **`place` last** — deliberately: deleting
+  `place` before `person`/`family` fires the "on delete set null" cascade on
+  still-present `event.place_id` rows, which is an UPDATE that trips
+  `event`'s BEFORE UPDATE trigger (`event_set_sort_key`), and that trigger's
+  unqualified call to `genealogy_date_sort_key()` fails under this
+  function's own `search_path = ''`. Caught by actually running the
+  migration + pgTAP suite against the local stack, not just reading the SQL
+  — `supabase migration up --local` / `supabase test db --local` (no
+  dedicated pnpm script for either; the local stack was already up from
+  another session, so migrations were applied non-destructively rather than
+  via `dev:reset`).
+- Every account's `person_id` and `tree_settings.default_root_person_id`
+  clear themselves via the existing "on delete set null" FKs the moment
+  `person` rows disappear — nothing to do explicitly for either.
+- **`lib/db/wipe-tree.ts`**: `getPersonCount` (the `/import` block and the
+  settings copy's shared emptiness check), `getAllMediaStoragePaths` (reads
+  `media.storage_path_*` in pages of 1000 — PostgREST's `max_rows` — a first
+  pass that read unpaginated would have silently dropped any media past the
+  cap, caught in code review), `removeMediaStorageObjects`, and `wipeTree`
+  (the RPC wrapper). `wipeTreeAction` (`app/settings/actions.ts`) calls them
+  in the order **read paths → wipe DB → remove storage**, not "remove
+  storage → wipe DB" — also a review catch: if `wipe_tree` fails after
+  storage is already gone, DB rows would be left pointing at now-missing
+  files (worse than the wipe simply not having happened), whereas storage
+  removal failing after a successful DB wipe just leaves harmless orphaned
+  objects.
+- **`WipeTreeSection.tsx`** (`/settings`, admin-only): a typed-literal
+  `"WIPE"` confirmation (not the tree name, which can be null), same
+  safety-catch posture as `DeletePersonSection`. On a non-empty tree it runs
+  a `manual_gedcom` backup export first (decision 33) and only proceeds to
+  the wipe if that export completes — `runBackupExport` reuses the export
+  flow's own pure `settle`/`settlePoll` decisions
+  (`lib/export/orchestrator.ts`) rather than re-deriving them, so a dropped
+  `functions.invoke` call gets the same polling grace period
+  `useGedcomExport` gives it instead of failing a possibly-fine export
+  outright. `personCount` is re-read fresh at click time before deciding
+  whether a backup is needed — the prop is only a page-load snapshot, and
+  trusting it could skip the backup on a tree that became non-empty in the
+  gap (another review catch). Verified live in a browser: with the local
+  edge-runtime container's default (no `--import-map`) config, `gedcom-export`
+  502/503s, and the flow correctly reported "the tree was not wiped" with the
+  DB confirmed untouched (28 people, unchanged) both before and after the
+  fix. The full happy path (backup succeeds → wipe runs → download link
+  shown) needs `pnpm dev:fresh`/`dev:up` to serve functions with the custom
+  import map — not run, since the repo's CLAUDE.md reserves that for Josh
+  (it restarts containers other sessions may be using).
+- **`ImportWorkspace.tsx`**: blocks the file picker with "This tree already
+  has N people…" when `personCount > 0` and the flow is idle, with a
+  "Go to Settings to wipe the tree" link shown only to admins (`isAdmin`
+  threaded through a new field on `ImportAccess`/`resolveImportAccess`).
+  Calls `router.refresh()` when an import completes, so a stale
+  server-rendered `personCount` cannot let "Import another file" slip a
+  second import past the block. No edge-function change — the issue rules
+  out a `replace_all` import mode explicitly (wipe + a plain `initial`
+  import is equivalent), so `gedcom-import` itself is untouched.
+- Verify gate green (typecheck/lint/format/build/test, plus the Deno gate for
+  `supabase/functions/`); full pgTAP suite green (295 assertions, 15 files).
 
 **Issue #59 — Delete a person (admin): done, staged on branch
 `feat/delete-person`, issue closed.** SPEC §8.3 ("Delete"), §4.9, WAYFINDER

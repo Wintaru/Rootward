@@ -60,11 +60,17 @@ export function isApproved(account: AccountAccess | null): boolean {
   return account !== null && account.status === "active";
 }
 
-/** Outcome of resolving `/import` access, so the page can branch on it. */
+/** Outcome of resolving `/import` access, so the page can branch on it.
+ * `isAdmin` gates the wipe-tree link on the non-empty-tree block notice
+ * (issue #60) — same shape as `ModerationAccess.isAdmin`. */
 export type ImportAccess =
   | { readonly kind: "unauthenticated" }
   | { readonly kind: "forbidden" }
-  | { readonly kind: "allowed"; readonly userId: string };
+  | {
+      readonly kind: "allowed";
+      readonly userId: string;
+      readonly isAdmin: boolean;
+    };
 
 /**
  * What `/onboarding` should do for a signed-in visitor (SPEC §8.1 / §9.3).
