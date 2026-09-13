@@ -8,12 +8,10 @@ the relevant `docs/SPEC.md` section.
 **Next issue: #59, then #60 → … → #65 in §10 Phase 9 order.** #64
 (docs), #50 (header), #51 (`/tree` index), #52 (tree card → profile), #53
 (root person by name), #54 (GEDCOM export UI), #55 (create a person in-app),
-#56 (Relationships section), #57 (family events), and #73 (the `/settings`
-and `/moderation` 500) are all merged to `main` and closed. #58 (person
-visibility + living override) is done, staged on branch
-`feat/person-visibility-living`, issue closed — awaiting Josh's commit/push;
-confirm it's on `origin/main` before starting #59 (see the workflow note in
-`CLAUDE.md`). A 2026-09-12
+#56 (Relationships section), #57 (family events), #58 (person visibility +
+living override), and #73 (the `/settings` and `/moderation` 500) are all
+merged to `main` and closed — confirmed `#58` landed as commit `bf4152a`
+on `origin/main`. A 2026-09-12
 audit found that every §10 item was built but the app was not usable: no
 sign-out, no navigation, no way to open a profile from the tree, a 404 on a
 fresh deploy, and no way to create a person or a relationship without a
@@ -26,7 +24,7 @@ until Phase 9 lands, so the screenshots show a usable app. The audit itself
 is in `GAP-AUDIT-HANDOFF.md` (gitignored).
 
 **Issue #58 — Person visibility and `is_living` override in the edit view:
-done, staged on branch `feat/person-visibility-living`, issue closed.** SPEC
+done, merged to `main` (commit `bf4152a`), issue closed.** SPEC
 §5, §8.3, decisions 6/7. No migration, no new RLS test — `person_update` /
 `person_select` already honored `visibility`/`is_living` before any UI wrote
 them (issue text), and the read-side RLS test already exists in
@@ -51,6 +49,21 @@ them (issue text), and the read-side RLS test already exists in
 - `PersonEditShellData` gained a `personVisibility` field, sibling to
   `person`/`personUpdatedAt` rather than added to the shared
   `ProfilePersonCore` — the read-only profile route doesn't need it.
+
+**Issue #97 — local seed: demo admin couldn't sign in (`email_change` NULL
+broke GoTrue): done, staged on branch `fix/seed-email-change-null`, issue
+closed.** Found live while testing `pnpm dev` from a clean clone on a
+newly-set-up machine, per Josh's request. `supabase/seed.sql`'s admin
+`auth.users` insert never set `email_change` (unlike its sibling token
+columns, it has no `''` default), so it stayed NULL and GoTrue 500'd on
+every `/otp` call with "converting NULL to string is unsupported" — the
+seeded admin could never actually sign in through `/login`. Fixed by adding
+`email_change` to the insert; verified with `supabase db reset` + a real
+Playwright sign-in through Mailpit, plus `supabase test db` (252 pgTAP
+tests, unaffected). Also noted but not fixed: the README/seed.sql comment
+describe a password sign-in path at `/login` that `LoginForm.tsx` doesn't
+actually have (magic link + Google only) — worth a docs fix or a deliberate
+decision, separately.
 
 **Issue #57 — Family events (marriage, divorce, engagement, annulment) in
 the edit view: done, merged to `main` (commit 13361b6), issue closed.**
