@@ -3,7 +3,11 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import type { ReactNode } from "react";
 
-import { isActiveModerator, isApproved } from "@/lib/auth/access";
+import {
+  isActiveAdmin,
+  isActiveModerator,
+  isApproved,
+} from "@/lib/auth/access";
 import { getCurrentAccount } from "@/lib/auth/current-account";
 import { getAccountDisplayName } from "@/lib/db/account-lookup";
 import type { Database } from "@/lib/db/database.types";
@@ -67,7 +71,9 @@ export const metadata: Metadata = {
  * `data` rather than re-querying `person`. It does pay for one extra query —
  * `getComputedIsLiving` (#58), for the Living control's "computes to" hint —
  * since that reads `event`/`tree_settings`, not `person`, and only a
- * moderator viewing this one section needs it.
+ * moderator viewing this one section needs it. `isAdmin` (#59, decision 18)
+ * gates the section's danger-zone delete the same way — computed here so an
+ * ordinary moderator never renders it.
  *
  * `selfDisplayName` (#32) resolves the caller's own `account.display_name`
  * for the `PresenceBanner` every other moderator editing this person sees —
@@ -116,6 +122,7 @@ export default async function EditPersonPage({
     personId,
     data,
     section,
+    isActiveAdmin(current.account),
   );
 
   return (
@@ -135,6 +142,7 @@ async function loadSectionContent(
   personId: string,
   shell: PersonEditShellData,
   section: EditSectionSlug,
+  isAdmin: boolean,
 ): Promise<ReactNode> {
   switch (section) {
     case "name-gender": {
@@ -156,6 +164,7 @@ async function loadSectionContent(
           personId={personId}
           loaded={fields}
           computedIsLiving={computedIsLiving}
+          isAdmin={isAdmin}
         />
       );
     }

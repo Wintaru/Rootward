@@ -5,13 +5,15 @@ the relevant `docs/SPEC.md` section.
 
 ## Current state
 
-**Next issue: #59, then #60 → … → #65 in §10 Phase 9 order.** #64
+**Next issue: #60, then #61 → … → #65 in §10 Phase 9 order.** #64
 (docs), #50 (header), #51 (`/tree` index), #52 (tree card → profile), #53
 (root person by name), #54 (GEDCOM export UI), #55 (create a person in-app),
 #56 (Relationships section), #57 (family events), #58 (person visibility +
 living override), and #73 (the `/settings` and `/moderation` 500) are all
 merged to `main` and closed — confirmed `#58` landed as commit `bf4152a`
-on `origin/main`. A 2026-09-12
+on `origin/main`. #59 (delete a person) is done and staged on branch
+`feat/delete-person`, not yet merged — the next session should confirm it
+landed on `origin/main` before starting #60. A 2026-09-12
 audit found that every §10 item was built but the app was not usable: no
 sign-out, no navigation, no way to open a profile from the tree, a 404 on a
 fresh deploy, and no way to create a person or a relationship without a
@@ -22,6 +24,54 @@ plus §8.1 / §8.3 / §7, and WAYFINDER decision 36 + the **Journeys** section.
 #40 (README) waits
 until Phase 9 lands, so the screenshots show a usable app. The audit itself
 is in `GAP-AUDIT-HANDOFF.md` (gitignored).
+
+**Issue #59 — Delete a person (admin): done, staged on branch
+`feat/delete-person`, issue closed.** SPEC §8.3 ("Delete"), §4.9, WAYFINDER
+decision 18. New migration `20260913190832_delete_person.sql` and new pgTAP
+test `delete_person_test.sql` (23 assertions) — the "Done when" list asked
+for an RLS deny test for moderators, which this covers alongside the
+cascade itself.
+
+- **`delete_person(p_person_id uuid)`** is a single `SECURITY INVOKER` SQL
+  function, not a client-driven multi-step delete — chosen because
+  `citation`/`media_link`/`note` are polymorphic (`owner_type`/`owner_id`,
+  no FK — SPEC §4.9) and are NOT cleaned up by the `person`/`event`/`fact`/
+  `family_child` cascades already in place, so the cleanup has to happen
+  in dependency order (notes-on-citations, then direct notes/media_links,
+  then citations, then the person row) inside one transaction — a
+  partially-applied client-side diff would leave a still-existing person
+  missing its notes/citations, which is worse than the ordinary "some rows
+  saved, refetch" story every other section's diff-save tolerates.
+  `family` rows are never touched (a partner slot just goes `null`, per
+  spec — no "empty family" cleanup, unlike the explicit remove-relationship
+  path in `family-edit.ts`) and neither are `media` assets (only the
+  `media_link` rows pointing at the deleted person/their events/facts —
+  the asset may be linked from elsewhere).
+- The function's own `is_admin()` check (not RLS) is the real boundary,
+  checked and raised _before_ any delete runs — `person_delete` RLS is
+  `is_admin()`-only but every polymorphic table's write policy is
+  `is_moderator()`, so without this a moderator's call would silently strip
+  a still-living person's notes/citations/media before failing only on the
+  final `person` delete. It also `select ... for update`s the person row
+  up front: an insert of a referencing `event`/`fact`/`family_child`/
+  `person_name` row takes a `FOR KEY SHARE` lock on it to enforce the FK,
+  which this blocks until the delete commits — closes a TOCTOU window a
+  code review caught, where a row inserted between the id-gathering
+  `SELECT`s and the final cascade would have its own citation/media_link/
+  note missed and left orphaned.
+- **`lib/db/person-delete.ts`** is a thin one-function RPC wrapper;
+  `deletePersonAction` (`edit/actions.ts`) re-checks `isAdmin` (a new field
+  on `EditAccess`, same shape as `ModerationAccess.isAdmin`) for a clean
+  error message, then revalidates `/tree` plus the now-gone person's own
+  `/person/[id]` and `/person/[id]/edit` paths.
+- **`DeletePersonSection.tsx`** — the Name & Gender section's admin-only
+  "danger zone", rendered only when `page.tsx` resolves `isActiveAdmin`.
+  The typed-full-name confirmation (reusing `personName` from
+  `lib/db/invitations.ts` rather than a fourth name formatter — see #85)
+  is client-side UX against a misclick, not re-verified server-side; the
+  real boundary is `isAdmin` end to end. No `updated_at` version check,
+  unlike every other edit-view save — deliberate, per spec: the typed
+  confirmation is the safety net here, not row versioning.
 
 **Issue #58 — Person visibility and `is_living` override in the edit view:
 done, merged to `main` (commit `bf4152a`), issue closed.** SPEC

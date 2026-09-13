@@ -3,7 +3,7 @@
 import { useId, useState } from "react";
 
 import { savePersonFields } from "@/app/person/[personId]/edit/actions";
-import { Constants } from "@/lib/db";
+import { Constants, personName } from "@/lib/db";
 import type { RowConflict } from "@/lib/db/conflict";
 import type { PersonEditFields, PersonFieldPatch } from "@/lib/db/person-edit";
 import type { Sex } from "@/lib/db/types";
@@ -21,6 +21,7 @@ import {
 import { enumTokenLabel, sexLabel } from "@/lib/person/labels";
 
 import { ConflictDialog } from "./ConflictDialog";
+import { DeletePersonSection } from "./DeletePersonSection";
 import { Field, inputClass, SaveBar } from "./form";
 
 /**
@@ -36,6 +37,7 @@ export function NameGenderSection({
   personId,
   loaded,
   computedIsLiving,
+  isAdmin,
 }: {
   readonly personId: string;
   readonly loaded: NameGenderFields;
@@ -43,6 +45,9 @@ export function NameGenderSection({
    * §5, §4.2, #58) — always fetched so switching the override back to
    * Computed shows the right value without a round trip. */
   readonly computedIsLiving: boolean;
+  /** Gates the danger-zone delete at the bottom (SPEC §8.3, decision 18,
+   * issue #59) — an ordinary moderator never sees it. */
+  readonly isAdmin: boolean;
 }) {
   const [baseline, setBaseline] = useState(loaded);
   const [draft, setDraft] = useState<NameGenderDraft>(() =>
@@ -308,6 +313,16 @@ export function NameGenderSection({
         onSave={save}
         conflictMessage="This person's name or gender changed while you had it open."
       />
+
+      {isAdmin && (
+        <DeletePersonSection
+          personId={personId}
+          personDisplayName={personName({
+            given_name: baseline.givenName,
+            surname: baseline.surname,
+          })}
+        />
+      )}
     </div>
   );
 }

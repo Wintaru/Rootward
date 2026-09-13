@@ -10,6 +10,7 @@ export * from "./types";
 export * from "./genealogy-date";
 export * from "./person";
 export * from "./person-create";
+export * from "./person-delete";
 export * from "./person-edit";
 export * from "./family-edit";
 export * from "./event-edit";

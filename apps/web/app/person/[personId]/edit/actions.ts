@@ -7,6 +7,7 @@ import {
   addChildToFamily,
   addParent,
   addPartner,
+  deletePerson,
   fillFamilyPartnerSlot,
   isUuid,
   removeFamilyChild,
@@ -130,6 +131,60 @@ export async function savePersonFields(input: {
   revalidatePath(`/person/${input.personId}/edit`);
   revalidatePath(`/person/${input.personId}`);
   return { status: "saved", row: result.row };
+}
+
+export type DeletePersonActionResult =
+  | { readonly status: "deleted" }
+  | { readonly status: "not-found" }
+  | { readonly status: "error"; readonly message: string };
+
+/** The Name & Gender section's danger-zone delete (SPEC §8.3, decision 18,
+ * issue #59) — admin, not just moderator+. `delete_person`'s own
+ * `is_admin()` check is the real boundary regardless (see its doc comment in
+ * the migration); this is for a clean error message, same posture as every
+ * other action here. The typed-name confirmation is a client-side safety
+ * catch against a misclick (`DeletePersonSection.tsx`), not re-verified —
+ * there is nothing more to check server-side once the caller is confirmed
+ * admin. `not-found` covers a concurrent delete or a stale page; the
+ * component treats it the same as `deleted`. */
+export async function deletePersonAction(input: {
+  readonly personId: string;
+}): Promise<DeletePersonActionResult> {
+  const access = await resolveEditAccess();
+  if (access.kind !== "allowed") {
+    return {
+      status: "error",
+      message: "You do not have permission to edit this person.",
+    };
+  }
+  if (!access.isAdmin) {
+    return {
+      status: "error",
+      message: "Deleting a person needs admin access.",
+    };
+  }
+  if (!isUuid(input.personId)) {
+    return { status: "error", message: "Invalid person." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  let deleted: boolean;
+  try {
+    deleted = await deletePerson(supabase, input.personId);
+  } catch (err) {
+    return {
+      status: "error",
+      message:
+        err instanceof Error
+          ? err.message
+          : "That person could not be deleted.",
+    };
+  }
+
+  revalidatePath("/tree");
+  revalidatePath(`/person/${input.personId}`);
+  revalidatePath(`/person/${input.personId}/edit`);
+  return { status: deleted ? "deleted" : "not-found" };
 }
 
 export type SaveAdditionalNamesActionResult =

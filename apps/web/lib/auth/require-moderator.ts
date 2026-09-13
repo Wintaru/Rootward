@@ -95,16 +95,26 @@ export async function resolveImportAccess(): Promise<ImportAccess> {
  * (`app/person/[personId]/edit/actions.ts`) and to `/person/new` (#55, which
  * redirects into the edit view on success) — the same moderator+ gate the
  * route itself uses (`isActiveModerator`, documented there as covering "the
- * edit view"), re-checked server-side rather than trusted from the client. */
+ * edit view"), re-checked server-side rather than trusted from the client.
+ * `isAdmin` gates the Name & Gender "danger zone" delete action (#59, decision
+ * 18) — same shape as `ModerationAccess.isAdmin` below. */
 export type EditAccess =
   | { readonly kind: "unauthenticated" }
   | { readonly kind: "forbidden" }
-  | { readonly kind: "allowed"; readonly userId: string };
+  | {
+      readonly kind: "allowed";
+      readonly userId: string;
+      readonly isAdmin: boolean;
+    };
 
 export async function resolveEditAccess(): Promise<EditAccess> {
   const gate = await resolveModeratorGate("resolveEditAccess");
   return gate.kind === "allowed"
-    ? { kind: "allowed", userId: gate.userId }
+    ? {
+        kind: "allowed",
+        userId: gate.userId,
+        isAdmin: gate.account?.role === "admin",
+      }
     : gate;
 }
 
