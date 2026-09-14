@@ -139,6 +139,17 @@ const CALENDAR_KEYWORDS: Readonly<Record<string, Calendar>> = {
 const CALENDAR_KEYWORD_RE =
   /^(?:[A-Z]+\s+)?(GREGORIAN|JULIAN|HEBREW|FRENCH_R)\s/i;
 
+/**
+ * `M/D/YYYY` (US-style, 1-2 digit month/day, exactly 4 digits of year). Some
+ * exporters — MacFamilyTree among them — write dates this way instead of
+ * GEDCOM's own `DD MON YYYY` form. A 2-digit year (`11/2/11`) is deliberately
+ * NOT matched here: it is genuinely ambiguous between, say, 1911 and 2011,
+ * and a wrong guess would silently corrupt a family's recorded history —
+ * left as a `phrase` instead, which at least shows the reader the original
+ * text rather than a confidently wrong date.
+ */
+const SLASH_DATE_RE = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/;
+
 // --- parse -------------------------------------------------------------
 
 /**
@@ -312,10 +323,24 @@ function twoDates(
   };
 }
 
-/** `[day] [month] year`, `year` optionally in `1700/01` dual form. */
+/**
+ * `[day] [month] year` (`year` optionally in `1700/01` dual form), or a bare
+ * `M/D/YYYY` numeric date — see {@link SLASH_DATE_RE}.
+ */
 function parseDatePart(text: string): DatePart | null {
   const trimmed = text.trim();
   if (trimmed === "") return null;
+
+  const slash = SLASH_DATE_RE.exec(trimmed);
+  if (slash !== null) {
+    const month = Number(slash[1]);
+    const day = Number(slash[2]);
+    const year = Number(slash[3]);
+    if (month < 1 || month > 12 || day < 1 || day > 31 || !isYear(year)) {
+      return null;
+    }
+    return { year, month, day, dualYear: false };
+  }
 
   const tokens = trimmed.split(/\s+/);
   if (tokens.length < 1 || tokens.length > 3) return null;

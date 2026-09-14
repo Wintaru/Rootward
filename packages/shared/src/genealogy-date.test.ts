@@ -156,6 +156,51 @@ const FIXTURES: readonly Fixture[] = [
     expected: { date_kind: "phrase", date_phrase: "circa the war years" },
     formatted: "circa the war years",
   },
+  // M/D/YYYY — MacFamilyTree's export style (issue tracking sibling-order
+  // sort), not GEDCOM's own `DD MON YYYY` grammar
+  {
+    raw: "5/16/2005",
+    expected: {
+      date_kind: "exact",
+      date_year1: 2005,
+      date_month1: 5,
+      date_day1: 16,
+    },
+    formatted: "16 May 2005",
+  },
+  {
+    raw: "1/8/1961",
+    expected: {
+      date_kind: "exact",
+      date_year1: 1961,
+      date_month1: 1,
+      date_day1: 8,
+    },
+    formatted: "8 January 1961",
+  },
+  {
+    raw: "ABT 12/15/1975",
+    expected: {
+      date_kind: "about",
+      date_year1: 1975,
+      date_month1: 12,
+      date_day1: 15,
+    },
+    formatted: "About 15 December 1975",
+  },
+  // A 2-digit year is genuinely ambiguous (1911 vs. 2011) — left a phrase
+  // rather than guessed at.
+  {
+    raw: "11/2/11",
+    expected: { date_kind: "phrase", date_phrase: "11/2/11" },
+    formatted: "11/2/11",
+  },
+  // Out-of-range month/day still fall through to phrase, not a crash.
+  {
+    raw: "13/40/2005",
+    expected: { date_kind: "phrase", date_phrase: "13/40/2005" },
+    formatted: "13/40/2005",
+  },
   // unknown
   {
     raw: "",
