@@ -64,19 +64,19 @@ export function EditShell({
         />
       </header>
 
-      <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
         <nav
           aria-label="Edit sections"
-          className="border-border w-56 shrink-0 overflow-y-auto border-r py-4"
+          className="border-border w-full shrink-0 overflow-x-auto border-b py-2 md:w-56 md:overflow-y-auto md:border-r md:border-b-0 md:py-4"
         >
-          <ul className="flex flex-col gap-0.5 px-2">
+          <ul className="flex flex-row gap-0.5 px-2 md:flex-col">
             {view.sections.map((section) => (
-              <li key={section.slug}>
+              <li key={section.slug} className="shrink-0">
                 <Link
                   href={section.href}
                   aria-current={section.isActive ? "page" : undefined}
                   className={
-                    "block rounded-md px-3 py-2 text-sm font-medium " +
+                    "block rounded-md px-3 py-2 text-sm font-medium whitespace-nowrap " +
                     (section.isActive
                       ? "bg-accent text-foreground"
                       : "text-muted-foreground hover:bg-accent hover:text-foreground")
@@ -89,7 +89,7 @@ export function EditShell({
           </ul>
         </nav>
 
-        <main className="flex flex-1 flex-col overflow-y-auto px-6 py-8">
+        <main className="flex flex-1 flex-col overflow-y-auto px-4 py-6 md:px-6 md:py-8">
           <h2 className="text-lg font-semibold tracking-tight">
             {view.activeSection.label}
           </h2>

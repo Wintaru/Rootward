@@ -2,11 +2,12 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import "./globals.css";
 
+import { MobileNavMenu } from "@/components/layout/MobileNavMenu";
 import { PersonSearchBox } from "@/components/layout/PersonSearchBox";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { isActiveModerator } from "@/lib/auth/access";
 import { getCurrentAccount } from "@/lib/auth/current-account";
-import { resolveHeaderNav } from "@/lib/auth/header-nav";
+import { type HeaderNavLink, resolveHeaderNav } from "@/lib/auth/header-nav";
 import { getUnreadNotificationCount } from "@/lib/db/notifications";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -44,19 +45,13 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
       <body className="bg-background text-foreground flex min-h-full flex-col">
         {current !== null && (
           <header className="border-border flex flex-wrap items-center justify-between gap-4 border-b px-4 py-2">
-            <nav aria-label="Main" className="flex flex-wrap gap-x-4 gap-y-1">
-              {navLinks.map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className="text-sm font-medium hover:underline"
-                >
-                  {link.label}
-                </Link>
-              ))}
-            </nav>
+            {navLinks.length > 0 && <MobileNavMenu links={navLinks} />}
+            <NavLinkList
+              links={navLinks}
+              className="hidden flex-wrap gap-x-4 gap-y-1 sm:flex"
+            />
             {navLinks.length > 0 && <PersonSearchBox />}
-            <div className="flex items-center gap-4">
+            <div className="ml-auto flex items-center gap-4">
               {showBell && (
                 <NotificationBell
                   accountId={current.userId}
@@ -77,5 +72,27 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         {children}
       </body>
     </html>
+  );
+}
+
+function NavLinkList({
+  links,
+  className,
+}: {
+  readonly links: readonly HeaderNavLink[];
+  readonly className: string;
+}) {
+  return (
+    <nav aria-label="Main" className={className}>
+      {links.map((link) => (
+        <Link
+          key={link.href}
+          href={link.href}
+          className="text-sm font-medium hover:underline"
+        >
+          {link.label}
+        </Link>
+      ))}
+    </nav>
   );
 }

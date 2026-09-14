@@ -88,7 +88,7 @@ export function PersonPickerOrCreate({
             value={givenName}
             disabled={disabled}
             onChange={(e) => setGivenName(e.target.value)}
-            className={`${inputClass} mt-1 w-full`}
+            className={`${inputClass} mt-1`}
           />
         </label>
         <label
@@ -101,7 +101,7 @@ export function PersonPickerOrCreate({
             value={surname}
             disabled={disabled}
             onChange={(e) => setSurname(e.target.value)}
-            className={`${inputClass} mt-1 w-full`}
+            className={`${inputClass} mt-1`}
           />
         </label>
       </div>
@@ -119,7 +119,7 @@ export function PersonPickerOrCreate({
               setSex(e.target.value);
             }
           }}
-          className={`${inputClass} mt-1 w-full`}
+          className={`${inputClass} mt-1`}
         >
           {Constants.public.Enums.sex.map((value) => (
             <option key={value} value={value}>

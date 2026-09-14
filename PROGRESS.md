@@ -5,27 +5,77 @@ the relevant `docs/SPEC.md` section.
 
 ## Current state
 
-**Next issue: #65, last in §10 Phase 9 order.** #64
-(docs), #50 (header), #51 (`/tree` index), #52 (tree card → profile), #53
-(root person by name), #54 (GEDCOM export UI), #55 (create a person in-app),
-#56 (Relationships section), #57 (family events), #58 (person visibility +
-living override), #59 (delete a person), #60 (wipe tree + block import on a
-non-empty tree), #61 ("hide my record" request), #62 (person search +
-`/people`), and #73 (the `/settings` and `/moderation` 500) are all merged to
-`main` and closed — confirmed `#62` landed as commit `fac4221` on
-`origin/main`. #63 (invite to claim from the profile) is done and staged on
-branch `feat/invite-to-claim-from-profile`, not yet merged — the next session
-should confirm it landed on `origin/main` before starting #65. A 2026-09-12
-audit found that every §10 item was built but the app was not usable: no
-sign-out, no navigation, no way to open a profile from the tree, a 404 on a
-fresh deploy, and no way to create a person or a relationship without a
-GEDCOM. Milestone **Phase 9 — Gap closure** (#50–#65, label `phase:9`) holds
-the fixes, and a second product-lens pass added #66–#72 to the Post-MVP
-milestone. The build contract for Phase 9 is `docs/SPEC.md` §10 "Phase 9"
-plus §8.1 / §8.3 / §7, and WAYFINDER decision 36 + the **Journeys** section.
-#40 (README) waits
-until Phase 9 lands, so the screenshots show a usable app. The audit itself
-is in `GAP-AUDIT-HANDOFF.md` (gitignored).
+**Phase 9 — Gap closure is complete.** #64 (docs), #50 (header), #51
+(`/tree` index), #52 (tree card → profile), #53 (root person by name), #54
+(GEDCOM export UI), #55 (create a person in-app), #56 (Relationships
+section), #57 (family events), #58 (person visibility + living override),
+#59 (delete a person), #60 (wipe tree + block import on a non-empty tree),
+#61 ("hide my record" request), #62 (person search + `/people`), #63
+(invite to claim from the profile), #73 (the `/settings` and `/moderation`
+500), and #65 (mobile layout pass) are all done and closed. #65 is staged on
+branch `fix/mobile-layout-pass`, not yet merged — the next session should
+confirm it landed on `origin/main` first. A 2026-09-12 audit found that every
+§10 item was built but the app was not usable: no sign-out, no navigation, no
+way to open a profile from the tree, a 404 on a fresh deploy, and no way to
+create a person or a relationship without a GEDCOM. Milestone **Phase 9 —
+Gap closure** (#50–#65, label `phase:9`) held the fixes, and a second
+product-lens pass added #66–#72 to the Post-MVP milestone. The build
+contract for Phase 9 was `docs/SPEC.md` §10 "Phase 9" plus §8.1 / §8.3 / §7,
+and WAYFINDER decision 36 + the **Journeys** section. The audit itself is in
+`GAP-AUDIT-HANDOFF.md` (gitignored).
+
+**Next: no issue is currently `ready`-labelled.** Per the original §10
+sequence, #39 (deploy docs), #40 (README — now unblocked, Phase 9 has
+landed), and #47 (tooling parity) remain open from before Phase 9 was
+inserted. A handful of other `mvp`-labeled issues (#82, #83, #85, #86, #87,
+#88) were also filed along the way and are not yet triaged into an order —
+the next session should re-read `docs/SPEC.md` §10 and the open issue list
+to pick the next item.
+
+**Issue #65 — Mobile layout pass: done, staged on branch
+`fix/mobile-layout-pass`, issue closed.** SPEC §8.1/§8.2/§8.3. No
+migrations. Walked every authed route (`/login`, `/onboarding`, `/tree`,
+`/tree/[id]`, `/people`, `/person/[id]`, `/person/[id]/edit` and every edit
+section, `/person/new`, `/import`, `/moderation`, `/settings`, the
+notification panel) at 390×844 and 768×1024 with Playwright against the
+local stack, signed in as the demo admin and a fresh onboarding account.
+
+- **Edit view (`EditShell.tsx`):** the fixed `w-56` left rail squeezed the
+  content column to ~166px at phone width, truncating every input. It's now
+  a horizontally-scrollable tab strip (`flex-col md:flex-row`, full-width
+  `overflow-x-auto` nav) below `md`, unchanged sidebar above it.
+- **Shared `inputClass` (`edit/form.tsx`):** added `w-full` — every edit-view
+  input/select/textarea was sized to the browser's intrinsic default instead
+  of filling its grid column, which is what made fields inside 2-column
+  grids look truncated at any narrow width, not just inside the edit rail.
+  Removed a few now-redundant explicit `w-full`s this uncovered in
+  `PersonPickerOrCreate.tsx`.
+- **Global header (`app/layout.tsx`):** the nav links wrapped onto multiple
+  lines at phone width, eating vertical space, and — because a lone flex
+  item on a wrapped line doesn't right-align under `justify-between` — threw
+  off the notification bell's `right-0`-anchored dropdown, which rendered
+  mostly off-screen to the left. Fixed by collapsing the nav into a
+  `<details>` "Menu" disclosure below `sm` (new `MobileNavMenu.tsx` client
+  island — closes itself on `usePathname()` change, since `RootLayout`
+  persists across a client-side navigation and an uncontrolled `<details>`
+  would otherwise stay open on the destination page) and giving the
+  bell/sign-out group `ml-auto` so it stays right-aligned on its own wrapped
+  row. `NotificationBell.tsx` also got a `max-w-[calc(100vw-2rem)]` safety
+  net alongside its `w-80`.
+- Investigated the generation-band labels on the tree view, which render
+  almost entirely off-screen at phone zoom. Traced it to `family-chart`'s
+  initial zoom-to-fit leaving very little horizontal margin around the card
+  cluster at narrow/tall aspect ratios — not a coordinate bug in
+  `FamilyTree.tsx`'s `labelX` math (confirmed against the actual `.rw-card`
+  element and the library's own render source: `x`/`y` are the card centre,
+  matching the existing code and doc comments). Left as-is: the SPEC's own
+  acceptance bar for the tree view is "fits with pinch-zoom," and panning
+  slightly left reveals the labels; no action taken.
+- Verify gate green (`pnpm typecheck && pnpm lint && pnpm format:check &&
+pnpm build && pnpm test`, plus the Deno gate for `supabase/functions`).
+  Code review flagged the `<details>`-stays-open-after-navigation bug (fixed
+  above) and caught that my first pass at the generation-band label fix was
+  wrong (see above) before either shipped.
 
 **Issue #63 — Invite to claim from the person profile: done, staged on branch
 `feat/invite-to-claim-from-profile`, issue closed.** SPEC §9.2. No

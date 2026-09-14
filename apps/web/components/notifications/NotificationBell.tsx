@@ -215,7 +215,7 @@ export function NotificationBell({
           <div
             role="dialog"
             aria-label="Notifications"
-            className="border-border bg-popover text-popover-foreground absolute right-0 z-50 mt-2 flex max-h-[70vh] w-80 flex-col rounded-lg border shadow-lg"
+            className="border-border bg-popover text-popover-foreground absolute right-0 z-50 mt-2 flex max-h-[70vh] w-80 max-w-[calc(100vw-2rem)] flex-col rounded-lg border shadow-lg"
           >
             <div className="border-border flex gap-1 border-b p-2">
               {STATUS_TABS.map((tab) => (

@@ -9,7 +9,8 @@
  * adds).
  */
 
-export const inputClass = "border-border rounded-md border px-3 py-2 text-sm";
+export const inputClass =
+  "border-border w-full rounded-md border px-3 py-2 text-sm";
 
 export type SectionSaveStatus =
   "idle" | "saving" | "saved" | "conflict" | "error";
