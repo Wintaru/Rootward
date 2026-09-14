@@ -16,19 +16,17 @@
  * `media/<media id>/...`, inserts `media` + `media_link`, and removes the
  * staging object.
  *
- * The validate / strip / derivative work itself lives in
- * `../_shared/media-pipeline.ts` -- `gedcom-import`'s bulk GedZip attach
- * (issue #101) runs the same pipeline over an already-existing `media` row
- * instead of inserting a new one, so that part is shared rather than
- * duplicated.
+ * The validate / strip / derivative work itself lives in `@rootward/media`'s
+ * `pipeline.ts` (issue #104 pt. 2), imported below -- a portable package so
+ * the browser can run the same pipeline client-side. `gedcom-import`'s bulk
+ * GedZip attach (issue #101) no longer runs this pipeline itself; it just
+ * writes the already-processed `ReadyMediaFile` the browser produced onto an
+ * already-existing `media` row.
  */
 
 import type { GenealogyDateFields } from "@rootward/shared";
+import { EXTENSION_FOR_MIME, processMediaBytes } from "@rootward/media";
 
-import {
-  EXTENSION_FOR_MIME,
-  processMediaBytes,
-} from "../_shared/media-pipeline.ts";
 import { parseExifDateTaken } from "./date.ts";
 
 export type {
@@ -38,12 +36,8 @@ export type {
   GpsStripResult,
   ImageCodec,
   TreeMediaSettings,
-} from "../_shared/media-pipeline.ts";
-import type {
-  ExifTools,
-  ImageCodec,
-  TreeMediaSettings,
-} from "../_shared/media-pipeline.ts";
+} from "@rootward/media";
+import type { ExifTools, ImageCodec, TreeMediaSettings } from "@rootward/media";
 
 /** SPEC §4.4 `media_owner` -- guarded against the migration enum by
  * `schema_parity.test.ts`. The single array (not a separate type + a second

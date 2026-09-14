@@ -19,9 +19,37 @@
 /** A job's GEDCOM text always lands at `<job storage prefix>/gedcom.ged`. */
 export const GEDCOM_OBJECT_NAME = "gedcom.ged";
 
-/** A job's media objects live under `<job storage prefix>/media/`, one per
- * archive file, each key produced by {@link encodeMediaStorageKey}. */
+/** A job's media objects live under `<job storage prefix>/media/`, one
+ * folder per archive file, each name produced by
+ * {@link encodeMediaStorageKey}. */
 export const MEDIA_SUBPREFIX = "media";
+
+/** The name of the small JSON sidecar inside each archive file's own
+ * `<job prefix>/media/<key>/` folder (issue #104 pt. 2). */
+export const MEDIA_META_OBJECT_NAME = "meta.json";
+
+/**
+ * The browser processes a GedZip's media itself (decode, resize, WebP-
+ * encode, EXIF-strip -- `@rootward/media`'s `processMediaBytes`) before
+ * upload, because the edge function's own fixed CPU-time budget cannot
+ * reliably fit that work for a real full-resolution photo. This is the
+ * subset of that result which survives a JSON round trip; the actual bytes
+ * (`originalBytes`/`derivatives`) live in sibling objects the browser
+ * uploads alongside it (`original.<ext>`, `thumb.webp`, `display.webp`),
+ * written only when `status` says they exist. Kept in sync by hand with
+ * `@rootward/media`'s `ReadyMediaFile`, which this is derived from --
+ * deliberately not imported from there, so this package's dependency graph
+ * stays about GEDCOM/archive concerns, not photo processing. */
+export type MediaMetaJson =
+  | { readonly status: "rejected"; readonly rejectReason: "size" | "mime" }
+  | {
+      readonly status: "processed";
+      readonly mimeType: string;
+      readonly hasDerivatives: boolean;
+      readonly hasGps: boolean;
+      readonly gpsStripped: boolean;
+      readonly warnings: readonly string[];
+    };
 
 /** Rejects an absolute path or a `..` segment. `encodeMediaStorageKey`
  * already percent-encodes the whole path as one opaque token before it

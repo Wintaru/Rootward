@@ -10,7 +10,7 @@
 import exifr from "exifr";
 import piexifRaw from "piexifjs";
 
-import type { ExifTools } from "./processor.ts";
+import type { ExifTools } from "./pipeline.ts";
 
 // piexifjs ships as a CommonJS default export with no types.
 const piexif = piexifRaw as {
@@ -26,7 +26,7 @@ const GPS_STRIPPABLE_MIME = "image/jpeg";
 
 export function createExifTools(): ExifTools {
   return {
-    async read(bytes, _mimeType) {
+    async read(bytes) {
       try {
         const tags = (await exifr.parse(bytes, {
           pick: [
@@ -37,19 +37,19 @@ export function createExifTools(): ExifTools {
           ],
         })) as
           | {
-            DateTimeOriginal?: Date;
-            CreateDate?: Date;
-            GPSLatitude?: number;
-            GPSLongitude?: number;
-          }
+              DateTimeOriginal?: Date;
+              CreateDate?: Date;
+              GPSLatitude?: number;
+              GPSLongitude?: number;
+            }
           | undefined;
         if (tags === undefined) {
           return { dateTaken: null, hasGps: false };
         }
         return {
           dateTaken: formatLocalDate(tags.DateTimeOriginal ?? tags.CreateDate),
-          hasGps: tags.GPSLatitude !== undefined &&
-            tags.GPSLongitude !== undefined,
+          hasGps:
+            tags.GPSLatitude !== undefined && tags.GPSLongitude !== undefined,
         };
       } catch {
         // No EXIF segment, or one exifr can't parse -- not fatal to the upload.

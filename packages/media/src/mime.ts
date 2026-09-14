@@ -8,14 +8,18 @@ const HEIC_BRANDS = new Set(["heic", "heix", "hevc", "hevx", "mif1", "msf1"]);
 
 export function sniffMimeType(bytes: Uint8Array): string | null {
   if (
-    bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 &&
+    bytes.length >= 3 &&
+    bytes[0] === 0xff &&
+    bytes[1] === 0xd8 &&
     bytes[2] === 0xff
   ) {
     return "image/jpeg";
   }
   if (
     bytes.length >= 8 &&
-    bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e &&
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
     bytes[3] === 0x47
   ) {
     return "image/png";

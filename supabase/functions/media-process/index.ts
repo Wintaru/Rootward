@@ -13,10 +13,9 @@
  */
 
 import { createClient } from "@supabase/supabase-js";
+import { createExifTools, createImageCodec } from "@rootward/media";
 
 import { createSupabaseGateway } from "./gateway.ts";
-import { createImageCodec } from "./codec.ts";
-import { createExifTools } from "./exif.ts";
 import { MEDIA_OWNERS, type MediaOwner, runMediaProcess } from "./processor.ts";
 
 const CORS_HEADERS: Record<string, string> = {

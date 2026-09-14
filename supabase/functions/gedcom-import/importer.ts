@@ -38,15 +38,13 @@ import type {
   ParsedPerson,
 } from "@rootward/gedcom";
 import type { GenealogyDateFields } from "@rootward/shared";
+import type { ReadyMediaFile } from "@rootward/media";
 
-import type {
-  ExifTools,
-  ImageCodec,
-  TreeMediaSettings,
-} from "../_shared/media-pipeline.ts";
 import { attachMediaFromArchive } from "./media-attach.ts";
 import type { MediaAttachGateway } from "./media-attach.ts";
 import { uuidv5 } from "./uuid.ts";
+
+export type { ReadyMediaFile } from "@rootward/media";
 
 // --- gateway --------------------------------------------------------------
 
@@ -105,29 +103,26 @@ export type NotificationType = "import_finished" | "import_failed";
 
 /** What `downloadSource` reads back from the private bucket: the GEDCOM text
  * always, plus (when the upload was a GedZip, issue #101) the archive *path*
- * of every media file the browser already unzipped and uploaded as its own
- * object before this job ever ran (issue #104) -- not its bytes, which
- * across a whole archive can run to tens of megabytes, far more than this
- * worker's fixed memory budget affords holding at once. `readMediaBytes`
- * downloads only the paths asked for, one small Storage object each, so a
- * batch that needs three photos fetches three small files, not the other
- * 125 alongside them. A plain `.ged` upload yields an empty
- * `mediaEntryNames` and a `readMediaBytes` that always resolves to an empty
- * map. */
+ * of every media file the browser already unzipped, processed, and uploaded
+ * as its own object before this job ever ran (issue #104) -- not the actual
+ * processed bytes, which across a whole archive can run to tens of
+ * megabytes, far more than this worker's fixed memory budget affords
+ * holding at once. `readReadyMedia` fetches only the paths asked for, one
+ * small set of Storage objects each, so a batch that needs three photos
+ * fetches three photos' worth, not the other 125 alongside them. A plain
+ * `.ged` upload yields an empty `mediaEntryNames` and a `readReadyMedia`
+ * that always resolves to an empty map. */
 export interface ImportSource {
   readonly gedcomText: string;
   readonly mediaEntryNames: readonly string[];
-  readMediaBytes(
+  readReadyMedia(
     paths: readonly string[],
-  ): Promise<ReadonlyMap<string, Uint8Array>>;
+  ): Promise<ReadonlyMap<string, ReadyMediaFile>>;
 }
 
 export interface ImportGateway extends MediaAttachGateway {
   loadJob(jobId: string): Promise<ImportJobRow>;
   downloadSource(storagePath: string): Promise<ImportSource>;
-  /** Only read when the upload carried media files (issue #101) -- a plain
-   * `.ged` import never needs it. */
-  loadMediaSettings(): Promise<TreeMediaSettings>;
   /** Upsert on the primary key (`id`). Idempotent by construction. */
   upsertRows(table: TableName, rows: readonly Row[]): Promise<void>;
   updateJob(jobId: string, patch: ImportJobPatch): Promise<void>;
@@ -220,10 +215,6 @@ export interface RunImportDeps {
   readonly batchSize: number;
   /** Called when the engine yields before finishing (self-reinvoke). */
   readonly reinvoke?: () => Promise<void>;
-  /** Only exercised when the upload was a GedZip (issue #101) -- same
-   * injected tools `media-process` uses, reused rather than duplicated. */
-  readonly mediaCodec: ImageCodec;
-  readonly mediaExif: ExifTools;
 }
 
 export interface RunImportOutcome {
@@ -295,13 +286,8 @@ async function ingest(
 
   const source = await gateway.downloadSource(job.storage_path as string);
   const parsed = readGedcom(source.gedcomText);
-  // Only a GedZip upload carries archive entries -- skip the extra round trip
-  // (and the index build) entirely for a plain `.ged` import. Building the
-  // index only needs entry *names*, not their (possibly tens-of-megabytes,
-  // in aggregate) bytes.
-  const mediaSettings = source.mediaEntryNames.length > 0
-    ? await gateway.loadMediaSettings()
-    : null;
+  // Only a GedZip upload carries archive entries -- skip the index build
+  // entirely for a plain `.ged` import.
   const mediaFileIndex = source.mediaEntryNames.length > 0
     ? buildMediaFileIndex(source.mediaEntryNames)
     : null;
@@ -340,8 +326,7 @@ async function ingest(
   while (cursor.phase !== "done") {
     const items = phaseItems(parsed, cursor.phase);
 
-    const attachingMedia = cursor.phase === "media" &&
-      mediaSettings !== null && mediaFileIndex !== null;
+    const attachingMedia = cursor.phase === "media" && mediaFileIndex !== null;
 
     while (cursor.offset < items.length) {
       const batchSize = attachingMedia
@@ -389,15 +374,14 @@ async function ingest(
         const neededPaths = new Set(
           matches.flatMap(({ match }) => (match === null ? [] : [match.path])),
         );
-        const bytesByPath = await source.readMediaBytes([...neededPaths]);
+        const readyByPath = await source.readReadyMedia([...neededPaths]);
         for (const { item: m, match } of matches) {
           await attachMediaFromArchive(
             await id(jobId, m.gedcom_xref),
             m,
             match,
-            match === null ? null : bytesByPath.get(match.path) ?? null,
-            mediaSettings,
-            { gateway, codec: deps.mediaCodec, exif: deps.mediaExif },
+            match === null ? null : readyByPath.get(match.path) ?? null,
+            gateway,
             stats,
           );
         }

@@ -28,9 +28,13 @@ export {
   encodeMediaStorageKey,
   GEDCOM_OBJECT_NAME,
   isSafeArchivePath,
+  MEDIA_META_OBJECT_NAME,
   MEDIA_SUBPREFIX,
 } from "./media-storage-keys.ts";
-export type { DecodedMediaStorageKey } from "./media-storage-keys.ts";
+export type {
+  DecodedMediaStorageKey,
+  MediaMetaJson,
+} from "./media-storage-keys.ts";
 
 export {
   buildForest,

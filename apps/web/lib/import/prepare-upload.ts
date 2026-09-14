@@ -10,9 +10,12 @@ import {
  * unzipped in the browser -- which has no fixed memory ceiling worth
  * worrying about -- instead of being handed to the `gedcom-import` edge
  * function as one archive, which crashed a real ~60 MB/128-file upload
- * against that worker's fixed 256 MB cap. `uploadImportFiles`
- * (`lib/db/import-jobs.ts`) then uploads {@link gedcomText} and each of
- * {@link mediaFiles} as their own small Storage objects.
+ * against that worker's fixed 256 MB cap. `processImportMedia`
+ * (`lib/import/process-media.ts`, issue #104 pt. 2) then runs each of
+ * {@link mediaFiles} through `@rootward/media`'s real codec/EXIF pipeline
+ * client-side, and `uploadImportFiles` (`lib/db/import-jobs.ts`) uploads
+ * {@link gedcomText} plus the processed results as their own small Storage
+ * objects.
  */
 export interface PreparedImport {
   readonly gedcomText: string;

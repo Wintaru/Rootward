@@ -25,6 +25,7 @@
     "paths": {
       "@/*": ["./*"],
       "@rootward/gedcom": ["../../packages/gedcom/src/index.ts"],
+      "@rootward/media": ["../../packages/media/src/index.ts"],
       "@rootward/shared": ["../../packages/shared/src/index.ts"]
     }
   },
@@ -34,7 +35,12 @@
     "**/*.tsx",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
-    "**/*.mts"
+    "**/*.mts",
+    // `@rootward/media`'s ambient module declarations for `heic-decode` /
+    // `piexifjs` (neither ships types) -- not picked up automatically since
+    // it lives outside this tsconfig's own directory tree, but its module
+    // graph is still part of this program (path-mapped in `paths` above).
+    "../../packages/media/src/global.d.ts"
   ],
   "exclude": ["node_modules"]
 }

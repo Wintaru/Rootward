@@ -2,10 +2,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   encodeMediaStorageKey,
   GEDCOM_OBJECT_NAME,
+  MEDIA_META_OBJECT_NAME,
   MEDIA_SUBPREFIX,
+  type MediaMetaJson,
 } from "@rootward/gedcom";
-
-import type { PreparedImport } from "@/lib/import/prepare-upload";
+import { EXTENSION_FOR_MIME } from "@rootward/media";
+import type { ReadyMediaFile } from "@rootward/media";
 
 import type { Database, Json } from "./database.types";
 
@@ -91,49 +93,103 @@ export async function createImportJob(
 }
 
 /**
- * Upload a client-unzipped {@link PreparedImport} to the job's storage
- * prefix: the GEDCOM text at `<jobId>/gedcom.ged`, then each media file
- * (a GedZip's photos, already unzipped by `prepareImportUpload` -- issue
- * #104) at its own key under `<jobId>/media/`. Sequential, not
- * `Promise.all` -- a real GedZip uploads well over a hundred small objects,
- * and unbounded concurrency has no precedent elsewhere in this codebase to
- * justify the added complexity for what is, locally, a fast loop either way.
- * `upsert` throughout so a retry of the same job overwrites rather than 409s.
+ * Upload the job's GEDCOM text and its already-processed media (issue #104
+ * pts. 1 and 2: a GedZip is unzipped client-side, and each photo is decoded/
+ * resized/EXIF-stripped client-side too -- `prepareImportUpload` +
+ * `processImportMedia` -- because the edge function's fixed memory and
+ * CPU-time budget cannot reliably fit either for a real archive). The
+ * GEDCOM text lands at `<jobId>/gedcom.ged`; each media item gets its own
+ * `<jobId>/media/<key>/` folder holding a small `meta.json` plus whichever
+ * of `original.<ext>` / `thumb.webp` / `display.webp` its outcome produced.
+ * Sequential, not `Promise.all` -- a real GedZip uploads well over a hundred
+ * small objects, and unbounded concurrency has no precedent elsewhere in
+ * this codebase to justify the added complexity for what is, locally, a
+ * fast loop either way. `upsert` throughout so a retry of the same job
+ * overwrites rather than 409s.
  */
 export async function uploadImportFiles(
   client: Db,
   jobId: string,
-  prepared: PreparedImport,
+  gedcomText: string,
+  media: ReadonlyMap<string, ReadyMediaFile>,
 ): Promise<void> {
-  const { error: gedcomError } = await client.storage
-    .from(IMPORTS_BUCKET)
-    .upload(
-      `${jobId}/${GEDCOM_OBJECT_NAME}`,
-      new TextEncoder().encode(prepared.gedcomText),
-      { upsert: true, contentType: "text/plain" },
-    );
-  if (gedcomError !== null) {
-    throw new Error(
-      `uploadImportFiles(${jobId}): gedcom text: ${gedcomError.message}`,
-    );
-  }
+  await uploadObject(
+    client,
+    `${jobId}/${GEDCOM_OBJECT_NAME}`,
+    new TextEncoder().encode(gedcomText),
+    "text/plain",
+  );
 
   let index = 0;
-  for (const [archivePath, bytes] of prepared.mediaFiles) {
-    const key = `${jobId}/${MEDIA_SUBPREFIX}/${encodeMediaStorageKey(index, archivePath)}`;
+  for (const [archivePath, ready] of media) {
+    const itemPrefix = `${jobId}/${MEDIA_SUBPREFIX}/${encodeMediaStorageKey(index, archivePath)}`;
     index += 1;
-    const { error } = await client.storage
-      .from(IMPORTS_BUCKET)
-      .upload(key, bytes, {
-        upsert: true,
-        contentType: "application/octet-stream",
+
+    if (ready.status === "rejected") {
+      await uploadJson(client, `${itemPrefix}/${MEDIA_META_OBJECT_NAME}`, {
+        status: "rejected",
+        rejectReason: ready.rejectReason,
       });
-    if (error !== null) {
-      throw new Error(
-        `uploadImportFiles(${jobId}): ${archivePath}: ${error.message}`,
+      continue;
+    }
+
+    const extension = EXTENSION_FOR_MIME[ready.mimeType] ?? "bin";
+    await uploadObject(
+      client,
+      `${itemPrefix}/original.${extension}`,
+      ready.originalBytes,
+      ready.mimeType,
+    );
+    if (ready.derivatives !== null) {
+      await uploadObject(
+        client,
+        `${itemPrefix}/thumb.webp`,
+        ready.derivatives.thumb,
+        "image/webp",
+      );
+      await uploadObject(
+        client,
+        `${itemPrefix}/display.webp`,
+        ready.derivatives.display,
+        "image/webp",
       );
     }
+    await uploadJson(client, `${itemPrefix}/${MEDIA_META_OBJECT_NAME}`, {
+      status: "processed",
+      mimeType: ready.mimeType,
+      hasDerivatives: ready.derivatives !== null,
+      hasGps: ready.exif.hasGps,
+      gpsStripped: ready.exif.gpsStripped,
+      warnings: ready.warnings,
+    });
   }
+}
+
+async function uploadObject(
+  client: Db,
+  key: string,
+  bytes: Uint8Array,
+  contentType: string,
+): Promise<void> {
+  const { error } = await client.storage
+    .from(IMPORTS_BUCKET)
+    .upload(key, bytes, { upsert: true, contentType });
+  if (error !== null) {
+    throw new Error(`uploadImportFiles: ${key}: ${error.message}`);
+  }
+}
+
+function uploadJson(
+  client: Db,
+  key: string,
+  value: MediaMetaJson,
+): Promise<void> {
+  return uploadObject(
+    client,
+    key,
+    new TextEncoder().encode(JSON.stringify(value)),
+    "application/json",
+  );
 }
 
 /**

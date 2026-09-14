@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { TreeMediaSettings } from "@rootward/media";
 
 import type { Database } from "./database.types";
 import { type PersonSearchOption, personSearchLabel } from "./person-search";
@@ -127,6 +128,35 @@ export async function getLivingThresholdYears(client: Db): Promise<number> {
     throw new Error(`getLivingThresholdYears: ${error.message}`);
   }
   return data?.living_threshold_years ?? 100;
+}
+
+/** The 3 columns a client-side media processing pass needs (issue #104 pt.
+ * 2 -- the GedZip import flow validates/resizes photos in the browser, so it
+ * needs the same size/MIME/GPS rules `/settings` edits, without the rest of
+ * {@link getTreeSettings}'s wider row). Falls back to the column defaults if
+ * the row is somehow missing, matching the other narrow getters above. */
+export async function getMediaSettings(client: Db): Promise<TreeMediaSettings> {
+  const { data, error } = await client
+    .from("tree_settings")
+    .select("media_max_bytes, media_allowed_mime, strip_exif_gps")
+    .eq("id", TREE_SETTINGS_ID)
+    .maybeSingle();
+
+  if (error !== null) {
+    throw new Error(`getMediaSettings: ${error.message}`);
+  }
+  return {
+    mediaMaxBytes: data?.media_max_bytes ?? 10 * 1024 * 1024,
+    mediaAllowedMime: data?.media_allowed_mime ?? [
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+      "image/gif",
+      "image/heic",
+      "application/pdf",
+    ],
+    stripExifGps: data?.strip_exif_gps ?? true,
+  };
 }
 
 /** The full editable `tree_settings` row for the `/settings` admin form

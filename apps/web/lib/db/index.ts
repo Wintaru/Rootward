@@ -33,6 +33,7 @@ export {
   getAllowSelfSignup,
   getDefaultGenerations,
   getLivingThresholdYears,
+  getMediaSettings,
   getTreeSettings,
   getVisibleRootPersonId,
   updateTreeSettings,

@@ -9,10 +9,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   decodeMediaStorageKey,
   GEDCOM_OBJECT_NAME,
+  MEDIA_META_OBJECT_NAME,
   MEDIA_SUBPREFIX,
+  type MediaMetaJson,
 } from "@rootward/gedcom";
+import { EXTENSION_FOR_MIME } from "@rootward/media";
 
-import type { TreeMediaSettings } from "../_shared/media-pipeline.ts";
 import type { MediaBytesPatch } from "./media-attach.ts";
 import type {
   Cursor,
@@ -22,6 +24,7 @@ import type {
   ImportSource,
   ImportStats,
   NotificationType,
+  ReadyMediaFile,
   Row,
   TableName,
 } from "./importer.ts";
@@ -74,10 +77,11 @@ export function createSupabaseGateway(supabase: SupabaseClient): ImportGateway {
       // `storagePath` is a job's storage *prefix* (`imports/<jobId>`), not a
       // single object -- see the constants above. This function never reads
       // more than one small object at a time: the GEDCOM text, then later,
-      // per media batch, only the handful of photos that batch needs. No
-      // archive is ever downloaded or decompressed here (issue #104) --
-      // that already happened client-side, before upload, where memory is
-      // not capped at 256 MB.
+      // per media batch, only the handful of already-processed photos that
+      // batch needs. No archive is ever downloaded, and no image codec ever
+      // runs, here (issue #104) -- both happened client-side, before upload,
+      // where neither memory nor CPU time is capped the way this worker's
+      // single invocation is.
       const [bucket, prefix] = splitStoragePath(storagePath);
       const gedcomBytes = await downloadBytes(
         supabase,
@@ -85,7 +89,7 @@ export function createSupabaseGateway(supabase: SupabaseClient): ImportGateway {
         `${prefix}/${GEDCOM_OBJECT_NAME}`,
       );
       const mediaPrefix = `${prefix}/${MEDIA_SUBPREFIX}`;
-      const keyByArchivePath = await listMediaObjects(
+      const folderByArchivePath = await listMediaFolders(
         supabase,
         bucket,
         mediaPrefix,
@@ -93,47 +97,26 @@ export function createSupabaseGateway(supabase: SupabaseClient): ImportGateway {
 
       return {
         gedcomText: new TextDecoder().decode(gedcomBytes),
-        mediaEntryNames: [...keyByArchivePath.keys()],
-        readMediaBytes: async (paths) => {
+        mediaEntryNames: [...folderByArchivePath.keys()],
+        readReadyMedia: async (paths) => {
           const found = await Promise.all(
             paths.map(async (path) => {
-              const key = keyByArchivePath.get(path);
-              if (key === undefined) {
+              const folder = folderByArchivePath.get(path);
+              if (folder === undefined) {
                 return null;
               }
               return [
                 path,
-                await downloadBytes(supabase, bucket, key),
+                await readReadyMediaFolder(supabase, bucket, folder),
               ] as const;
             }),
           );
           return new Map(
-            found.filter((entry): entry is readonly [string, Uint8Array] =>
+            found.filter((entry): entry is readonly [string, ReadyMediaFile] =>
               entry !== null
             ),
           );
         },
-      };
-    },
-
-    async loadMediaSettings(): Promise<TreeMediaSettings> {
-      const { data, error } = await supabase
-        .from("tree_settings")
-        .select("media_max_bytes,media_allowed_mime,strip_exif_gps")
-        .eq("id", 1)
-        .single();
-      if (error !== null) {
-        throw new Error(`load tree_settings: ${error.message}`);
-      }
-      const row = data as {
-        media_max_bytes: number;
-        media_allowed_mime: string[];
-        strip_exif_gps: boolean;
-      };
-      return {
-        mediaMaxBytes: row.media_max_bytes,
-        mediaAllowedMime: row.media_allowed_mime,
-        stripExifGps: row.strip_exif_gps,
       };
     },
 
@@ -246,18 +229,22 @@ async function downloadBytes(
   return new Uint8Array(await data.arrayBuffer());
 }
 
-/** Every media object under a job's `media/` prefix, keyed by the archive
- * path its storage key decodes to (see `GEDCOM_OBJECT_NAME` comment above).
- * A plain `.ged` import (no `media/` objects at all) returns an empty map --
- * `list()` on an empty prefix is not an error. An entry whose key does not
- * decode (never written by this app) is silently skipped rather than failing
- * the whole import over one stray object. */
-async function listMediaObjects(
+/** Every media item's own folder under a job's `media/` prefix -- one per
+ * archive file, holding `meta.json` plus whichever of `original.<ext>` /
+ * `thumb.webp` / `display.webp` the browser's processing produced -- keyed
+ * by the archive path its folder name decodes to (see `GEDCOM_OBJECT_NAME`
+ * comment above). `storage.list()` returns immediate children only, so each
+ * item's folder shows up once here regardless of how many objects live
+ * inside it. A plain `.ged` import (no `media/` folders at all) returns an
+ * empty map -- `list()` on an empty prefix is not an error. An entry whose
+ * name does not decode (never written by this app) is silently skipped
+ * rather than failing the whole import over one stray object. */
+async function listMediaFolders(
   supabase: SupabaseClient,
   bucket: string,
   mediaPrefix: string,
 ): Promise<Map<string, string>> {
-  const keyByArchivePath = new Map<string, string>();
+  const folderByArchivePath = new Map<string, string>();
   for (let offset = 0;; offset += STORAGE_LIST_PAGE_SIZE) {
     const { data, error } = await supabase.storage
       .from(bucket)
@@ -268,16 +255,60 @@ async function listMediaObjects(
     for (const entry of data) {
       const decoded = decodeMediaStorageKey(entry.name);
       if (decoded !== null) {
-        keyByArchivePath.set(
+        folderByArchivePath.set(
           decoded.archivePath,
           `${mediaPrefix}/${entry.name}`,
         );
       }
     }
     if (data.length < STORAGE_LIST_PAGE_SIZE) {
-      return keyByArchivePath;
+      return folderByArchivePath;
     }
   }
+}
+
+/** Reads one media item's folder back into a {@link ReadyMediaFile}: the
+ * small `meta.json` sidecar first, then -- only for a `"processed"` outcome
+ * -- the original bytes and, if it has them, the derivative bytes. Every
+ * download here is small (a single already-processed photo, not an
+ * archive), which is the entire point of this redesign (issue #104 pt. 2). */
+async function readReadyMediaFolder(
+  supabase: SupabaseClient,
+  bucket: string,
+  folder: string,
+): Promise<ReadyMediaFile> {
+  const metaBytes = await downloadBytes(
+    supabase,
+    bucket,
+    `${folder}/${MEDIA_META_OBJECT_NAME}`,
+  );
+  const meta = JSON.parse(new TextDecoder().decode(metaBytes)) as MediaMetaJson;
+
+  if (meta.status === "rejected") {
+    return { status: "rejected", rejectReason: meta.rejectReason };
+  }
+
+  const extension = EXTENSION_FOR_MIME[meta.mimeType] ?? "bin";
+  const originalBytes = await downloadBytes(
+    supabase,
+    bucket,
+    `${folder}/original.${extension}`,
+  );
+  const derivatives = meta.hasDerivatives
+    ? {
+      thumb: await downloadBytes(supabase, bucket, `${folder}/thumb.webp`),
+      display: await downloadBytes(supabase, bucket, `${folder}/display.webp`),
+    }
+    : null;
+
+  return {
+    status: "processed",
+    mimeType: meta.mimeType,
+    originalBytes,
+    derivatives,
+    exif: { hasGps: meta.hasGps, gpsStripped: meta.gpsStripped },
+    warnings: meta.warnings,
+  };
 }
 
 function normalizeStats(value: unknown): ImportStats {

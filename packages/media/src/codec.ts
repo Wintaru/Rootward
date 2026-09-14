@@ -1,10 +1,10 @@
 /**
  * The real {@link ImageCodec} (issue #33): decode JPEG / PNG / WebP with
- * `@jsquash` (WASM, no native bindings -- Supabase Edge Functions only
- * support WASM image libraries) and HEIC with `heic-decode` (`libheif-js`
- * WASM). GIF and PDF have no codec here -- `processor.ts` stores the
+ * `@jsquash` (WASM, no native bindings) and HEIC with `heic-decode`
+ * (`libheif-js` WASM). GIF and PDF have no codec here -- callers store the
  * original with no derivatives for those (see `docs/DECISIONS.md`; neither
- * is in the issue's "done when" list).
+ * is in the issue's "done when" list). Runs identically in a Deno edge
+ * function or a browser tab (issue #104) -- `@jsquash/*` targets both.
  */
 
 import { decode as decodeJpeg } from "@jsquash/jpeg";
@@ -13,19 +13,18 @@ import { decode as decodeWebp, encode as encodeWebpBytes } from "@jsquash/webp";
 import resizePixels from "@jsquash/resize";
 import decodeHeic from "heic-decode";
 
-import type { DecodedImage, ImageCodec } from "./processor.ts";
+import type { DecodedImage, ImageCodec } from "./pipeline.ts";
 import { computeTargetSize } from "./image-geometry.ts";
 
 /**
  * `@jsquash/*`'s `.d.ts` types every function against the DOM `ImageData`
- * interface, which doesn't exist in Deno and (in this TS lib version) also
- * requires `colorSpace` / `pixelFormat` fields the library never actually
- * reads -- confirmed against the real WASM codecs in `codec.test.ts`, which
- * passes exactly the plain `{width, height, data}` shape these casts assert.
- * Isolating the cast here keeps the rest of the file honestly typed against
- * our own `DecodedImage`.
+ * interface, which (in this TS lib version) requires `colorSpace` /
+ * `pixelFormat` fields the library never actually reads -- confirmed against
+ * the real WASM codecs in `codec.test.ts`, which passes exactly the plain
+ * `{width, height, data}` shape these casts assert. Isolating the cast here
+ * keeps the rest of the file honestly typed against our own `DecodedImage`.
  */
-// deno-lint-ignore no-explicit-any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function asImageData(image: unknown): any {
   return image;
 }
@@ -35,10 +34,13 @@ export function createImageCodec(): ImageCodec {
     async decode(bytes, mimeType) {
       switch (mimeType) {
         case "image/jpeg":
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-argument -- see `asImageData` above
           return toDecodedImage(await decodeJpeg(asImageData(bytes)));
         case "image/png":
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-argument -- see `asImageData` above
           return toDecodedImage(await decodePng(asImageData(bytes)));
         case "image/webp":
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-argument -- see `asImageData` above
           return toDecodedImage(await decodeWebp(asImageData(bytes)));
         case "image/heic": {
           const heic = await decodeHeic({ buffer: bytes, all: false });
@@ -59,11 +61,11 @@ export function createImageCodec(): ImageCodec {
         target.width === image.width && target.height === image.height
           ? image
           : toDecodedImage(
-            await resizePixels(asImageData(image), {
-              width: target.width,
-              height: target.height,
-            }),
-          );
+              await resizePixels(asImageData(image), {
+                width: target.width,
+                height: target.height,
+              }),
+            );
       const encoded = await encodeWebpBytes(asImageData(raster));
       return new Uint8Array(encoded);
     },
@@ -76,8 +78,9 @@ function toDecodedImage(raw: unknown): DecodedImage {
     height: number;
     data: Uint8ClampedArray | ArrayBuffer;
   };
-  const data = img.data instanceof Uint8ClampedArray
-    ? img.data
-    : new Uint8ClampedArray(img.data);
+  const data =
+    img.data instanceof Uint8ClampedArray
+      ? img.data
+      : new Uint8ClampedArray(img.data);
   return { width: img.width, height: img.height, data };
 }

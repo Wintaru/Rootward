@@ -1,14 +1,12 @@
 /**
  * The bytes-processing core shared by `media-process` (a single upload,
- * SPEC §4.4, issue #33) and `gedcom-import` (bulk-attaching a GedZip's media,
- * issue #101): validate against the tree's size/MIME settings, optionally
- * strip GPS EXIF, and generate `thumb`/`display` WebP derivatives. Neither
- * function talks to storage or the database here -- that stays in each
- * function's own gateway, so this stays a pure, driver-free engine the test
- * suite can run with fakes (same split as every other edge function).
+ * SPEC §4.4, issue #33), `gedcom-import` (bulk-attaching a GedZip's media,
+ * issue #101), and, now, the browser itself (issue #104 -- see this
+ * package's own doc comment on `index.ts`). Portable: no Deno or Node
+ * built-ins, so it runs unchanged in an edge function or a browser tab.
  */
 
-import { sniffMimeType } from "../media-process/mime.ts";
+import { sniffMimeType } from "./mime.ts";
 
 const THUMB_MAX_DIMENSION = 240;
 const DISPLAY_MAX_DIMENSION = 1200;
@@ -86,6 +84,36 @@ export interface ProcessedMediaBytes {
 export type ProcessMediaBytesOutcome =
   | { readonly status: "processed"; readonly result: ProcessedMediaBytes }
   | { readonly status: "rejected"; readonly reason: "size" | "mime" };
+
+/**
+ * A {@link ProcessMediaBytesOutcome}, reshaped for storage transport (issue
+ * #104 pt. 2): the browser runs {@link processMediaBytes} itself -- the edge
+ * runtime's fixed ~1-2s CPU budget routinely can't fit decoding and
+ * re-encoding a real full-resolution photo through WASM codecs -- uploads
+ * the result under this shape (bytes as separate Storage objects, everything
+ * else as a small JSON sidecar), and the edge function reconstructs it on
+ * read. Field names differ deliberately from {@link ProcessedMediaBytes} --
+ * `originalBytes` rather than `finalBytes` -- so this transport shape can
+ * evolve independently of the in-process one it is derived from. */
+export type ReadyMediaFile =
+  | {
+      readonly status: "rejected";
+      readonly rejectReason: "size" | "mime";
+    }
+  | {
+      readonly status: "processed";
+      readonly mimeType: string;
+      readonly originalBytes: Uint8Array;
+      readonly derivatives: {
+        readonly thumb: Uint8Array;
+        readonly display: Uint8Array;
+      } | null;
+      readonly exif: {
+        readonly hasGps: boolean;
+        readonly gpsStripped: boolean;
+      };
+      readonly warnings: readonly string[];
+    };
 
 /**
  * Validate `original` against `settings`, strip GPS EXIF when asked for and

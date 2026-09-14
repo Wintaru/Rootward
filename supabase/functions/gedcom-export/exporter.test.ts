@@ -3,11 +3,6 @@ import { assert, assertEquals } from "@std/assert";
 import { readGedcom } from "../../../packages/gedcom/src/index.ts";
 import { GEDCOM_551 } from "../../../packages/gedcom/src/fixtures.ts";
 
-import type {
-  ExifTools,
-  ImageCodec,
-  TreeMediaSettings,
-} from "../_shared/media-pipeline.ts";
 import { runImport } from "../gedcom-import/importer.ts";
 import type {
   ImportGateway,
@@ -58,12 +53,8 @@ class FakeImportGateway implements ImportGateway {
     return Promise.resolve({
       gedcomText: this.gedcom,
       mediaEntryNames: [],
-      readMediaBytes: () => Promise.resolve(new Map()),
+      readReadyMedia: () => Promise.resolve(new Map()),
     });
-  }
-  loadMediaSettings(): Promise<TreeMediaSettings> {
-    // Never called: this fixture never carries archive entries.
-    return Promise.reject(new Error("loadMediaSettings: not exercised"));
   }
   writeMediaObject(): Promise<void> {
     return Promise.reject(new Error("writeMediaObject: not exercised"));
@@ -94,24 +85,11 @@ class FakeImportGateway implements ImportGateway {
   }
 }
 
-/** This fixture never carries GedZip archive entries, so neither is ever
- * called -- present only to satisfy `RunImportDeps`. */
-const NO_CODEC: ImageCodec = {
-  decode: () => Promise.resolve(null),
-  encodeWebp: () => Promise.resolve(new Uint8Array()),
-};
-const NO_EXIF: ExifTools = {
-  read: () => Promise.resolve({ dateTaken: null, hasGps: false }),
-  stripGps: (bytes) => Promise.resolve({ bytes, stripped: false }),
-};
-
 const NO_YIELD = {
   now: () => Date.now(),
   budgetMs: Number.MAX_SAFE_INTEGER,
   batchSize: 500,
   reinvoke: () => Promise.resolve(),
-  mediaCodec: NO_CODEC,
-  mediaExif: NO_EXIF,
 };
 
 /** Import a GEDCOM string and return the written rows as an export `TreeRows`. */

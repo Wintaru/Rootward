@@ -1,29 +1,27 @@
 /**
  * Bulk media attach from a GedZip archive (SPEC §6, issue #101). During the
  * import engine's `media` phase, match a parsed `OBJE` record's `FILE` value
- * against the archive's media files and, on a match, run the shared
- * `_shared/media-pipeline.ts` validate/derivative pipeline -- the same one
- * `media-process` runs for a single hand-uploaded photo -- then update that
- * `media` row's storage columns instead of inserting a new row (the row
- * already exists; `buildMedia` in `importer.ts` wrote it from the GEDCOM
- * record itself).
+ * against the archive's media files and, on a match, write the already-
+ * processed bytes the browser produced to that `media` row's storage columns
+ * instead of inserting a new row (the row already exists; `buildMedia` in
+ * `importer.ts` wrote it from the GEDCOM record itself).
+ *
+ * No codec or EXIF work happens here (issue #104 pt. 2): decoding and
+ * re-encoding a real full-resolution photo through the WASM codecs routinely
+ * exceeded the edge runtime's own fixed CPU-time budget (~1-2s, hardcoded,
+ * no override in local dev), so `processMediaBytes` now runs client-side,
+ * before upload -- see `apps/web/lib/import/process-media.ts`. This module
+ * just writes bytes it already has to Storage and updates the row.
  *
  * Scope: only top-level `OBJE` records reach this -- an inline `OBJE`
  * synthesised under a person/family attachment has no dedicated media-phase
  * item to hang bytes off of, and stays reference-only as it always has.
  */
 
+import { EXTENSION_FOR_MIME } from "@rootward/media";
 import type { MatchedMediaFile, ParsedMedia } from "@rootward/gedcom";
 
-import {
-  EXTENSION_FOR_MIME,
-  processMediaBytes,
-} from "../_shared/media-pipeline.ts";
-import type {
-  ExifTools,
-  ImageCodec,
-  TreeMediaSettings,
-} from "../_shared/media-pipeline.ts";
+import type { ReadyMediaFile } from "./importer.ts";
 
 export interface MediaBytesPatch {
   readonly mimeType: string;
@@ -43,12 +41,6 @@ export interface MediaAttachGateway {
   updateMediaBytes(mediaId: string, patch: MediaBytesPatch): Promise<void>;
 }
 
-export interface AttachMediaDeps {
-  readonly gateway: MediaAttachGateway;
-  readonly codec: ImageCodec;
-  readonly exif: ExifTools;
-}
-
 /** The subset of `ImportStats` this needs -- a structural match avoids an
  * import from `importer.ts` (which imports this module) just for one field. */
 interface WarnSink {
@@ -62,31 +54,29 @@ function warn(sink: WarnSink, message: string): void {
 }
 
 /**
- * Attempt to attach archive bytes to `mediaId` (already `upsert`ed by
- * `buildMedia` this same batch). `match` and `bytes` are resolved by the
+ * Write `ready`'s already-processed bytes to `mediaId` (already `upsert`ed
+ * by `buildMedia` this same batch). `match` and `ready` are resolved by the
  * caller: matching (`matchMediaFile`, against every item in the batch, in
- * order) has to happen before any bytes are decompressed, because the
- * whole batch's worth of needed archive paths gets decompressed in one
- * targeted pass (`readMediaEntries`) rather than the whole archive up
- * front -- see `importer.ts`'s media-phase batch loop. A miss -- no
- * matching archive entry, a match rejected by size/MIME, or an unexpected
- * failure partway through (a transient storage error, say) -- is recorded
- * as a warning and leaves the row reference-only, exactly like a plain
- * `.ged` import with no archive at all. One bad photo must not fail the
- * whole import: everything from `processMediaBytes` on is wrapped so a
- * thrown error degrades to a warning instead of propagating out of the
- * media phase's batch loop.
+ * order) has to happen before any bytes are fetched, because the whole
+ * batch's worth of needed archive items gets fetched in one targeted pass
+ * (`readReadyMedia`) rather than the whole archive up front -- see
+ * `importer.ts`'s media-phase batch loop. A miss -- no matching archive
+ * entry, a client-side rejection (size, MIME), or an unexpected failure
+ * partway through (a transient storage error, say) -- is recorded as a
+ * warning and leaves the row reference-only, exactly like a plain `.ged`
+ * import with no archive at all. One bad photo must not fail the whole
+ * import: the write is wrapped so a thrown error degrades to a warning
+ * instead of propagating out of the media phase's batch loop.
  */
 export async function attachMediaFromArchive(
   mediaId: string,
   item: ParsedMedia,
   match: MatchedMediaFile | null,
-  bytes: Uint8Array | null,
-  settings: TreeMediaSettings,
-  deps: AttachMediaDeps,
+  ready: ReadyMediaFile | null,
+  gateway: MediaAttachGateway,
   stats: WarnSink,
 ): Promise<void> {
-  if (match === null || bytes === null) {
+  if (match === null || ready === null) {
     warn(
       stats,
       `media ${item.gedcom_xref}: "${
@@ -95,60 +85,52 @@ export async function attachMediaFromArchive(
     );
     return;
   }
+  if (ready.status === "rejected") {
+    warn(
+      stats,
+      `media ${item.gedcom_xref}: archive file "${match.path}" rejected (${ready.rejectReason})`,
+    );
+    return;
+  }
 
   try {
-    const outcome = await processMediaBytes(
-      bytes,
-      settings,
-      deps.codec,
-      deps.exif,
-    );
-    if (outcome.status === "rejected") {
-      warn(
-        stats,
-        `media ${item.gedcom_xref}: archive file "${match.path}" rejected (${outcome.reason})`,
-      );
-      return;
-    }
-
-    const { result } = outcome;
-    const extension = EXTENSION_FOR_MIME[result.mimeType] ?? "bin";
+    const extension = EXTENSION_FOR_MIME[ready.mimeType] ?? "bin";
     const originalPath = `${mediaId}/original.${extension}`;
-    await deps.gateway.writeMediaObject(
+    await gateway.writeMediaObject(
       originalPath,
-      result.finalBytes,
-      result.mimeType,
+      ready.originalBytes,
+      ready.mimeType,
     );
 
     let thumbPath: string | null = null;
     let displayPath: string | null = null;
-    if (result.derivatives !== null) {
+    if (ready.derivatives !== null) {
       thumbPath = `${mediaId}/thumb.webp`;
       displayPath = `${mediaId}/display.webp`;
       await Promise.all([
-        deps.gateway.writeMediaObject(
+        gateway.writeMediaObject(
           thumbPath,
-          result.derivatives.thumb,
+          ready.derivatives.thumb,
           "image/webp",
         ),
-        deps.gateway.writeMediaObject(
+        gateway.writeMediaObject(
           displayPath,
-          result.derivatives.display,
+          ready.derivatives.display,
           "image/webp",
         ),
       ]);
     }
 
-    await deps.gateway.updateMediaBytes(mediaId, {
-      mimeType: result.mimeType,
-      sizeBytes: result.finalBytes.byteLength,
+    await gateway.updateMediaBytes(mediaId, {
+      mimeType: ready.mimeType,
+      sizeBytes: ready.originalBytes.byteLength,
       storagePathOriginal: originalPath,
       storagePathThumb: thumbPath,
       storagePathDisplay: displayPath,
-      exif: result.exif,
+      exif: ready.exif,
     });
 
-    for (const w of result.warnings) {
+    for (const w of ready.warnings) {
       warn(stats, `media ${item.gedcom_xref}: ${w}`);
     }
   } catch (err) {

@@ -8,6 +8,12 @@ export default defineConfig({
   // entries in each package `tsconfig.json`.
   resolve: {
     alias: {
+      "@rootward/gedcom": fileURLToPath(
+        new URL("./packages/gedcom/src/index.ts", import.meta.url),
+      ),
+      "@rootward/media": fileURLToPath(
+        new URL("./packages/media/src/index.ts", import.meta.url),
+      ),
       "@rootward/shared": fileURLToPath(
         new URL("./packages/shared/src/index.ts", import.meta.url),
       ),
@@ -22,5 +28,9 @@ export default defineConfig({
       "apps/web/**/*.{test,spec}.ts",
     ],
     passWithNoTests: true,
+    // `@jsquash/*`'s WASM loader needs a `file:`-URL-aware `fetch` under
+    // Node (see the setup file's own doc comment) -- irrelevant to every
+    // real runtime target (Deno, browser), both of which already support it.
+    setupFiles: ["./vitest.setup.ts"],
   },
 });

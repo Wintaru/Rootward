@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 import {
   createImportJob,
   getImportJob,
+  getMediaSettings,
   type ImportJob,
   invokeGedcomImport,
   uploadImportFiles,
@@ -19,6 +20,7 @@ import {
   type ImportFlowState,
 } from "./orchestrator";
 import { prepareImportUpload } from "./prepare-upload";
+import { processImportMedia } from "./process-media";
 
 /** Consecutive poll failures tolerated before the flow gives up. A blip must
  * not strand a job that is still resuming server-side. */
@@ -76,12 +78,26 @@ export function useGedcomImport(startedBy: string): UseGedcomImport {
               prepared.unsafePaths,
             );
           }
+          // Only a GedZip needs this round trip -- a plain .ged import
+          // never touches tree_settings or the codec at all.
+          const processedMedia =
+            prepared.mediaFiles.size > 0
+              ? await processImportMedia(
+                  prepared.mediaFiles,
+                  await getMediaSettings(supabase),
+                )
+              : new Map();
           await createImportJob(supabase, {
             id: jobId,
             filename: file.name,
             startedBy,
           });
-          await uploadImportFiles(supabase, jobId, prepared);
+          await uploadImportFiles(
+            supabase,
+            jobId,
+            prepared.gedcomText,
+            processedMedia,
+          );
           await invokeGedcomImport(supabase, jobId);
           const job = await getImportJob(supabase, jobId);
           dispatch({

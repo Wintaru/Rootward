@@ -1,14 +1,14 @@
 /**
- * Runs the real `exifr` / `piexifjs` wiring (not `processor.test.ts`'s
- * fakes). Builds its own tiny JPEG-with-GPS fixture at test time (via the
- * real `@jsquash/jpeg` encoder + `piexifjs` itself, both already dev
- * dependencies of this function) rather than committing a binary fixture, so
- * the "GPS tag actually removed" branch is exercised by CI, not deferred.
+ * Runs the real `exifr` / `piexifjs` wiring (not fakes). Builds its own tiny
+ * JPEG-with-GPS fixture at test time (via the real `@jsquash/jpeg` encoder +
+ * `piexifjs` itself, both already dependencies of this package) rather than
+ * committing a binary fixture, so the "GPS tag actually removed" branch is
+ * exercised by CI, not deferred.
  */
 
-import { assertEquals } from "@std/assert";
 import { encode as encodeJpeg } from "@jsquash/jpeg";
 import piexifRaw from "piexifjs";
+import { describe, expect, it } from "vitest";
 
 import { createExifTools } from "./exif.ts";
 
@@ -52,9 +52,7 @@ async function jpegWithGps(): Promise<Uint8Array> {
     height: 2,
     data: new Uint8ClampedArray(2 * 2 * 4).fill(180),
   };
-  const plainJpeg = new Uint8Array(
-    await encodeJpeg(raw as unknown as Parameters<typeof encodeJpeg>[0]),
-  );
+  const plainJpeg = new Uint8Array(await encodeJpeg(raw));
   const exifObj = {
     "0th": {},
     Exif: {},
@@ -80,64 +78,49 @@ async function jpegWithGps(): Promise<Uint8Array> {
   return binaryStringToBytes(piexif.insert(exifBytes, binary));
 }
 
-Deno.test(
-  "createExifTools.read: a PNG with no EXIF segment reports nothing found",
-  async () => {
+describe("createExifTools", () => {
+  it("read: a PNG with no EXIF segment reports nothing found", async () => {
     const exif = createExifTools();
     const result = await exif.read(PNG_BYTES, "image/png");
-    assertEquals(result, { dateTaken: null, hasGps: false });
-  },
-);
+    expect(result).toEqual({ dateTaken: null, hasGps: false });
+  });
 
-Deno.test(
-  "createExifTools.read: a JPEG with an embedded GPS IFD reports hasGps",
-  async () => {
+  it("read: a JPEG with an embedded GPS IFD reports hasGps", async () => {
     const exif = createExifTools();
     const result = await exif.read(await jpegWithGps(), "image/jpeg");
-    assertEquals(result.hasGps, true);
-  },
-);
+    expect(result.hasGps).toBe(true);
+  });
 
-Deno.test(
-  "createExifTools.stripGps: actually removes GPS from a JPEG that has it",
-  async () => {
+  it("stripGps: actually removes GPS from a JPEG that has it", async () => {
     const exif = createExifTools();
     const withGps = await jpegWithGps();
-    assertEquals(
+    expect(
       piexif.load(bytesToBinaryString(withGps)).GPS[
         piexif.GPSIFD.GPSLatitude
       ] !== undefined,
-      true,
-    );
+    ).toBe(true);
 
     const result = await exif.stripGps(withGps, "image/jpeg");
-    assertEquals(result.stripped, true);
-    assertEquals(
+    expect(result.stripped).toBe(true);
+    expect(
       Object.keys(piexif.load(bytesToBinaryString(result.bytes)).GPS).length,
-      0,
-    );
+    ).toBe(0);
 
     // The strip is a metadata edit only -- the pixels must still decode.
     const reread = await exif.read(result.bytes, "image/jpeg");
-    assertEquals(reread.hasGps, false);
-  },
-);
+    expect(reread.hasGps).toBe(false);
+  });
 
-Deno.test(
-  "createExifTools.stripGps: non-JPEG mime types are an untouched passthrough that reports stripped=false",
-  async () => {
+  it("stripGps: non-JPEG mime types are an untouched passthrough that reports stripped=false", async () => {
     const exif = createExifTools();
     const result = await exif.stripGps(PNG_BYTES, "image/png");
-    assertEquals(result, { bytes: PNG_BYTES, stripped: false });
-  },
-);
+    expect(result).toEqual({ bytes: PNG_BYTES, stripped: false });
+  });
 
-Deno.test(
-  "createExifTools.stripGps: a JPEG with no EXIF segment is returned untouched and reports stripped=false",
-  async () => {
+  it("stripGps: a JPEG with no EXIF segment is returned untouched and reports stripped=false", async () => {
     const exif = createExifTools();
     const jpegLike = new Uint8Array([0xff, 0xd8, 0xff, 0xd9]); // SOI + EOI, no APP1
     const result = await exif.stripGps(jpegLike, "image/jpeg");
-    assertEquals(result, { bytes: jpegLike, stripped: false });
-  },
-);
+    expect(result).toEqual({ bytes: jpegLike, stripped: false });
+  });
+});

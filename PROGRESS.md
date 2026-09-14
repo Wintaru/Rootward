@@ -5,30 +5,36 @@ the relevant `docs/SPEC.md` section.
 
 ## Current state
 
-**Issue #104 — GedZip import OOM'd the edge function worker: fixed by moving
-unzip to the browser, staged on branch `feat/client-side-gedzip-unzip`, issue
-still open pending live confirmation.** A real ~61 MB/128-photo GedZip
-crashed `gedcom-import`'s worker (`memory limit reached`) even after an
-earlier same-day fix made archive decompression batch-scoped — the local
-Supabase CLI hardcodes a 256 MB per-invocation ceiling (no `config.toml`
-override) and just downloading a real archive into that budget left no room
-for the media phase's own WASM image-decode cost. Real fix: the browser now
-unzips a GedZip itself (`apps/web/lib/import/prepare-upload.ts`, using
-`readGedZip`/`readMediaEntries` from `@rootward/gedcom` — now a real
-`apps/web` dependency, mirroring the `@rootward/shared` wiring) and uploads
-the GEDCOM text plus each media file as its own small Storage object under
-`imports/<jobId>/`; `gedcom-import/gateway.ts` no longer touches a zip at
-all, just small per-file downloads. The object-name/key contract
-(`packages/gedcom/src/media-storage-keys.ts`) is a new portable module so
-the browser and edge function can't drift on it. Full verify gate is green
-(unit/integration tests, including a real-fflate round-trip), but this
-session could not confirm it live end to end — hit an unrelated local
-Docker/OrbStack container-mount regression (the edge-runtime container
-currently can't see anything outside `supabase/functions/`, breaking every
-function that imports `@rootward/shared`, confirmed pre-existing and
-unrelated to this diff). Next session: confirm the local Docker environment
-is healthy, then actually run a real GedZip through `/import` before closing
-#104.
+**Issue #104 — GedZip import OOM'd the edge function worker: unzip AND photo
+processing both moved to the browser, staged on branch
+`feat/client-side-media-processing`, issue still open pending live
+confirmation — now blocked on a Supabase CLI bug, not this repo's code.** A
+real ~61 MB/128-photo GedZip crashed `gedcom-import`'s worker even after
+moving unzip to the browser (pt. 1, prior round): a real photo's WASM
+decode/resize/encode alone could exceed the worker's hardcoded 1-2s CPU-time
+budget (no `config.toml` override). Pt. 2 (this round): extracted the whole
+image-codec/EXIF pipeline into a new portable package `@rootward/media`
+(shared by the browser, `media-process`, and `gedcom-import`) and moved the
+actual processing to the browser too — `gedcom-import`'s server side now
+just writes bytes the browser already produced (`meta.json` sidecar +
+`original`/`thumb`/`display` objects per item, read back via
+`gateway.ts`'s `readReadyMediaFolder`). Surfaced a real Next.js/Turbopack
+bundling issue (`heic-decode` unconditionally `require`s a Node-only
+`libheif-js` build) — fixed with a `turbopack.resolveAlias` browser stub
+that degrades HEIC the same way GIF/PDF already degrade (original stored, no
+thumbnail); HEIC stays fully supported server-side in `media-process`. Full
+verify gate is green (725 pnpm + 65 Deno tests, including real WASM codec
+round-trips), code review clean. Live end-to-end confirmation is still
+blocked — but now root-caused: a reported Supabase CLI bind-mount regression
+([supabase/supabase#50088](https://github.com/supabase/supabase/issues/50088))
+breaks resolving anything under `packages/` from the edge runtime when
+`deno.json`'s import map has both a directory-prefix and a specific-file
+mapping for the same package, which this repo's does. Confirmed broken on
+our installed 2.117.0; reported working on 2.111.0/2.115.0. Fix needs a CLI
+downgrade, which is Josh's call (shared machine, other concurrent sessions).
+Details and next steps in `GEDZIP-MEMORY-HANDOFF.md`. Next session: once the
+CLI is downgraded and the stack restarted, run a real GedZip through
+`/import` before closing #104.
 
 **Wipe tree: added a "skip the automatic backup" checkbox, staged on branch
 `feat/wipe-tree-skip-backup`, no issue filed (small, same-session request).**
