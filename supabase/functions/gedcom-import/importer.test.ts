@@ -215,6 +215,30 @@ const NO_YIELD = {
   mediaExif: NO_EXIF,
 };
 
+/** A media-attach batch reinvokes unconditionally regardless of `budgetMs`
+ * (issue #101 -- one real photo's decode/encode work can trip the edge
+ * runtime's own CPU/memory ceiling well inside the wall-clock budget), so a
+ * GedZip test needs to keep calling `runImport` until it actually finishes,
+ * the same way a real client re-polls, rather than assuming one call
+ * completes the job the way every non-media test can. */
+async function runToCompletion(
+  gw: FakeGateway,
+  reinvoke: () => Promise<void> = NO_YIELD.reinvoke,
+): Promise<Awaited<ReturnType<typeof runImport>>> {
+  for (let i = 0; i < 1000; i++) {
+    const outcome = await runImport({
+      jobId: JOB_ID,
+      gateway: gw,
+      ...NO_YIELD,
+      reinvoke,
+    });
+    if (outcome.status !== "importing") {
+      return outcome;
+    }
+  }
+  throw new Error("runToCompletion: did not finish within 1000 invocations");
+}
+
 Deno.test("initial import runs to completion and notifies", async () => {
   const gw = new FakeGateway();
 
@@ -443,14 +467,10 @@ Deno.test(
       mediaFiles: new Map([["media/john-smith-portrait.jpg", JPEG_BYTES]]),
     });
 
-    const outcome = await runImport({
-      jobId: JOB_ID,
-      gateway: gw,
-      ...NO_YIELD,
-    });
+    const outcome = await runToCompletion(gw);
 
     assertEquals(outcome.status, "completed");
-    assertEquals(gw.loadMediaSettingsCalls, 1);
+    assert(gw.loadMediaSettingsCalls >= 1);
     const media = gw.rows("media").find((r) => r.gedcom_xref === "@O1@");
     assert(media !== undefined, "@O1@ should have a media row");
     assertEquals(media.mime_type, "image/jpeg");
@@ -475,12 +495,9 @@ Deno.test(
       mediaFiles: new Map([["media/someone-else.jpg", JPEG_BYTES]]),
     });
 
-    const outcome = await runImport({
-      jobId: JOB_ID,
-      gateway: gw,
-      ...NO_YIELD,
-    });
+    const outcome = await runToCompletion(gw);
 
+    assertEquals(outcome.status, "completed");
     assertEquals(gw.mediaUpdates.length, 0);
     assertEquals(gw.writtenObjects.size, 0);
     assert(
@@ -500,12 +517,9 @@ Deno.test(
       mediaSettings: { ...DEFAULT_MEDIA_SETTINGS, mediaMaxBytes: 1 },
     });
 
-    const outcome = await runImport({
-      jobId: JOB_ID,
-      gateway: gw,
-      ...NO_YIELD,
-    });
+    const outcome = await runToCompletion(gw);
 
+    assertEquals(outcome.status, "completed");
     assertEquals(gw.mediaUpdates.length, 0);
     assert(
       outcome.stats.warnings.some(
@@ -555,11 +569,7 @@ Deno.test(
       mediaFiles: new Map([["media/photo.jpg", JPEG_BYTES]]),
     });
 
-    const outcome = await runImport({
-      jobId: JOB_ID,
-      gateway: gw,
-      ...NO_YIELD,
-    });
+    const outcome = await runToCompletion(gw);
 
     assertEquals(outcome.status, "completed");
     assertEquals(gw.mediaUpdates.length, 1);
@@ -584,11 +594,7 @@ Deno.test(
       failWriteMediaObject: true,
     });
 
-    const outcome = await runImport({
-      jobId: JOB_ID,
-      gateway: gw,
-      ...NO_YIELD,
-    });
+    const outcome = await runToCompletion(gw);
 
     assertEquals(outcome.status, "completed");
     assertEquals(gw.mediaUpdates.length, 0);
@@ -596,6 +602,65 @@ Deno.test(
       outcome.stats.warnings.some(
         (w) => w.includes("@O1@") && w.includes("could not be attached"),
       ),
+    );
+  },
+);
+
+/** Seven people, seven `OBJE` records, seven distinct archive files -- not a
+ * multiple of `MEDIA_ATTACH_BATCH_SIZE` (3), so the batch that finishes the
+ * phase (a partial batch of 1) is unambiguously the last one: exactly 2
+ * reinvokes are necessary (after the first two full batches), and the third,
+ * final batch continues into the next phase in the same invocation instead
+ * of forcing a pointless extra one. */
+const PHOTO_COUNT = 7;
+const GEDCOM_MANY_PHOTOS = [
+  "0 HEAD",
+  "1 GEDC",
+  "2 VERS 5.5.1",
+  ...Array.from({ length: PHOTO_COUNT }, (_, i) =>
+    [
+      `0 @I${String(i)}@ INDI`,
+      `1 NAME Person ${String(i)} /Doe/`,
+      `1 OBJE @O${String(i)}@`,
+    ].join("\n")),
+  ...Array.from(
+    { length: PHOTO_COUNT },
+    (_, i) => `0 @O${String(i)}@ OBJE\n1 FILE photo-${String(i)}.jpg`,
+  ),
+  "0 TRLR",
+  "",
+].join("\n");
+
+Deno.test(
+  "GedZip: media attach reinvokes per small batch instead of all at once",
+  async () => {
+    const mediaFiles = new Map(
+      Array.from({ length: PHOTO_COUNT }, (_, i) => [
+        `photo-${String(i)}.jpg`,
+        JPEG_BYTES,
+      ]),
+    );
+    const gw = new FakeGateway({ gedcom: GEDCOM_MANY_PHOTOS, mediaFiles });
+    let reinvokes = 0;
+
+    const outcome = await runToCompletion(gw, () => {
+      reinvokes += 1;
+      return Promise.resolve();
+    });
+
+    assertEquals(outcome.status, "completed");
+    assertEquals(gw.mediaUpdates.length, PHOTO_COUNT);
+    // 7 photos at 3 per batch is three media-phase batches (3, 3, 1); the
+    // first two each force a reinvoke (real work remains), the last does not
+    // (the phase is finished) -- proof the whole archive is chunked across
+    // invocations rather than decoded/encoded all at once, and proof the
+    // engine does not force a wasted extra round trip once it is done.
+    assertEquals(
+      reinvokes,
+      2,
+      `expected exactly 2 reinvokes for ${
+        String(PHOTO_COUNT)
+      } photos at batch size 3, got ${String(reinvokes)}`,
     );
   },
 );

@@ -184,6 +184,17 @@ function emptyStats(): ImportStats {
   };
 }
 
+/** Records per checkpoint specifically while attaching GedZip media (issue
+ * #101) -- much smaller than the general `batchSize`. Decoding and
+ * re-encoding a real photo through the WASM codecs is CPU- and
+ * memory-heavy enough that a handful of them can trip the edge runtime's own
+ * per-invocation CPU-time/memory ceiling well before `budgetMs`'s wall-clock
+ * check ever gets a chance to fire -- unlike row-building, which stays cheap
+ * regardless of batch size. Reinvoking unconditionally after every one of
+ * these small batches (see below) gives each batch of photos a fresh
+ * invocation, and therefore a fresh resource allowance. */
+const MEDIA_ATTACH_BATCH_SIZE = 3;
+
 // --- run ---------------------------------------------------------------
 
 export interface RunImportDeps {
@@ -316,8 +327,14 @@ async function ingest(
   while (cursor.phase !== "done") {
     const items = phaseItems(parsed, cursor.phase);
 
+    const attachingMedia = cursor.phase === "media" &&
+      mediaSettings !== null && mediaFileIndex !== null;
+
     while (cursor.offset < items.length) {
-      const slice = items.slice(cursor.offset, cursor.offset + deps.batchSize);
+      const batchSize = attachingMedia
+        ? MEDIA_ATTACH_BATCH_SIZE
+        : deps.batchSize;
+      const slice = items.slice(cursor.offset, cursor.offset + batchSize);
       const byTable = new Map<TableName, Row[]>();
       for (const item of slice) {
         await buildRows(byTable, {
@@ -333,10 +350,7 @@ async function ingest(
       }
       await flush(gateway, byTable);
 
-      if (
-        cursor.phase === "media" && mediaSettings !== null &&
-        mediaFileIndex !== null
-      ) {
+      if (attachingMedia) {
         for (const m of slice as readonly ParsedMedia[]) {
           await attachMediaFromArchive(
             await id(jobId, m.gedcom_xref),
@@ -361,7 +375,20 @@ async function ingest(
         stats,
       });
 
-      if (now() - startedAt > budgetMs && cursor.phase !== "done") {
+      // A media-attach batch reinvokes unconditionally, not just once over
+      // `budgetMs`: decoding/encoding a real photo is expensive enough that
+      // the edge runtime's own CPU-time/memory ceiling can be hit well
+      // inside the wall-clock budget, and this is the only checkpoint
+      // between batches small enough to matter. Gated on there being more
+      // media left in this phase (`cursor.offset < items.length`) -- without
+      // that, the batch that finishes the phase would still force one more,
+      // wholly unnecessary invocation (a full archive re-download/re-unzip
+      // and GEDCOM re-parse) just to discover there is nothing left to do.
+      const moreMediaWork = attachingMedia && cursor.offset < items.length;
+      if (
+        (moreMediaWork || now() - startedAt > budgetMs) &&
+        cursor.phase !== "done"
+      ) {
         await deps.reinvoke?.();
         return {
           status: "importing",
