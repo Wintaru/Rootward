@@ -20,7 +20,8 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@rootward/shared": "workspace:*"
+    "@rootward/shared": "workspace:*",
+    "fflate": "^0.8.3"
   },
   "devDependencies": {
     "typescript": "5.9.3"

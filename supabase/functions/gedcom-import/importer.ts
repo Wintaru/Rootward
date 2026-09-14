@@ -8,8 +8,11 @@
  *
  * Resumability (decision 8): every row id is `uuidv5(<stable key>, jobId)`, so
  * re-running a batch after a timeout upserts the same rows rather than
- * duplicating them. The only state carried across invocations is
- * `import_job.cursor` — `{ phase, offset }` — plus `processed_records`.
+ * duplicating them. State carried across invocations is `import_job.cursor` —
+ * `{ phase, offset }` — plus `processed_records` and `stats` (`warnings` and,
+ * for a GedZip upload, `claimedMediaPaths` — see `media-attach.ts`'s doc
+ * comment on why a basename match must not be granted twice, including across
+ * a resumed run).
  *
  * Default root (SPEC §7, issue #51): when the import completes and
  * `tree_settings.default_root_person_id` is still null, it is set to the
@@ -18,17 +21,29 @@
  * already set is never overwritten; the gateway's write is conditional.
  */
 
-import { normalizePlaceName, readGedcom } from "@rootward/gedcom";
+import {
+  buildMediaFileIndex,
+  normalizePlaceName,
+  readGedcom,
+} from "@rootward/gedcom";
 import type {
   GedcomReadResult,
   ParsedCitation,
   ParsedFamily,
+  ParsedMedia,
   ParsedMediaLink,
   ParsedNote,
   ParsedPerson,
 } from "@rootward/gedcom";
 import type { GenealogyDateFields } from "@rootward/shared";
 
+import type {
+  ExifTools,
+  ImageCodec,
+  TreeMediaSettings,
+} from "../_shared/media-pipeline.ts";
+import { attachMediaFromArchive } from "./media-attach.ts";
+import type { MediaAttachGateway } from "./media-attach.ts";
 import { uuidv5 } from "./uuid.ts";
 
 // --- gateway --------------------------------------------------------------
@@ -86,10 +101,21 @@ export interface ImportJobPatch {
 
 export type NotificationType = "import_finished" | "import_failed";
 
-export interface ImportGateway {
+/** What `downloadSource` reads back from the private bucket: the GEDCOM text
+ * always, plus (when the upload was a GedZip, issue #101) every other
+ * archive entry, keyed by its archive path, for the `media` phase to match
+ * `FILE` values against. A plain `.ged` upload yields an empty map. */
+export interface ImportSource {
+  readonly gedcomText: string;
+  readonly mediaFiles: ReadonlyMap<string, Uint8Array>;
+}
+
+export interface ImportGateway extends MediaAttachGateway {
   loadJob(jobId: string): Promise<ImportJobRow>;
-  /** Fetch the uploaded GEDCOM text from the private bucket. */
-  downloadGedcom(storagePath: string): Promise<string>;
+  downloadSource(storagePath: string): Promise<ImportSource>;
+  /** Only read when the upload carried media files (issue #101) -- a plain
+   * `.ged` import never needs it. */
+  loadMediaSettings(): Promise<TreeMediaSettings>;
   /** Upsert on the primary key (`id`). Idempotent by construction. */
   upsertRows(table: TableName, rows: readonly Row[]): Promise<void>;
   updateJob(jobId: string, patch: ImportJobPatch): Promise<void>;
@@ -139,10 +165,23 @@ export interface ImportStats {
   skipped: number;
   removed: number;
   warnings: string[];
+  /** Archive paths already granted to a `FILE` value through
+   * `matchMediaFile`'s basename fallback (issue #101) -- carried across
+   * invocations the same way `warnings` is, so a resumed run cannot grant the
+   * same low-confidence guess to a second, unrelated record (see
+   * `media-attach.ts`). Empty for a plain `.ged` import. */
+  claimedMediaPaths: string[];
 }
 
 function emptyStats(): ImportStats {
-  return { added: 0, updated: 0, skipped: 0, removed: 0, warnings: [] };
+  return {
+    added: 0,
+    updated: 0,
+    skipped: 0,
+    removed: 0,
+    warnings: [],
+    claimedMediaPaths: [],
+  };
 }
 
 // --- run ---------------------------------------------------------------
@@ -158,6 +197,10 @@ export interface RunImportDeps {
   readonly batchSize: number;
   /** Called when the engine yields before finishing (self-reinvoke). */
   readonly reinvoke?: () => Promise<void>;
+  /** Only exercised when the upload was a GedZip (issue #101) -- same
+   * injected tools `media-process` uses, reused rather than duplicated. */
+  readonly mediaCodec: ImageCodec;
+  readonly mediaExif: ExifTools;
 }
 
 export interface RunImportOutcome {
@@ -227,8 +270,17 @@ async function ingest(
   const { jobId, gateway, now, budgetMs } = deps;
   const startedAt = now();
 
-  const text = await gateway.downloadGedcom(job.storage_path as string);
-  const parsed = readGedcom(text);
+  const source = await gateway.downloadSource(job.storage_path as string);
+  const parsed = readGedcom(source.gedcomText);
+  const mediaFiles = source.mediaFiles;
+  // Only a GedZip upload carries archive entries -- skip the extra round trip
+  // (and the index build) entirely for a plain `.ged` import.
+  const mediaSettings = mediaFiles.size > 0
+    ? await gateway.loadMediaSettings()
+    : null;
+  const mediaFileIndex = mediaFiles.size > 0
+    ? buildMediaFileIndex(mediaFiles)
+    : null;
 
   const stats: ImportStats = {
     ...emptyStats(),
@@ -237,7 +289,12 @@ async function ingest(
       0,
       200,
     ),
+    claimedMediaPaths: [...(job.stats?.claimedMediaPaths ?? [])],
   };
+  // Every basename-tier grant made so far, this run or an earlier invocation
+  // of it -- not capped like `warnings`, since every entry here is load-
+  // bearing for the no-double-grant guarantee `matchMediaFile` gives.
+  const claimedByBasename = new Set(stats.claimedMediaPaths);
 
   const total = countRecords(parsed);
   let processed = job.processed_records;
@@ -275,6 +332,24 @@ async function ingest(
         });
       }
       await flush(gateway, byTable);
+
+      if (
+        cursor.phase === "media" && mediaSettings !== null &&
+        mediaFileIndex !== null
+      ) {
+        for (const m of slice as readonly ParsedMedia[]) {
+          await attachMediaFromArchive(
+            await id(jobId, m.gedcom_xref),
+            m,
+            mediaFileIndex,
+            claimedByBasename,
+            mediaSettings,
+            { gateway, codec: deps.mediaCodec, exif: deps.mediaExif },
+            stats,
+          );
+        }
+        stats.claimedMediaPaths = [...claimedByBasename];
+      }
 
       cursor = { phase: cursor.phase, offset: cursor.offset + slice.length };
       processed += slice.length;
@@ -536,7 +611,9 @@ async function buildSource(
       s.repository_xref,
       ctx.index.repositories,
       `source ${s.gedcom_xref}: repository ${
-        String(s.repository_xref)
+        String(
+          s.repository_xref,
+        )
       } not found`,
     ),
     source_text: s.source_text,
@@ -691,14 +768,18 @@ async function buildFamily(
       ctx,
       family.partner1_xref,
       `family ${xref}: partner ${
-        String(family.partner1_xref)
+        String(
+          family.partner1_xref,
+        )
       } has no INDI record`,
     ),
     partner2_id: await maybePersonId(
       ctx,
       family.partner2_xref,
       `family ${xref}: partner ${
-        String(family.partner2_xref)
+        String(
+          family.partner2_xref,
+        )
       } has no INDI record`,
     ),
     partner1_role: family.partner1_role,

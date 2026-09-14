@@ -48,8 +48,9 @@ export function ImportWorkspace({
         <h2 className="text-xl font-semibold tracking-tight">Import</h2>
         <p className="text-muted-foreground text-sm">
           Upload a GEDCOM file to load its people, families, sources, and notes
-          into the tree. Large files import in the background — you can watch
-          the progress here.
+          into the tree — or a zip bundling the GEDCOM with its photos (a
+          &ldquo;GedZip&rdquo;) to bring those in too. Large files import in the
+          background — you can watch the progress here.
         </p>
       </div>
 
@@ -158,7 +159,7 @@ function FilePicker({ onStart }: { onStart: (file: File) => void }) {
         <input
           id={inputId}
           type="file"
-          accept=".ged,.gedcom,text/plain"
+          accept=".ged,.gedcom,.zip,.gdz,text/plain,application/zip"
           className="text-sm"
           onChange={(event) => {
             setFile(event.target.files?.[0] ?? null);
@@ -167,7 +168,9 @@ function FilePicker({ onStart }: { onStart: (file: File) => void }) {
         />
         <p className="text-muted-foreground text-xs">
           Exported from Ancestry, MacFamilyTree, Gramps, or any tool that writes
-          GEDCOM 5.5.1 or 7.0.
+          GEDCOM 5.5.1 or 7.0. A GedZip&apos;s photos are matched to their
+          people automatically; anything it misses can still be added by hand
+          afterward.
         </p>
       </div>
       {error !== null && (

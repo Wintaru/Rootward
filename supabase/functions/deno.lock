@@ -9,6 +9,7 @@
     "npm:@jsquash/webp@1.5.0": "1.5.0",
     "npm:@supabase/supabase-js@2.112.4": "2.112.4",
     "npm:exifr@7.1.3": "7.1.3",
+    "npm:fflate@0.8.3": "0.8.3",
     "npm:heic-decode@1.1.1": "1.1.1",
     "npm:piexifjs@1.0.6": "1.0.6"
   },
@@ -87,6 +88,9 @@
     "exifr@7.1.3": {
       "integrity": "sha512-g/aje2noHivrRSLbAUtBPWFbxKdKhgj/xr1vATDdUXPOFYJlQ62Ft0oy+72V6XLIpDJfHs6gXLbBLAolqOXYRw=="
     },
+    "fflate@0.8.3": {
+      "integrity": "sha512-tbZNuJrLwGUp3zshBtdy4W+ORxZuIh8a5ilyIEQDC5rY1f3U20JMry0Ll3WBzU58EZKsEuJFXhb5gwv8CsPvgA=="
+    },
     "heic-decode@1.1.1": {
       "integrity": "sha512-0KKYaXk2QSZrQIp4UKaNt/tyK8UGZkdfTzZRzny+cyYbNPJXRicaLCphMOuaBxHpHvCBTqnl0rM0qQ+rN98gJg==",
       "dependencies": [
@@ -118,6 +122,7 @@
       "npm:@jsquash/webp@1.5.0",
       "npm:@supabase/supabase-js@2.112.4",
       "npm:exifr@7.1.3",
+      "npm:fflate@0.8.3",
       "npm:heic-decode@1.1.1",
       "npm:piexifjs@1.0.6"
     ]

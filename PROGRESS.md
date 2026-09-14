@@ -5,6 +5,46 @@ the relevant `docs/SPEC.md` section.
 
 ## Current state
 
+**Issue #101 — GEDCOM import: attach embedded media from a GedZip archive:
+done, staged on branch `feat/gedzip-media-import`, issue closed.** No
+migration — `media`'s existing storage-path columns are all
+this needed. `packages/gedcom/src/gedzip.ts` (new `fflate` dependency, pure
+JS, keeps the package portable per decision 8) detects a zip by magic bytes
+and splits it into the `.ged` text plus a path → bytes map of everything
+else; `matchMediaFile` resolves a GEDCOM `FILE` value against that map (exact
+path, case-insensitive, then basename fallback for an absolute local path).
+The bytes-processing core `media-process/processor.ts` used for a single
+upload was factored out into `supabase/functions/_shared/media-pipeline.ts`
+so `gedcom-import`'s new `media-attach.ts` reuses it rather than duplicating
+validate/EXIF-strip/thumbnail logic — `processor.test.ts`'s 10 existing cases
+still pass unchanged, confirming the refactor is behavior-preserving.
+`gedcom-import`'s `media` phase now matches each `OBJE` record against the
+archive and, on a hit, runs that pipeline and updates the row's storage
+columns instead of the reference-only write it did before; a miss or a
+rejected file (size/MIME) is reported through `stats.warnings` and left
+reference-only, same as a plain `.ged` import. `/import`'s file picker now
+accepts `.zip`/`.gdz`. Scope: only top-level `OBJE` records get bytes —
+inline `OBJE` stays reference-only, called out as an explicit non-goal on the
+issue. A code-review pass on the first cut of `matchMediaFile` found a real
+correctness hole: its basename fallback (needed for the absolute local paths
+some exporters write) had no memory across calls, so two different people's
+`OBJE` records with the same default-camera-filename basename in unrelated
+directories could both silently claim the same archive photo, and a URL
+`FILE` value got its tail filename basename-matched against unrelated zip
+contents too. Fixed by precomputing a `MediaFileIndex` once per import
+(`buildMediaFileIndex`, also closing an O(n·m) rescan-per-record perf issue
+the same review found) and threading a `claimedByBasename` set through every
+match call — only the guess-based basename tier checks and updates it;
+an explicit path match two records both name outright is not a collision and
+is unaffected. That set round-trips through `import_job.stats` the same way
+`warnings` already does, so a resumed multi-invocation run cannot re-grant a
+claim a completed earlier invocation already made. The review also found a
+single photo's transient storage failure could fail the _entire_ import;
+`attachMediaFromArchive` now catches and downgrades that to a warning, same
+as a miss or a rejected file. 16 gedcom tests + 20 gedcom-import tests + full
+deno check/lint/fmt/test across all four edge functions and `_shared` all
+green.
+
 **Phase 9 — Gap closure is complete.** #64 (docs), #50 (header), #51
 (`/tree` index), #52 (tree card → profile), #53 (root person by name), #54
 (GEDCOM export UI), #55 (create a person in-app), #56 (Relationships

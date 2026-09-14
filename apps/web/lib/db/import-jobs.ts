@@ -79,8 +79,11 @@ export async function createImportJob(
 }
 
 /**
- * Upload the chosen GEDCOM to `imports/<jobId>.ged`. `upsert` so a retry of the
- * same job overwrites rather than 409s.
+ * Upload the chosen file to `imports/<jobId>.ged` -- a plain GEDCOM, or a
+ * GedZip bundling the GEDCOM with the media its `FILE` tags point at (issue
+ * #101); `gedcom-import` tells the two apart by magic bytes, not this key's
+ * extension, so the storage path stays `.ged` either way. `upsert` so a retry
+ * of the same job overwrites rather than 409s.
  */
 export async function uploadGedcomFile(
   client: Db,
@@ -89,7 +92,10 @@ export async function uploadGedcomFile(
 ): Promise<void> {
   const { error } = await client.storage
     .from(IMPORTS_BUCKET)
-    .upload(`${jobId}.ged`, file, { upsert: true, contentType: "text/plain" });
+    .upload(`${jobId}.ged`, file, {
+      upsert: true,
+      contentType: file.type !== "" ? file.type : "application/octet-stream",
+    });
 
   if (error !== null) {
     throw new Error(`uploadGedcomFile(${jobId}): ${error.message}`);

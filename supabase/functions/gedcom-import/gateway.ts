@@ -6,11 +6,16 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { isZip, readGedZip } from "@rootward/gedcom";
+
+import type { TreeMediaSettings } from "../_shared/media-pipeline.ts";
+import type { MediaBytesPatch } from "./media-attach.ts";
 import type {
   Cursor,
   ImportGateway,
   ImportJobPatch,
   ImportJobRow,
+  ImportSource,
   ImportStats,
   NotificationType,
   Row,
@@ -19,6 +24,12 @@ import type {
 
 /** Fallback bucket when `import_job.storage_path` carries no `bucket/` prefix. */
 const DEFAULT_BUCKET = "imports";
+
+/** Private bucket `media-process` and, now, `gedcom-import` write processed
+ * objects into (`20260901111850_media_bucket.sql`) -- same bucket, same path
+ * shape (`<media id>/original.<ext>`, …), so the frontend Media viewer reads
+ * either origin identically. */
+const MEDIA_BUCKET = "media";
 
 /** Max rows per `upsert` call, to bound the PostgREST request body. */
 const UPSERT_CHUNK = 500;
@@ -51,7 +62,7 @@ export function createSupabaseGateway(supabase: SupabaseClient): ImportGateway {
       };
     },
 
-    async downloadGedcom(storagePath: string): Promise<string> {
+    async downloadSource(storagePath: string): Promise<ImportSource> {
       const [bucket, key] = splitStoragePath(storagePath);
       const { data, error } = await supabase.storage.from(bucket).download(key);
       if (error !== null || data === null) {
@@ -59,7 +70,72 @@ export function createSupabaseGateway(supabase: SupabaseClient): ImportGateway {
           `download ${bucket}/${key}: ${error?.message ?? "no data"}`,
         );
       }
-      return data.text();
+      const bytes = new Uint8Array(await data.arrayBuffer());
+      // A GedZip (issue #101): the upload carries the media its FILE tags
+      // point at alongside the .ged text, detected by magic bytes rather than
+      // the storage key's extension so a mislabeled upload still works.
+      if (isZip(bytes)) {
+        const zip = readGedZip(bytes);
+        return { gedcomText: zip.gedcomText, mediaFiles: zip.mediaFiles };
+      }
+      return {
+        gedcomText: new TextDecoder().decode(bytes),
+        mediaFiles: new Map(),
+      };
+    },
+
+    async loadMediaSettings(): Promise<TreeMediaSettings> {
+      const { data, error } = await supabase
+        .from("tree_settings")
+        .select("media_max_bytes,media_allowed_mime,strip_exif_gps")
+        .eq("id", 1)
+        .single();
+      if (error !== null) {
+        throw new Error(`load tree_settings: ${error.message}`);
+      }
+      const row = data as {
+        media_max_bytes: number;
+        media_allowed_mime: string[];
+        strip_exif_gps: boolean;
+      };
+      return {
+        mediaMaxBytes: row.media_max_bytes,
+        mediaAllowedMime: row.media_allowed_mime,
+        stripExifGps: row.strip_exif_gps,
+      };
+    },
+
+    async writeMediaObject(
+      path: string,
+      bytes: Uint8Array,
+      contentType: string,
+    ): Promise<void> {
+      const { error } = await supabase.storage
+        .from(MEDIA_BUCKET)
+        .upload(path, bytes, { contentType, upsert: true });
+      if (error !== null) {
+        throw new Error(`write ${MEDIA_BUCKET}/${path}: ${error.message}`);
+      }
+    },
+
+    async updateMediaBytes(
+      mediaId: string,
+      patch: MediaBytesPatch,
+    ): Promise<void> {
+      const { error } = await supabase
+        .from("media")
+        .update({
+          mime_type: patch.mimeType,
+          size_bytes: patch.sizeBytes,
+          storage_path_original: patch.storagePathOriginal,
+          storage_path_thumb: patch.storagePathThumb,
+          storage_path_display: patch.storagePathDisplay,
+          exif: patch.exif,
+        })
+        .eq("id", mediaId);
+      if (error !== null) {
+        throw new Error(`update media ${mediaId}: ${error.message}`);
+      }
     },
 
     async upsertRows(table: TableName, rows: readonly Row[]): Promise<void> {
@@ -131,6 +207,7 @@ function normalizeStats(value: unknown): ImportStats {
     skipped: 0,
     removed: 0,
     warnings: [],
+    claimedMediaPaths: [],
   };
   if (value === null || typeof value !== "object") {
     return base;
@@ -142,5 +219,8 @@ function normalizeStats(value: unknown): ImportStats {
     skipped: typeof s.skipped === "number" ? s.skipped : 0,
     removed: typeof s.removed === "number" ? s.removed : 0,
     warnings: Array.isArray(s.warnings) ? s.warnings.map(String) : [],
+    claimedMediaPaths: Array.isArray(s.claimedMediaPaths)
+      ? s.claimedMediaPaths.map(String)
+      : [],
   };
 }

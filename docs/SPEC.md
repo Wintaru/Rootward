@@ -603,9 +603,14 @@ compatibility) with a 7.0 option.
 `gedcom_xref`. Re-export uses the stored xref so a round trip is stable
 (decision 4).
 
-**Media on import:** GEDCOM references media by file path. The importer records
-the reference; the actual files are uploaded separately (import UI prompts for a
-media folder / zip, or media is added later).
+**Media on import:** GEDCOM references media by file path. A plain `.ged`
+upload leaves that as a reference only — the file is added later through the
+Media section. A GedZip (the GEDCOM plus its media in one zip, issue #101)
+gets its files matched to the `FILE` path on each `OBJE` record — path match,
+then basename fallback for an absolute local path — and run through the same
+validate / EXIF-strip / thumbnail pipeline `media-process` uses; a miss or a
+rejected file (size, MIME) stays reference-only and is reported in
+`import_job.stats.warnings`.
 
 ---
 
@@ -617,6 +622,11 @@ media folder / zip, or media is added later).
 - Reads `import_job`, streams the GEDCOM, processes in batches of N records,
   writes `processed_records` and `cursor` after each batch so a timeout resumes
   cleanly on the next invocation (self-reinvoke or client re-poll).
+- The upload is read by magic bytes, not its filename: a plain `.ged`/text
+  file, or a zip (GedZip, issue #101) — detected either way, so the storage
+  key's extension does not matter. A zip's media files are matched and
+  attached during the `media` phase (§6); everything else about the run is
+  unchanged.
 - `mode`:
   - `initial` — empty tree, straight insert.
   - `replace_all` — admin only; refuses if any `account.person_id` is set or

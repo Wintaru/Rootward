@@ -11,6 +11,18 @@ export { writeGedcom } from "./writer.ts";
 export type { GedcomWriteOptions } from "./writer.ts";
 
 export {
+  buildMediaFileIndex,
+  isZip,
+  matchMediaFile,
+  readGedZip,
+} from "./gedzip.ts";
+export type {
+  GedZipContents,
+  MatchedMediaFile,
+  MediaFileIndex,
+} from "./gedzip.ts";
+
+export {
   buildForest,
   child,
   childPointer,

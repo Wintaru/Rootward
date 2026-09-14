@@ -12,6 +12,8 @@
 
 import { createClient } from "@supabase/supabase-js";
 
+import { createImageCodec } from "../media-process/codec.ts";
+import { createExifTools } from "../media-process/exif.ts";
 import { createSupabaseGateway } from "./gateway.ts";
 import { runImport } from "./importer.ts";
 
@@ -115,6 +117,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
       budgetMs: BUDGET_MS,
       batchSize: BATCH_SIZE,
       reinvoke,
+      mediaCodec: createImageCodec(),
+      mediaExif: createExifTools(),
     });
     return json(outcome);
   } catch (err) {

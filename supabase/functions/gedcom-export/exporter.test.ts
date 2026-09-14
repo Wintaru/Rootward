@@ -3,11 +3,17 @@ import { assert, assertEquals } from "@std/assert";
 import { readGedcom } from "../../../packages/gedcom/src/index.ts";
 import { GEDCOM_551 } from "../../../packages/gedcom/src/fixtures.ts";
 
+import type {
+  ExifTools,
+  ImageCodec,
+  TreeMediaSettings,
+} from "../_shared/media-pipeline.ts";
 import { runImport } from "../gedcom-import/importer.ts";
 import type {
   ImportGateway,
   ImportJobPatch,
   ImportJobRow,
+  ImportSource,
   Row,
   TableName,
 } from "../gedcom-import/importer.ts";
@@ -35,14 +41,31 @@ class FakeImportGateway implements ImportGateway {
     total_records: null,
     processed_records: 0,
     cursor: null,
-    stats: { added: 0, updated: 0, skipped: 0, removed: 0, warnings: [] },
+    stats: {
+      added: 0,
+      updated: 0,
+      skipped: 0,
+      removed: 0,
+      warnings: [],
+      claimedMediaPaths: [],
+    },
   };
   constructor(private readonly gedcom: string) {}
   loadJob(): Promise<ImportJobRow> {
     return Promise.resolve({ ...this.job });
   }
-  downloadGedcom(): Promise<string> {
-    return Promise.resolve(this.gedcom);
+  downloadSource(): Promise<ImportSource> {
+    return Promise.resolve({ gedcomText: this.gedcom, mediaFiles: new Map() });
+  }
+  loadMediaSettings(): Promise<TreeMediaSettings> {
+    // Never called: this fixture never carries archive entries.
+    return Promise.reject(new Error("loadMediaSettings: not exercised"));
+  }
+  writeMediaObject(): Promise<void> {
+    return Promise.reject(new Error("writeMediaObject: not exercised"));
+  }
+  updateMediaBytes(): Promise<void> {
+    return Promise.reject(new Error("updateMediaBytes: not exercised"));
   }
   upsertRows(table: TableName, rows: readonly Row[]): Promise<void> {
     const store = this.tables.get(table) ?? new Map<string, Row>();
@@ -67,11 +90,24 @@ class FakeImportGateway implements ImportGateway {
   }
 }
 
+/** This fixture never carries GedZip archive entries, so neither is ever
+ * called -- present only to satisfy `RunImportDeps`. */
+const NO_CODEC: ImageCodec = {
+  decode: () => Promise.resolve(null),
+  encodeWebp: () => Promise.resolve(new Uint8Array()),
+};
+const NO_EXIF: ExifTools = {
+  read: () => Promise.resolve({ dateTaken: null, hasGps: false }),
+  stripGps: (bytes) => Promise.resolve({ bytes, stripped: false }),
+};
+
 const NO_YIELD = {
   now: () => Date.now(),
   budgetMs: Number.MAX_SAFE_INTEGER,
   batchSize: 500,
   reinvoke: () => Promise.resolve(),
+  mediaCodec: NO_CODEC,
+  mediaExif: NO_EXIF,
 };
 
 /** Import a GEDCOM string and return the written rows as an export `TreeRows`. */
@@ -93,8 +129,9 @@ function treeFromImport(gw: FakeImportGateway): TreeRows {
   const stamp = (rows: Row[]): Row[] =>
     rows.map((row) => ({
       ...row,
-      created_at: new Date(Date.UTC(2020, 0, 1) + (clock += 1000))
-        .toISOString(),
+      created_at: new Date(
+        Date.UTC(2020, 0, 1) + (clock += 1000),
+      ).toISOString(),
     }));
 
   return {
@@ -110,9 +147,9 @@ function treeFromImport(gw: FakeImportGateway): TreeRows {
     citations: gw.rows("citation") as unknown as TreeRows["citations"],
     mediaLinks: gw.rows("media_link") as unknown as TreeRows["mediaLinks"],
     sources: stamp(gw.rows("source")) as unknown as TreeRows["sources"],
-    repositories: stamp(gw.rows("repository")) as unknown as TreeRows[
-      "repositories"
-    ],
+    repositories: stamp(
+      gw.rows("repository"),
+    ) as unknown as TreeRows["repositories"],
     media: stamp(gw.rows("media")) as unknown as TreeRows["media"],
     places: gw.rows("place") as unknown as TreeRows["places"],
   };
@@ -189,69 +226,75 @@ const FIXED_NOW = () => Date.UTC(2026, 5, 15, 12, 0, 0);
 
 // --- tests ----------------------------------------------------------
 
-Deno.test("exports a seeded tree to a valid 5.5.1 file that re-imports", async () => {
-  const tree = await importToTree(GEDCOM_551);
-  const gw = new FakeExportGateway({ tree });
+Deno.test(
+  "exports a seeded tree to a valid 5.5.1 file that re-imports",
+  async () => {
+    const tree = await importToTree(GEDCOM_551);
+    const gw = new FakeExportGateway({ tree });
 
-  const outcome = await runExport({
-    jobId: JOB_ID,
-    gateway: gw,
-    now: FIXED_NOW,
-  });
+    const outcome = await runExport({
+      jobId: JOB_ID,
+      gateway: gw,
+      now: FIXED_NOW,
+    });
 
-  assertEquals(outcome.status, "completed");
-  assert(outcome.signedUrl !== null);
-  assertEquals(outcome.storagePath, `exports/${JOB_ID}.ged`);
-  assert(outcome.sizeBytes > 0);
-  assertEquals(gw.currentJob.status, "completed");
+    assertEquals(outcome.status, "completed");
+    assert(outcome.signedUrl !== null);
+    assertEquals(outcome.storagePath, `exports/${JOB_ID}.ged`);
+    assert(outcome.sizeBytes > 0);
+    assertEquals(gw.currentJob.status, "completed");
 
-  const reread = readGedcom(gw.onlyUpload);
-  assertEquals(reread.warnings, []);
-  assertEquals(reread.version, "5.5.1");
-  assertEquals(reread.persons.length, 3);
-  assertEquals(reread.families.length, 1);
-  assertEquals(reread.sources.length, 1);
-  assertEquals(reread.repositories.length, 1);
-  assertEquals(reread.media.length, 1);
+    const reread = readGedcom(gw.onlyUpload);
+    assertEquals(reread.warnings, []);
+    assertEquals(reread.version, "5.5.1");
+    assertEquals(reread.persons.length, 3);
+    assertEquals(reread.families.length, 1);
+    assertEquals(reread.sources.length, 1);
+    assertEquals(reread.repositories.length, 1);
+    assertEquals(reread.media.length, 1);
 
-  // The HEAD block declares 5.5.1.
-  const gedc = reread.header.find((n) => n.tag === "GEDC");
-  const vers = gedc?.children?.find((n) => n.tag === "VERS");
-  assertEquals(vers?.value, "5.5.1");
+    // The HEAD block declares 5.5.1.
+    const gedc = reread.header.find((n) => n.tag === "GEDC");
+    const vers = gedc?.children?.find((n) => n.tag === "VERS");
+    assertEquals(vers?.value, "5.5.1");
 
-  const john = reread.persons.find((p) => p.gedcom_xref === "@I1@");
-  assert(john !== undefined);
-  assertEquals(john.given_name, "John Fitzgerald");
-  assertEquals(john.surname, "Smith");
-  assertEquals(john.nickname, "Jack");
-  assertEquals(john.additional_names.length, 1);
-  assertEquals(john.additional_names[0].surname, "Smyth");
-  const birth = john.events.find((e) => e.type === "birth");
-  assertEquals(birth?.date?.date_value_raw, "12 MAR 1820");
-  assertEquals(birth?.place_name, "Boston, Suffolk, Massachusetts, USA");
+    const john = reread.persons.find((p) => p.gedcom_xref === "@I1@");
+    assert(john !== undefined);
+    assertEquals(john.given_name, "John Fitzgerald");
+    assertEquals(john.surname, "Smith");
+    assertEquals(john.nickname, "Jack");
+    assertEquals(john.additional_names.length, 1);
+    assertEquals(john.additional_names[0].surname, "Smyth");
+    const birth = john.events.find((e) => e.type === "birth");
+    assertEquals(birth?.date?.date_value_raw, "12 MAR 1820");
+    assertEquals(birth?.place_name, "Boston, Suffolk, Massachusetts, USA");
 
-  const family = reread.families[0];
-  assertEquals(
-    [family.partner1_xref, family.partner2_xref].sort(),
-    ["@I1@", "@I2@"],
-  );
-  assertEquals(family.children[0].person_xref, "@I3@");
-});
+    const family = reread.families[0];
+    assertEquals([family.partner1_xref, family.partner2_xref].sort(), [
+      "@I1@",
+      "@I2@",
+    ]);
+    assertEquals(family.children[0].person_xref, "@I3@");
+  },
+);
 
-Deno.test("the exported file survives a second import unchanged in shape", async () => {
-  const first = await importToTree(GEDCOM_551);
-  const gw = new FakeExportGateway({ tree: first });
-  await runExport({ jobId: JOB_ID, gateway: gw, now: FIXED_NOW });
+Deno.test(
+  "the exported file survives a second import unchanged in shape",
+  async () => {
+    const first = await importToTree(GEDCOM_551);
+    const gw = new FakeExportGateway({ tree: first });
+    await runExport({ jobId: JOB_ID, gateway: gw, now: FIXED_NOW });
 
-  const second = await importToTree(gw.onlyUpload);
+    const second = await importToTree(gw.onlyUpload);
 
-  assertEquals(second.persons.length, first.persons.length);
-  assertEquals(second.families.length, first.families.length);
-  assertEquals(second.events.length, first.events.length);
-  assertEquals(second.familyChildren.length, first.familyChildren.length);
-  assertEquals(second.sources.length, first.sources.length);
-  assertEquals(second.repositories.length, first.repositories.length);
-});
+    assertEquals(second.persons.length, first.persons.length);
+    assertEquals(second.families.length, first.families.length);
+    assertEquals(second.events.length, first.events.length);
+    assertEquals(second.familyChildren.length, first.familyChildren.length);
+    assertEquals(second.sources.length, first.sources.length);
+    assertEquals(second.repositories.length, first.repositories.length);
+  },
+);
 
 Deno.test("export is deterministic", async () => {
   const tree = await importToTree(GEDCOM_551);
@@ -262,41 +305,44 @@ Deno.test("export is deterministic", async () => {
   assertEquals(a.onlyUpload, b.onlyUpload);
 });
 
-Deno.test("an app-created person with no gedcom_xref gets a synthesised xref", async () => {
-  const tree: TreeRows = {
-    ...EMPTY_TREE,
-    persons: [
-      {
-        id: "aaaaaaaa-0000-4000-8000-000000000001",
-        gedcom_xref: null,
-        given_name: "Grace",
-        surname: "Hopper",
-        name_prefix: null,
-        name_suffix: null,
-        nickname: null,
-        sex: "female",
-        familysearch_id: null,
-        ancestral_file_number: null,
-        user_reference_number: null,
-        raw_gedcom: null,
-        created_at: "2020-01-01T00:00:00.000Z",
-      },
-    ],
-  };
-  const gw = new FakeExportGateway({ tree });
-  const outcome = await runExport({
-    jobId: JOB_ID,
-    gateway: gw,
-    now: FIXED_NOW,
-  });
+Deno.test(
+  "an app-created person with no gedcom_xref gets a synthesised xref",
+  async () => {
+    const tree: TreeRows = {
+      ...EMPTY_TREE,
+      persons: [
+        {
+          id: "aaaaaaaa-0000-4000-8000-000000000001",
+          gedcom_xref: null,
+          given_name: "Grace",
+          surname: "Hopper",
+          name_prefix: null,
+          name_suffix: null,
+          nickname: null,
+          sex: "female",
+          familysearch_id: null,
+          ancestral_file_number: null,
+          user_reference_number: null,
+          raw_gedcom: null,
+          created_at: "2020-01-01T00:00:00.000Z",
+        },
+      ],
+    };
+    const gw = new FakeExportGateway({ tree });
+    const outcome = await runExport({
+      jobId: JOB_ID,
+      gateway: gw,
+      now: FIXED_NOW,
+    });
 
-  assertEquals(outcome.status, "completed");
-  const reread = readGedcom(gw.onlyUpload);
-  assertEquals(reread.warnings, []);
-  assertEquals(reread.persons.length, 1);
-  assertEquals(reread.persons[0].gedcom_xref, "@I1@");
-  assertEquals(reread.persons[0].surname, "Hopper");
-});
+    assertEquals(outcome.status, "completed");
+    const reread = readGedcom(gw.onlyUpload);
+    assertEquals(reread.warnings, []);
+    assertEquals(reread.persons.length, 1);
+    assertEquals(reread.persons[0].gedcom_xref, "@I1@");
+    assertEquals(reread.persons[0].surname, "Hopper");
+  },
+);
 
 Deno.test("an empty tree still produces a valid file", async () => {
   const gw = new FakeExportGateway();
@@ -313,44 +359,47 @@ Deno.test("an empty tree still produces a valid file", async () => {
   assertEquals(reread.persons.length, 0);
 });
 
-Deno.test("the demo GEDCOM (docs/reference/demo-tree.ged) round-trips", async () => {
-  // The shipped demo file (issue #38) — a multi-generation family with a
-  // first-cousin marriage (pedigree collapse), sources, a media ref, and
-  // varied date forms. Import it, export it, re-import: the record set must be
-  // unchanged and the file must re-read without warnings.
-  const demo = Deno.readTextFileSync(
-    new URL("../../../docs/reference/demo-tree.ged", import.meta.url),
-  );
+Deno.test(
+  "the demo GEDCOM (docs/reference/demo-tree.ged) round-trips",
+  async () => {
+    // The shipped demo file (issue #38) — a multi-generation family with a
+    // first-cousin marriage (pedigree collapse), sources, a media ref, and
+    // varied date forms. Import it, export it, re-import: the record set must be
+    // unchanged and the file must re-read without warnings.
+    const demo = Deno.readTextFileSync(
+      new URL("../../../docs/reference/demo-tree.ged", import.meta.url),
+    );
 
-  const first = await importToTree(demo);
-  const gw = new FakeExportGateway({ tree: first });
-  const outcome = await runExport({
-    jobId: JOB_ID,
-    gateway: gw,
-    now: FIXED_NOW,
-  });
-  assertEquals(outcome.status, "completed");
+    const first = await importToTree(demo);
+    const gw = new FakeExportGateway({ tree: first });
+    const outcome = await runExport({
+      jobId: JOB_ID,
+      gateway: gw,
+      now: FIXED_NOW,
+    });
+    assertEquals(outcome.status, "completed");
 
-  const reread = readGedcom(gw.onlyUpload);
-  assertEquals(reread.warnings, []);
-  assertEquals(reread.version, "5.5.1");
+    const reread = readGedcom(gw.onlyUpload);
+    assertEquals(reread.warnings, []);
+    assertEquals(reread.version, "5.5.1");
 
-  const second = await importToTree(gw.onlyUpload);
-  assertEquals(second.persons.length, first.persons.length);
-  assertEquals(second.families.length, first.families.length);
-  assertEquals(second.events.length, first.events.length);
-  assertEquals(second.familyChildren.length, first.familyChildren.length);
-  assertEquals(second.sources.length, first.sources.length);
-  assertEquals(second.repositories.length, first.repositories.length);
+    const second = await importToTree(gw.onlyUpload);
+    assertEquals(second.persons.length, first.persons.length);
+    assertEquals(second.families.length, first.families.length);
+    assertEquals(second.events.length, first.events.length);
+    assertEquals(second.familyChildren.length, first.familyChildren.length);
+    assertEquals(second.sources.length, first.sources.length);
+    assertEquals(second.repositories.length, first.repositories.length);
 
-  // 11 individuals, 5 families; the repeated ancestor (@I1@) still appears once.
-  assertEquals(reread.persons.length, 11);
-  assertEquals(reread.families.length, 5);
-  assertEquals(
-    reread.persons.filter((p) => p.gedcom_xref === "@I1@").length,
-    1,
-  );
-});
+    // 11 individuals, 5 families; the repeated ancestor (@I1@) still appears once.
+    assertEquals(reread.persons.length, 11);
+    assertEquals(reread.families.length, 5);
+    assertEquals(
+      reread.persons.filter((p) => p.gedcom_xref === "@I1@").length,
+      1,
+    );
+  },
+);
 
 Deno.test("a non-manual_gedcom job fails without writing a file", async () => {
   const gw = new FakeExportGateway({ type: "manual_full" });

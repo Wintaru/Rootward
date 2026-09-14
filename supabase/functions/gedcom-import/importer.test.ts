@@ -5,17 +5,30 @@ import {
   GEDCOM_EMPTY,
 } from "../../../packages/gedcom/src/fixtures.ts";
 
+import type {
+  ExifTools,
+  ImageCodec,
+  TreeMediaSettings,
+} from "../_shared/media-pipeline.ts";
 import { runImport } from "./importer.ts";
 import type {
   ImportGateway,
   ImportJobPatch,
   ImportJobRow,
+  ImportSource,
   NotificationType,
   Row,
   TableName,
 } from "./importer.ts";
+import type { MediaBytesPatch } from "./media-attach.ts";
 
 const JOB_ID = "00000000-0000-4000-8000-00000000abcd";
+
+const DEFAULT_MEDIA_SETTINGS: TreeMediaSettings = {
+  mediaMaxBytes: 10 * 1024 * 1024,
+  mediaAllowedMime: ["image/jpeg", "image/png"],
+  stripExifGps: false,
+};
 
 interface FakeOptions {
   readonly gedcom?: string;
@@ -25,6 +38,13 @@ interface FakeOptions {
   /** Report the job as `completed` on the finish guard's re-read, as if an
    * overlapping invocation finished first. */
   readonly completedBeforeGuard?: boolean;
+  /** A GedZip's archive entries (issue #101); empty for a plain `.ged`
+   * upload, which is what every pre-existing test exercises. */
+  readonly mediaFiles?: ReadonlyMap<string, Uint8Array>;
+  readonly mediaSettings?: TreeMediaSettings;
+  /** Make every `writeMediaObject` call reject, to exercise a mid-attach I/O
+   * failure. */
+  readonly failWriteMediaObject?: boolean;
 }
 
 /** In-memory {@link ImportGateway}. Tables are id-keyed, so an upsert of a
@@ -39,14 +59,24 @@ class FakeGateway implements ImportGateway {
    * "always ask on finish; the gateway decides", so a preset root still sees
    * one call. */
   readonly rootWrites: string[] = [];
+  /** Every object `writeMediaObject` was asked to write, path → bytes. */
+  readonly writtenObjects = new Map<string, Uint8Array>();
+  readonly mediaUpdates: { mediaId: string; patch: MediaBytesPatch }[] = [];
+  loadMediaSettingsCalls = 0;
   private readonly gedcom: string;
   private readonly completedBeforeGuard: boolean;
+  private readonly mediaFiles: ReadonlyMap<string, Uint8Array>;
+  private readonly mediaSettings: TreeMediaSettings;
+  private readonly failWriteMediaObject: boolean;
   private job: ImportJobRow;
 
   constructor(opts: FakeOptions = {}) {
     this.gedcom = opts.gedcom ?? GEDCOM_551;
     this.defaultRootPersonId = opts.defaultRootPersonId ?? null;
     this.completedBeforeGuard = opts.completedBeforeGuard ?? false;
+    this.mediaFiles = opts.mediaFiles ?? new Map();
+    this.mediaSettings = opts.mediaSettings ?? DEFAULT_MEDIA_SETTINGS;
+    this.failWriteMediaObject = opts.failWriteMediaObject ?? false;
     this.job = {
       id: JOB_ID,
       mode: opts.mode ?? "initial",
@@ -56,7 +86,14 @@ class FakeGateway implements ImportGateway {
       total_records: null,
       processed_records: 0,
       cursor: null,
-      stats: { added: 0, updated: 0, skipped: 0, removed: 0, warnings: [] },
+      stats: {
+        added: 0,
+        updated: 0,
+        skipped: 0,
+        removed: 0,
+        warnings: [],
+        claimedMediaPaths: [],
+      },
     };
   }
 
@@ -70,8 +107,45 @@ class FakeGateway implements ImportGateway {
     return Promise.resolve({ ...this.job });
   }
 
-  downloadGedcom(): Promise<string> {
-    return Promise.resolve(this.gedcom);
+  downloadSource(): Promise<ImportSource> {
+    return Promise.resolve({
+      gedcomText: this.gedcom,
+      mediaFiles: this.mediaFiles,
+    });
+  }
+
+  loadMediaSettings(): Promise<TreeMediaSettings> {
+    this.loadMediaSettingsCalls += 1;
+    return Promise.resolve(this.mediaSettings);
+  }
+
+  writeMediaObject(path: string, bytes: Uint8Array): Promise<void> {
+    if (this.failWriteMediaObject) {
+      return Promise.reject(new Error("simulated storage write failure"));
+    }
+    this.writtenObjects.set(path, bytes);
+    return Promise.resolve();
+  }
+
+  /** Mirrors the real gateway's `update ... where id = mediaId`: merges into
+   * whichever `media` row `buildMedia` already upserted this batch, so a
+   * test can assert on the row's final state via {@link rows}. */
+  updateMediaBytes(mediaId: string, patch: MediaBytesPatch): Promise<void> {
+    this.mediaUpdates.push({ mediaId, patch });
+    const store = this.tables.get("media");
+    const row = store?.get(mediaId);
+    if (store !== undefined && row !== undefined) {
+      store.set(mediaId, {
+        ...row,
+        mime_type: patch.mimeType,
+        size_bytes: patch.sizeBytes,
+        storage_path_original: patch.storagePathOriginal,
+        storage_path_thumb: patch.storagePathThumb,
+        storage_path_display: patch.storagePathDisplay,
+        exif: patch.exif,
+      });
+    }
+    return Promise.resolve();
   }
 
   upsertRows(table: TableName, rows: readonly Row[]): Promise<void> {
@@ -120,11 +194,25 @@ class FakeGateway implements ImportGateway {
   }
 }
 
+/** No derivative codec, no EXIF data -- the "processed, original only"
+ * branch. Only exercised by tests that opt a `FakeGateway` into
+ * `mediaFiles`; every other test never calls into either. */
+const NO_CODEC: ImageCodec = {
+  decode: () => Promise.resolve(null),
+  encodeWebp: () => Promise.resolve(new Uint8Array()),
+};
+const NO_EXIF: ExifTools = {
+  read: () => Promise.resolve({ dateTaken: null, hasGps: false }),
+  stripGps: (bytes) => Promise.resolve({ bytes, stripped: false }),
+};
+
 const NO_YIELD = {
   now: () => Date.now(),
   budgetMs: Number.MAX_SAFE_INTEGER,
   batchSize: 500,
   reinvoke: () => Promise.resolve(),
+  mediaCodec: NO_CODEC,
+  mediaExif: NO_EXIF,
 };
 
 Deno.test("initial import runs to completion and notifies", async () => {
@@ -173,58 +261,69 @@ Deno.test("places are deduplicated on the normalized name", async () => {
   assertEquals(new Set(names).size, names.length);
   // I1/I2 events + the marriage all sit in Boston -> one row, not four.
   assertEquals(
-    gw.rows("place").filter((r) =>
-      r.name === "Boston, Suffolk, Massachusetts, USA"
-    )
-      .length,
+    gw
+      .rows("place")
+      .filter((r) => r.name === "Boston, Suffolk, Massachusetts, USA").length,
     1,
   );
 });
 
-Deno.test("a mid-import kill resumes from the cursor without duplicating rows", async () => {
-  const single = new FakeGateway();
-  await runImport({ jobId: JOB_ID, gateway: single, ...NO_YIELD });
+Deno.test(
+  "a mid-import kill resumes from the cursor without duplicating rows",
+  async () => {
+    const single = new FakeGateway();
+    await runImport({ jobId: JOB_ID, gateway: single, ...NO_YIELD });
 
-  const resumed = new FakeGateway();
-  let ticks = 0;
-  const clock = () => (ticks += 1_000);
-  let invocations = 0;
-  let status = "importing";
-  while (status === "importing" && invocations < 500) {
-    invocations += 1;
+    const resumed = new FakeGateway();
+    let ticks = 0;
+    const clock = () => (ticks += 1_000);
+    let invocations = 0;
+    let status = "importing";
+    while (status === "importing" && invocations < 500) {
+      invocations += 1;
+      const outcome = await runImport({
+        jobId: JOB_ID,
+        gateway: resumed,
+        now: clock,
+        budgetMs: 0, // yield after every batch
+        batchSize: 1,
+        reinvoke: () => Promise.resolve(),
+        mediaCodec: NO_CODEC,
+        mediaExif: NO_EXIF,
+      });
+      status = outcome.status;
+    }
+
+    assertEquals(status, "completed");
+    assert(invocations > 3, `expected several invocations, got ${invocations}`);
+    // Same rows, same ids — the deterministic uuidv5 ids make every replay an
+    // overwrite, so the piecemeal run lands exactly where the one-shot run did.
+    assertEquals(resumed.ids(), single.ids());
+    assertEquals(
+      resumed.currentJob.processed_records,
+      single.currentJob.processed_records,
+    );
+    assertEquals(resumed.notifications.length, 1);
+  },
+);
+
+Deno.test(
+  "a non-initial job fails with an import_failed notification",
+  async () => {
+    const gw = new FakeGateway({ mode: "replace_all" });
+
     const outcome = await runImport({
       jobId: JOB_ID,
-      gateway: resumed,
-      now: clock,
-      budgetMs: 0, // yield after every batch
-      batchSize: 1,
-      reinvoke: () => Promise.resolve(),
+      gateway: gw,
+      ...NO_YIELD,
     });
-    status = outcome.status;
-  }
 
-  assertEquals(status, "completed");
-  assert(invocations > 3, `expected several invocations, got ${invocations}`);
-  // Same rows, same ids — the deterministic uuidv5 ids make every replay an
-  // overwrite, so the piecemeal run lands exactly where the one-shot run did.
-  assertEquals(resumed.ids(), single.ids());
-  assertEquals(
-    resumed.currentJob.processed_records,
-    single.currentJob.processed_records,
-  );
-  assertEquals(resumed.notifications.length, 1);
-});
-
-Deno.test("a non-initial job fails with an import_failed notification", async () => {
-  const gw = new FakeGateway({ mode: "replace_all" });
-
-  const outcome = await runImport({ jobId: JOB_ID, gateway: gw, ...NO_YIELD });
-
-  assertEquals(outcome.status, "failed");
-  assertEquals(gw.currentJob.status, "failed");
-  assertEquals(gw.notifications[0]?.type, "import_failed");
-  assertEquals(gw.rows("person").length, 0);
-});
+    assertEquals(outcome.status, "failed");
+    assertEquals(gw.currentJob.status, "failed");
+    assertEquals(gw.notifications[0]?.type, "import_failed");
+    assertEquals(gw.rows("person").length, 0);
+  },
+);
 
 const DANGLING = `0 HEAD
 1 GEDC
@@ -243,26 +342,33 @@ const DANGLING = `0 HEAD
 0 TRLR
 `;
 
-Deno.test("dangling pointers and junk places do not fail the import", async () => {
-  const gw = new FakeGateway({ gedcom: DANGLING });
+Deno.test(
+  "dangling pointers and junk places do not fail the import",
+  async () => {
+    const gw = new FakeGateway({ gedcom: DANGLING });
 
-  const outcome = await runImport({ jobId: JOB_ID, gateway: gw, ...NO_YIELD });
+    const outcome = await runImport({
+      jobId: JOB_ID,
+      gateway: gw,
+      ...NO_YIELD,
+    });
 
-  assertEquals(outcome.status, "completed");
-  // The one real person landed; the missing wife/child/source/object did not
-  // become orphan rows, and the junk PLAC produced no place.
-  assertEquals(gw.rows("person").length, 1);
-  assertEquals(gw.rows("place").length, 0);
-  assertEquals(gw.rows("family_child").length, 0);
-  const family = gw.rows("family")[0];
-  assertEquals(family.partner2_id, null);
-  const birth = gw.rows("event")[0];
-  assertEquals(birth.place_id, null);
-  // A synthesised source keeps the citation; the media link keeps a stub media.
-  assertEquals(gw.rows("citation").length, 1);
-  assertEquals(gw.rows("media_link").length, 1);
-  assert(outcome.stats.warnings.length >= 3, "missing refs should be warned");
-});
+    assertEquals(outcome.status, "completed");
+    // The one real person landed; the missing wife/child/source/object did not
+    // become orphan rows, and the junk PLAC produced no place.
+    assertEquals(gw.rows("person").length, 1);
+    assertEquals(gw.rows("place").length, 0);
+    assertEquals(gw.rows("family_child").length, 0);
+    const family = gw.rows("family")[0];
+    assertEquals(family.partner2_id, null);
+    const birth = gw.rows("event")[0];
+    assertEquals(birth.place_id, null);
+    // A synthesised source keeps the citation; the media link keeps a stub media.
+    assertEquals(gw.rows("citation").length, 1);
+    assertEquals(gw.rows("media_link").length, 1);
+    assert(outcome.stats.warnings.length >= 3, "missing refs should be warned");
+  },
+);
 
 Deno.test("an empty tree still completes and notifies", async () => {
   const gw = new FakeGateway({ gedcom: GEDCOM_EMPTY });
@@ -277,38 +383,219 @@ Deno.test("an empty tree still completes and notifies", async () => {
   assertEquals(gw.defaultRootPersonId, null);
 });
 
-Deno.test("completion sets an unset default root to the first INDI (#51)", async () => {
-  const gw = new FakeGateway();
+Deno.test(
+  "completion sets an unset default root to the first INDI (#51)",
+  async () => {
+    const gw = new FakeGateway();
 
-  await runImport({ jobId: JOB_ID, gateway: gw, ...NO_YIELD });
+    await runImport({ jobId: JOB_ID, gateway: gw, ...NO_YIELD });
 
-  const first = gw.rows("person").find((r) => r.gedcom_xref === "@I1@");
-  assert(first !== undefined, "@I1@ should have been imported");
-  assertEquals(gw.rootWrites, [first.id]);
-  assertEquals(gw.defaultRootPersonId, first.id);
-});
+    const first = gw.rows("person").find((r) => r.gedcom_xref === "@I1@");
+    assert(first !== undefined, "@I1@ should have been imported");
+    assertEquals(gw.rootWrites, [first.id]);
+    assertEquals(gw.defaultRootPersonId, first.id);
+  },
+);
 
-Deno.test("a preset default root is still offered once — the gateway keeps it (#51)", async () => {
-  const chosen = "11111111-1111-4111-8111-111111111111";
-  const gw = new FakeGateway({ defaultRootPersonId: chosen });
+Deno.test(
+  "a preset default root is still offered once — the gateway keeps it (#51)",
+  async () => {
+    const chosen = "11111111-1111-4111-8111-111111111111";
+    const gw = new FakeGateway({ defaultRootPersonId: chosen });
 
-  await runImport({ jobId: JOB_ID, gateway: gw, ...NO_YIELD });
+    await runImport({ jobId: JOB_ID, gateway: gw, ...NO_YIELD });
 
-  // The engine's contract is "always ask on finish"; the conditional write in
-  // the gateway (`… IS NULL`) is what leaves an admin's choice alone.
-  const first = gw.rows("person").find((r) => r.gedcom_xref === "@I1@");
-  assertEquals(gw.rootWrites, [first?.id]);
-  assertEquals(gw.defaultRootPersonId, chosen);
-});
+    // The engine's contract is "always ask on finish"; the conditional write in
+    // the gateway (`… IS NULL`) is what leaves an admin's choice alone.
+    const first = gw.rows("person").find((r) => r.gedcom_xref === "@I1@");
+    assertEquals(gw.rootWrites, [first?.id]);
+    assertEquals(gw.defaultRootPersonId, chosen);
+  },
+);
 
-Deno.test("a finish that lost the race to an overlapping invocation sets nothing (#51)", async () => {
-  const gw = new FakeGateway({ completedBeforeGuard: true });
+Deno.test(
+  "a finish that lost the race to an overlapping invocation sets nothing (#51)",
+  async () => {
+    const gw = new FakeGateway({ completedBeforeGuard: true });
 
-  const outcome = await runImport({ jobId: JOB_ID, gateway: gw, ...NO_YIELD });
+    const outcome = await runImport({
+      jobId: JOB_ID,
+      gateway: gw,
+      ...NO_YIELD,
+    });
 
-  // The finish guard saw `completed` and skipped the whole block: no root
-  // write, no second notification.
-  assertEquals(outcome.status, "completed");
-  assertEquals(gw.rootWrites, []);
-  assertEquals(gw.notifications.length, 0);
-});
+    // The finish guard saw `completed` and skipped the whole block: no root
+    // write, no second notification.
+    assertEquals(outcome.status, "completed");
+    assertEquals(gw.rootWrites, []);
+    assertEquals(gw.notifications.length, 0);
+  },
+);
+
+// --- GedZip media attach (issue #101) -------------------------------
+
+const JPEG_BYTES = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4]);
+
+Deno.test(
+  "GedZip: a matched archive file is attached to its media row",
+  async () => {
+    const gw = new FakeGateway({
+      mediaFiles: new Map([["media/john-smith-portrait.jpg", JPEG_BYTES]]),
+    });
+
+    const outcome = await runImport({
+      jobId: JOB_ID,
+      gateway: gw,
+      ...NO_YIELD,
+    });
+
+    assertEquals(outcome.status, "completed");
+    assertEquals(gw.loadMediaSettingsCalls, 1);
+    const media = gw.rows("media").find((r) => r.gedcom_xref === "@O1@");
+    assert(media !== undefined, "@O1@ should have a media row");
+    assertEquals(media.mime_type, "image/jpeg");
+    assertEquals(media.storage_path_original, `${media.id}/original.jpg`);
+    assertEquals(gw.writtenObjects.get(`${media.id}/original.jpg`), JPEG_BYTES);
+    // NO_CODEC has no derivative codec at all, so the attach still reports the
+    // same "stored original only" advisory `runMediaProcess` would — it must
+    // not be mistaken for a match failure.
+    assertEquals(
+      outcome.stats.warnings.some(
+        (w) => w.includes("not found") || w.includes("rejected"),
+      ),
+      false,
+    );
+  },
+);
+
+Deno.test(
+  "GedZip: an unmatched FILE value stays reference-only and warns",
+  async () => {
+    const gw = new FakeGateway({
+      mediaFiles: new Map([["media/someone-else.jpg", JPEG_BYTES]]),
+    });
+
+    const outcome = await runImport({
+      jobId: JOB_ID,
+      gateway: gw,
+      ...NO_YIELD,
+    });
+
+    assertEquals(gw.mediaUpdates.length, 0);
+    assertEquals(gw.writtenObjects.size, 0);
+    assert(
+      outcome.stats.warnings.some(
+        (w) =>
+          w.includes("@O1@") && w.includes("not found in the uploaded archive"),
+      ),
+    );
+  },
+);
+
+Deno.test(
+  "GedZip: a matched file rejected for size stays reference-only and warns",
+  async () => {
+    const gw = new FakeGateway({
+      mediaFiles: new Map([["john-smith-portrait.jpg", JPEG_BYTES]]),
+      mediaSettings: { ...DEFAULT_MEDIA_SETTINGS, mediaMaxBytes: 1 },
+    });
+
+    const outcome = await runImport({
+      jobId: JOB_ID,
+      gateway: gw,
+      ...NO_YIELD,
+    });
+
+    assertEquals(gw.mediaUpdates.length, 0);
+    assert(
+      outcome.stats.warnings.some(
+        (w) => w.includes("@O1@") && w.includes("rejected (size)"),
+      ),
+    );
+  },
+);
+
+Deno.test(
+  "a plain .ged import (no archive) never loads media settings",
+  async () => {
+    const gw = new FakeGateway();
+
+    await runImport({ jobId: JOB_ID, gateway: gw, ...NO_YIELD });
+
+    assertEquals(gw.loadMediaSettingsCalls, 0);
+    assertEquals(gw.writtenObjects.size, 0);
+  },
+);
+
+/** Two people, two `OBJE` records with the same basename in unrelated local
+ * directories — the default-camera-filename collision a multi-contributor
+ * archive produces. Only one may legitimately claim the single matching
+ * archive file. */
+const GEDCOM_BASENAME_COLLISION = `0 HEAD
+1 GEDC
+2 VERS 5.5.1
+0 @I1@ INDI
+1 NAME Jane /Doe/
+1 OBJE @O1@
+0 @I2@ INDI
+1 NAME Bob /Doe/
+1 OBJE @O2@
+0 @O1@ OBJE
+1 FILE C:\\Users\\Jane\\Pictures\\photo.jpg
+0 @O2@ OBJE
+1 FILE C:\\Users\\Bob\\Pictures\\photo.jpg
+0 TRLR
+`;
+
+Deno.test(
+  "GedZip: a basename match is granted to only one of two colliding records",
+  async () => {
+    const gw = new FakeGateway({
+      gedcom: GEDCOM_BASENAME_COLLISION,
+      mediaFiles: new Map([["media/photo.jpg", JPEG_BYTES]]),
+    });
+
+    const outcome = await runImport({
+      jobId: JOB_ID,
+      gateway: gw,
+      ...NO_YIELD,
+    });
+
+    assertEquals(outcome.status, "completed");
+    assertEquals(gw.mediaUpdates.length, 1);
+    const media = gw.rows("media");
+    const attached = media.filter((r) => r.storage_path_original !== undefined);
+    assertEquals(attached.length, 1);
+    assert(
+      outcome.stats.warnings.some(
+        (w) =>
+          w.includes("@O2@") && w.includes("not found in the uploaded archive"),
+      ),
+      "the second record should warn instead of silently reusing the match",
+    );
+  },
+);
+
+Deno.test(
+  "GedZip: a mid-attach storage failure warns instead of failing the import",
+  async () => {
+    const gw = new FakeGateway({
+      mediaFiles: new Map([["media/john-smith-portrait.jpg", JPEG_BYTES]]),
+      failWriteMediaObject: true,
+    });
+
+    const outcome = await runImport({
+      jobId: JOB_ID,
+      gateway: gw,
+      ...NO_YIELD,
+    });
+
+    assertEquals(outcome.status, "completed");
+    assertEquals(gw.mediaUpdates.length, 0);
+    assert(
+      outcome.stats.warnings.some(
+        (w) => w.includes("@O1@") && w.includes("could not be attached"),
+      ),
+    );
+  },
+);
