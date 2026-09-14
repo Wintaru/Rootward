@@ -135,7 +135,7 @@ export function PersonPickerOrCreate({
           onClick={submitNewPerson}
           className="bg-primary text-primary-foreground w-fit rounded-md px-3 py-1.5 text-xs font-medium disabled:opacity-50"
         >
-          Add {label.toLowerCase()}
+          {label}
         </button>
         <button
           type="button"
