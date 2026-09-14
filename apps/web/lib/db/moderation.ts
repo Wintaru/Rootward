@@ -320,5 +320,29 @@ export async function unlinkAccount(
   return { ok: true };
 }
 
+/**
+ * Whether some account is already linked to `personId` (issue #63: the
+ * profile's "Invite to claim" only makes sense when nobody has claimed the
+ * person yet). Moderator-only in practice — `account_select` RLS lets a
+ * non-moderator read only their own row, so this would under-report for
+ * anyone else; the caller (the profile page) only runs it for a moderator.
+ */
+export async function personHasLinkedAccount(
+  client: Db,
+  personId: string,
+): Promise<boolean> {
+  const { data, error } = await client
+    .from("account")
+    .select("id")
+    .eq("person_id", personId)
+    .limit(1)
+    .maybeSingle();
+
+  if (error !== null) {
+    throw new Error(`personHasLinkedAccount: ${error.message}`);
+  }
+  return data !== null;
+}
+
 // Person search (the shared `PersonPicker`) lives in `person-search.ts`,
 // generalized for the header search box and `/people` (issue #62).

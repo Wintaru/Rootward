@@ -18,11 +18,14 @@ export function PersonProfile({
   view,
   canEdit,
   canRequestHide,
+  canInviteToClaim,
 }: {
   readonly view: PersonProfileView;
   readonly canEdit: boolean;
   /** Issue #61: this viewer is linked to `view.id`, or to one of its parents. */
   readonly canRequestHide: boolean;
+  /** Issue #63: a moderator, and nobody has claimed this person yet. */
+  readonly canInviteToClaim: boolean;
 }) {
   const subtitle = [
     view.sexLabel,
@@ -50,13 +53,25 @@ export function PersonProfile({
               <p className="text-muted-foreground text-sm">{subtitle}</p>
             )}
           </div>
-          {canEdit && (
-            <Link
-              href={`/person/${view.id}/edit`}
-              className="border-border hover:bg-accent rounded-md border px-3 py-1.5 text-sm font-medium"
-            >
-              Edit
-            </Link>
+          {(canInviteToClaim || canEdit) && (
+            <div className="flex gap-2">
+              {canInviteToClaim && (
+                <Link
+                  href={`/moderation?personId=${view.id}`}
+                  className="border-border hover:bg-accent rounded-md border px-3 py-1.5 text-sm font-medium"
+                >
+                  Invite to claim
+                </Link>
+              )}
+              {canEdit && (
+                <Link
+                  href={`/person/${view.id}/edit`}
+                  className="border-border hover:bg-accent rounded-md border px-3 py-1.5 text-sm font-medium"
+                >
+                  Edit
+                </Link>
+              )}
+            </div>
           )}
         </div>
         {canRequestHide && <HideRequestButton personId={view.id} />}

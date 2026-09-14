@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 
 import { isActiveModerator, isApproved } from "@/lib/auth/access";
 import { getCurrentAccount } from "@/lib/auth/current-account";
-import { getPersonProfile } from "@/lib/db";
+import { getPersonProfile, personHasLinkedAccount } from "@/lib/db";
 import { getSignedMediaUrls } from "@/lib/db/media-urls";
 import { buildPersonProfileView } from "@/lib/person/view-model";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -27,6 +27,12 @@ export const metadata: Metadata = {
  * Relationships section, rather than a second query — the "ask a moderator to
  * hide this record" button is shown to the linked viewer themselves or a
  * linked parent (decision 14); `request_hide`'s own check is the real gate.
+ *
+ * `canInviteToClaim` (issue #63, SPEC §9.2) links to `/moderation?personId=`,
+ * which already preselects the person in `InviteToClaimForm` (issue #20). It
+ * is checked only for a moderator (`personHasLinkedAccount`'s RLS read would
+ * under-report for anyone else) and only when the person has no linked
+ * account yet — inviting an already-claimed person makes no sense.
  *
  * The gallery's thumbnails need one extra step (#34): `getSignedMediaUrls`
  * runs under the service role, since the `media` bucket's `storage.objects`
@@ -62,12 +68,16 @@ export default async function PersonPage({
     current.personId !== null &&
     (current.personId === view.id ||
       view.parents.some((parent) => parent.id === current.personId));
+  const isModerator = isActiveModerator(current.account);
+  const canInviteToClaim =
+    isModerator && !(await personHasLinkedAccount(supabase, view.id));
 
   return (
     <PersonProfile
       view={view}
-      canEdit={isActiveModerator(current.account)}
+      canEdit={isModerator}
       canRequestHide={canRequestHide}
+      canInviteToClaim={canInviteToClaim}
     />
   );
 }

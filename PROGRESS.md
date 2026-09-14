@@ -5,17 +5,17 @@ the relevant `docs/SPEC.md` section.
 
 ## Current state
 
-**Next issue: #63, then #65 in §10 Phase 9 order.** #64
+**Next issue: #65, last in §10 Phase 9 order.** #64
 (docs), #50 (header), #51 (`/tree` index), #52 (tree card → profile), #53
 (root person by name), #54 (GEDCOM export UI), #55 (create a person in-app),
 #56 (Relationships section), #57 (family events), #58 (person visibility +
 living override), #59 (delete a person), #60 (wipe tree + block import on a
-non-empty tree), #61 ("hide my record" request), and #73 (the `/settings`
-and `/moderation` 500) are all merged to `main` and closed — confirmed `#61`
-landed as commit `b868592` on `origin/main`. #62 (person search + `/people`)
-is done and staged on branch `feat/person-search`, not yet merged — the next
-session should confirm it landed on `origin/main` before starting #63. A
-2026-09-12
+non-empty tree), #61 ("hide my record" request), #62 (person search +
+`/people`), and #73 (the `/settings` and `/moderation` 500) are all merged to
+`main` and closed — confirmed `#62` landed as commit `fac4221` on
+`origin/main`. #63 (invite to claim from the profile) is done and staged on
+branch `feat/invite-to-claim-from-profile`, not yet merged — the next session
+should confirm it landed on `origin/main` before starting #65. A 2026-09-12
 audit found that every §10 item was built but the app was not usable: no
 sign-out, no navigation, no way to open a profile from the tree, a 404 on a
 fresh deploy, and no way to create a person or a relationship without a
@@ -26,6 +26,25 @@ plus §8.1 / §8.3 / §7, and WAYFINDER decision 36 + the **Journeys** section.
 #40 (README) waits
 until Phase 9 lands, so the screenshots show a usable app. The audit itself
 is in `GAP-AUDIT-HANDOFF.md` (gitignored).
+
+**Issue #63 — Invite to claim from the person profile: done, staged on branch
+`feat/invite-to-claim-from-profile`, issue closed.** SPEC §9.2. No
+migrations.
+
+- The profile (`PersonProfile.tsx`) now shows an "Invite to claim" link next
+  to "Edit" when the viewer is a moderator and nobody has claimed the person
+  yet. It links to `/moderation?personId=<id>`, a param `InviteToClaimForm`
+  already read (from issue #20) but nothing linked to — so this was a small,
+  targeted fix, not new plumbing.
+- New `personHasLinkedAccount` (`lib/db/moderation.ts`) checks the `account`
+  table for the person; it only reports accurately for a moderator caller
+  (`account_select` RLS is own-row-or-moderator), so `page.tsx` only runs it
+  when the viewer already passed `isActiveModerator`.
+- Verified live against the local Supabase stack (admin sign-in via
+  Mailpit): the button appears on an unclaimed demo person, and clicking it
+  lands on `/moderation` with the Person ID field prefilled.
+- Code review: no correctness issues; one nit applied (don't render the
+  empty button-row wrapper when neither "Invite to claim" nor "Edit" shows).
 
 **Issue #62 — Person search in the header + `/people` index: done, staged on
 branch `feat/person-search`, issue closed.** SPEC §8.1. No migrations — a
