@@ -784,6 +784,10 @@ export type Database = {
       media: {
         Row: {
           created_at: string
+          crop_height: number | null
+          crop_width: number | null
+          crop_x: number | null
+          crop_y: number | null
           date_calendar: Database["public"]["Enums"]["calendar"]
           date_day1: number | null
           date_day2: number | null
@@ -802,6 +806,7 @@ export type Database = {
           mime_type: string | null
           original_filename: string | null
           raw_gedcom: Json | null
+          rotation: number
           size_bytes: number | null
           storage_path_display: string | null
           storage_path_original: string | null
@@ -812,6 +817,10 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          crop_height?: number | null
+          crop_width?: number | null
+          crop_x?: number | null
+          crop_y?: number | null
           date_calendar?: Database["public"]["Enums"]["calendar"]
           date_day1?: number | null
           date_day2?: number | null
@@ -830,6 +839,7 @@ export type Database = {
           mime_type?: string | null
           original_filename?: string | null
           raw_gedcom?: Json | null
+          rotation?: number
           size_bytes?: number | null
           storage_path_display?: string | null
           storage_path_original?: string | null
@@ -840,6 +850,10 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          crop_height?: number | null
+          crop_width?: number | null
+          crop_x?: number | null
+          crop_y?: number | null
           date_calendar?: Database["public"]["Enums"]["calendar"]
           date_day1?: number | null
           date_day2?: number | null
@@ -858,6 +872,7 @@ export type Database = {
           mime_type?: string | null
           original_filename?: string | null
           raw_gedcom?: Json | null
+          rotation?: number
           size_bytes?: number | null
           storage_path_display?: string | null
           storage_path_original?: string | null
