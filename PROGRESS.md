@@ -5,36 +5,38 @@ the relevant `docs/SPEC.md` section.
 
 ## Current state
 
-**Issue #104 — GedZip import OOM'd the edge function worker: unzip AND photo
-processing both moved to the browser, staged on branch
-`feat/client-side-media-processing`, issue still open pending live
-confirmation — now blocked on a Supabase CLI bug, not this repo's code.** A
-real ~61 MB/128-photo GedZip crashed `gedcom-import`'s worker even after
-moving unzip to the browser (pt. 1, prior round): a real photo's WASM
-decode/resize/encode alone could exceed the worker's hardcoded 1-2s CPU-time
-budget (no `config.toml` override). Pt. 2 (this round): extracted the whole
-image-codec/EXIF pipeline into a new portable package `@rootward/media`
-(shared by the browser, `media-process`, and `gedcom-import`) and moved the
-actual processing to the browser too — `gedcom-import`'s server side now
-just writes bytes the browser already produced (`meta.json` sidecar +
-`original`/`thumb`/`display` objects per item, read back via
-`gateway.ts`'s `readReadyMediaFolder`). Surfaced a real Next.js/Turbopack
-bundling issue (`heic-decode` unconditionally `require`s a Node-only
-`libheif-js` build) — fixed with a `turbopack.resolveAlias` browser stub
-that degrades HEIC the same way GIF/PDF already degrade (original stored, no
-thumbnail); HEIC stays fully supported server-side in `media-process`. Full
-verify gate is green (725 pnpm + 65 Deno tests, including real WASM codec
-round-trips), code review clean. Live end-to-end confirmation is still
-blocked — but now root-caused: a reported Supabase CLI bind-mount regression
-([supabase/supabase#50088](https://github.com/supabase/supabase/issues/50088))
-breaks resolving anything under `packages/` from the edge runtime when
-`deno.json`'s import map has both a directory-prefix and a specific-file
-mapping for the same package, which this repo's does. Confirmed broken on
-our installed 2.117.0; reported working on 2.111.0/2.115.0. Fix needs a CLI
-downgrade, which is Josh's call (shared machine, other concurrent sessions).
-Details and next steps in `GEDZIP-MEMORY-HANDOFF.md`. Next session: once the
-CLI is downgraded and the stack restarted, run a real GedZip through
-`/import` before closing #104.
+**Issue #104 — GedZip import OOM'd the edge function worker: fixed, confirmed
+live against the real `Donner.zip`, ready to close.** A real ~61 MB/128-photo
+GedZip crashed `gedcom-import`'s worker even after moving unzip to the
+browser (pt. 1): a real photo's WASM decode/resize/encode alone could exceed
+the worker's hardcoded 1-2s CPU-time budget (no `config.toml` override). Pt.
+2: extracted the whole image-codec/EXIF pipeline into a new portable package
+`@rootward/media` (shared by the browser, `media-process`, and
+`gedcom-import`) and moved the actual processing to the browser too —
+`gedcom-import`'s server side now just writes bytes the browser already
+produced (`meta.json` sidecar + `original`/`thumb`/`display` objects per
+item, read back via `gateway.ts`'s `readReadyMediaFolder`). Surfaced a real
+Next.js/Turbopack bundling issue (`heic-decode` unconditionally `require`s a
+Node-only `libheif-js` build) — fixed with a `turbopack.resolveAlias` browser
+stub that degrades HEIC the same way GIF/PDF already degrade (original
+stored, no thumbnail); HEIC stays fully supported server-side in
+`media-process`. Committed as `386c3fa`. Live verification had been blocked
+by a Supabase CLI bind-mount bug
+([supabase/supabase#50088](https://github.com/supabase/supabase/issues/50088));
+that bug is intermittent (an "algorithm" ordering issue in the CLI's mount
+list, not a hard failure every time), and a later `pnpm dev` restart
+produced a correctly-mounted container. Result: `Donner.zip` (1,048 GEDCOM
+records, 128 photos) imported completely — 723 people, 127 media rows (108
+with generated thumbnails, 19 original-only where the source format has no
+browser codec, e.g. some HEIC — the designed graceful-degradation path, not
+a bug), 129 media links, job status `completed`, no `error_text`. The only
+warnings (200) are "Unmapped level-0 record" for MacFamilyTree's
+proprietary `_STF`/`_PTF`/`_PTE`/`_STE`/`_PLAC` tags, which aren't part of
+the GEDCOM standard and are correctly skipped rather than guessed at. The
+CLI bug can still resurface on an unlucky restart — if it does, downgrading
+to Supabase CLI 2.115.0 is the known fix (see `git log` for
+`386c3fa`'s era or ask Josh; the standalone hand-off file for this was
+deleted once the issue was confirmed resolved).
 
 **Wipe tree: added a "skip the automatic backup" checkbox, staged on branch
 `feat/wipe-tree-skip-backup`, no issue filed (small, same-session request).**
