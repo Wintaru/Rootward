@@ -99,6 +99,43 @@ No migration.
   already written for #39; this issue only needed the cross-link, already in
   place.
 
+**Issue #99 — `wipe_tree()` fails live with "DELETE requires a WHERE clause":
+done, staged on branch `fix/wipe-tree-safeupdate`, issue closed.** Found by
+Josh clicking "Wipe tree" in the running app (not from the issue queue) right
+after the #82 fix landed. Migration `20260914133629_wipe_tree_safeupdate.sql`
+— no code touched. Also filed **#100** (not fixed): pgTAP always runs as the
+superuser `pg_prove` connects as, never as PostgREST's `authenticator` role,
+so this whole bug class is structurally invisible to `supabase test db` no
+matter how good the fixtures are — worth a follow-up session's attention if
+another "delete everything" admin action is ever added.
+
+- Root cause, confirmed by direct DB inspection (not guessed): `wipe_tree()`
+  (`20260913191500_wipe_tree.sql`, issue #60) runs several unqualified
+  `delete from <table>;` statements to hard-reset the tree. PostgREST always
+  connects as the `authenticator` role, even after its own internal
+  `SET LOCAL ROLE authenticated`, and that role preloads the `safeupdate`
+  extension — a Supabase-platform default, not project config. `safeupdate`
+  rejects any DELETE/UPDATE with no WHERE clause in that session, including
+  one issued from inside a `plpgsql` function via RPC. Reproduced exactly by
+  connecting directly as `authenticator` and calling `wipe_tree()` the same
+  way PostgREST does; calling it as the `postgres` superuser (no safeupdate
+  preload there) succeeds silently, which is also why `wipe_tree_test.sql`
+  never caught it.
+- Fix: a new migration (never hand-edit a shipped one) adds a tautological
+  `where true` to each of the seven deletes — satisfies safeupdate's
+  syntactic check, semantically identical to no WHERE at all (a constant, not
+  a column comparison, so no NULL-propagation risk). Re-verified the fixed
+  function as `authenticator` in a rolled-back transaction.
+- Swept every migration for the same unqualified-delete pattern — only
+  `wipe_tree()` had it; `delete_person()` already scopes every delete.
+- `supabase db lint` clean; `supabase test db` green (312 pgTAP tests) after
+  also cleaning up one real leftover `exports` bucket object that the
+  browser's own earlier, pre-fix "Wipe tree" attempt had left behind (its
+  backup-export step had actually succeeded — only the delete failed — so a
+  real \*.ged file existed and was tripping `exports_bucket_test.sql`'s
+  absolute-count assertion; unrelated to this fix, just local-stack
+  cleanup). Code review: no must-fix, no should-fix.
+
 **Issue #82 — `/` and `/tree` 404 for non-moderators when the default root is
 hidden from them: done, staged on branch `fix/hidden-root-fallback`, issue
 closed.** SPEC §8.1. No migration. Picked over #47 (open since before Phase 9,
