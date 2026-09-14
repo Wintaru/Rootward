@@ -1,4 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  encodeMediaStorageKey,
+  GEDCOM_OBJECT_NAME,
+  MEDIA_SUBPREFIX,
+} from "@rootward/gedcom";
+
+import type { PreparedImport } from "@/lib/import/prepare-upload";
 
 import type { Database, Json } from "./database.types";
 
@@ -8,9 +15,14 @@ export type ImportMode = Database["public"]["Enums"]["import_mode"];
 /** Private bucket the `/import` upload lands in (migration 20260830235147). */
 export const IMPORTS_BUCKET = "imports";
 
-/** Storage key for a job's uploaded GEDCOM: `imports/<jobId>.ged`. */
-export function gedcomStoragePath(jobId: string): string {
-  return `${IMPORTS_BUCKET}/${jobId}.ged`;
+/** Storage *prefix* for a job's uploaded files: `imports/<jobId>` (issue
+ * #104). `uploadImportFiles` writes the GEDCOM text at
+ * `<prefix>/gedcom.ged` and, for a GedZip, each media file under
+ * `<prefix>/media/` -- see `@rootward/gedcom`'s `media-storage-keys` module,
+ * which both this and the `gedcom-import` edge function's gateway import so
+ * the object-name/key contract can't drift between the two sides. */
+export function importStoragePrefix(jobId: string): string {
+  return `${IMPORTS_BUCKET}/${jobId}`;
 }
 
 /**
@@ -69,7 +81,7 @@ export async function createImportJob(
     mode: job.mode ?? "initial",
     filename: job.filename,
     started_by: job.startedBy,
-    storage_path: gedcomStoragePath(job.id),
+    storage_path: importStoragePrefix(job.id),
   };
   const { error } = await client.from("import_job").insert(row);
 
@@ -79,26 +91,48 @@ export async function createImportJob(
 }
 
 /**
- * Upload the chosen file to `imports/<jobId>.ged` -- a plain GEDCOM, or a
- * GedZip bundling the GEDCOM with the media its `FILE` tags point at (issue
- * #101); `gedcom-import` tells the two apart by magic bytes, not this key's
- * extension, so the storage path stays `.ged` either way. `upsert` so a retry
- * of the same job overwrites rather than 409s.
+ * Upload a client-unzipped {@link PreparedImport} to the job's storage
+ * prefix: the GEDCOM text at `<jobId>/gedcom.ged`, then each media file
+ * (a GedZip's photos, already unzipped by `prepareImportUpload` -- issue
+ * #104) at its own key under `<jobId>/media/`. Sequential, not
+ * `Promise.all` -- a real GedZip uploads well over a hundred small objects,
+ * and unbounded concurrency has no precedent elsewhere in this codebase to
+ * justify the added complexity for what is, locally, a fast loop either way.
+ * `upsert` throughout so a retry of the same job overwrites rather than 409s.
  */
-export async function uploadGedcomFile(
+export async function uploadImportFiles(
   client: Db,
   jobId: string,
-  file: Blob,
+  prepared: PreparedImport,
 ): Promise<void> {
-  const { error } = await client.storage
+  const { error: gedcomError } = await client.storage
     .from(IMPORTS_BUCKET)
-    .upload(`${jobId}.ged`, file, {
-      upsert: true,
-      contentType: file.type !== "" ? file.type : "application/octet-stream",
-    });
+    .upload(
+      `${jobId}/${GEDCOM_OBJECT_NAME}`,
+      new TextEncoder().encode(prepared.gedcomText),
+      { upsert: true, contentType: "text/plain" },
+    );
+  if (gedcomError !== null) {
+    throw new Error(
+      `uploadImportFiles(${jobId}): gedcom text: ${gedcomError.message}`,
+    );
+  }
 
-  if (error !== null) {
-    throw new Error(`uploadGedcomFile(${jobId}): ${error.message}`);
+  let index = 0;
+  for (const [archivePath, bytes] of prepared.mediaFiles) {
+    const key = `${jobId}/${MEDIA_SUBPREFIX}/${encodeMediaStorageKey(index, archivePath)}`;
+    index += 1;
+    const { error } = await client.storage
+      .from(IMPORTS_BUCKET)
+      .upload(key, bytes, {
+        upsert: true,
+        contentType: "application/octet-stream",
+      });
+    if (error !== null) {
+      throw new Error(
+        `uploadImportFiles(${jobId}): ${archivePath}: ${error.message}`,
+      );
+    }
   }
 }
 

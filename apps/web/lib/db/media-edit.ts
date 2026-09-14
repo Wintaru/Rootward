@@ -162,7 +162,7 @@ function stagingExtension(filename: string, mimeType: string): string {
 
 /**
  * Upload the chosen file to a fresh staging key in the private `media`
- * bucket — the moderator's own session, mirroring `uploadGedcomFile`'s
+ * bucket — the moderator's own session, mirroring `uploadImportFiles`'s
  * upload-before-invoke shape. A random key (not the job/person id) because a
  * person can upload many photos in one sitting; `media-process` removes the
  * staging object once it has read it.

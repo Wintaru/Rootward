@@ -622,9 +622,13 @@ rejected file (size, MIME) stays reference-only and is reported in
 - Reads `import_job`, streams the GEDCOM, processes in batches of N records,
   writes `processed_records` and `cursor` after each batch so a timeout resumes
   cleanly on the next invocation (self-reinvoke or client re-poll).
-- The upload is read by magic bytes, not its filename: a plain `.ged`/text
-  file, or a zip (GedZip, issue #101) — detected either way, so the storage
-  key's extension does not matter. A zip's media files are matched and
+- The picked file is read by magic bytes in the browser, not its filename: a
+  plain `.ged`/text file, or a zip (GedZip, issue #101). A GedZip is unzipped
+  client-side before upload — not by this function — so its media never has
+  to fit in the function's own memory as one archive (issue #104); the
+  browser uploads the GEDCOM text and each media file as separate objects
+  under the job's storage prefix (`@rootward/gedcom`'s `media-storage-keys`
+  module owns that key shape). A GedZip's media files are matched and
   attached during the `media` phase (§6); everything else about the run is
   unchanged.
 - `mode`:

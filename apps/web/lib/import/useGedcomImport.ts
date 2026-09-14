@@ -7,7 +7,7 @@ import {
   getImportJob,
   type ImportJob,
   invokeGedcomImport,
-  uploadGedcomFile,
+  uploadImportFiles,
 } from "@/lib/db";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
@@ -18,6 +18,7 @@ import {
   POLL_MS,
   type ImportFlowState,
 } from "./orchestrator";
+import { prepareImportUpload } from "./prepare-upload";
 
 /** Consecutive poll failures tolerated before the flow gives up. A blip must
  * not strand a job that is still resuming server-side. */
@@ -64,12 +65,23 @@ export function useGedcomImport(startedBy: string): UseGedcomImport {
       void (async () => {
         const jobId = crypto.randomUUID();
         try {
+          const prepared = await prepareImportUpload(file);
+          if (prepared.unsafePaths.length > 0) {
+            // A well-formed GedZip never has these; surfacing to the console
+            // rather than the job's own `warnings` keeps this off the
+            // engine's stats, which the archive itself never reaches (issue
+            // #104) — nothing server-side observes a dropped path.
+            console.warn(
+              `${file.name}: dropped ${prepared.unsafePaths.length.toString()} unsafe archive path(s), not uploaded:`,
+              prepared.unsafePaths,
+            );
+          }
           await createImportJob(supabase, {
             id: jobId,
             filename: file.name,
             startedBy,
           });
-          await uploadGedcomFile(supabase, jobId, file);
+          await uploadImportFiles(supabase, jobId, prepared);
           await invokeGedcomImport(supabase, jobId);
           const job = await getImportJob(supabase, jobId);
           dispatch({

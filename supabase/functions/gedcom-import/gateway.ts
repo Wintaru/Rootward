@@ -6,7 +6,11 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { isZip, readGedZip, readMediaEntries } from "@rootward/gedcom";
+import {
+  decodeMediaStorageKey,
+  GEDCOM_OBJECT_NAME,
+  MEDIA_SUBPREFIX,
+} from "@rootward/gedcom";
 
 import type { TreeMediaSettings } from "../_shared/media-pipeline.ts";
 import type { MediaBytesPatch } from "./media-attach.ts";
@@ -24,6 +28,10 @@ import type {
 
 /** Fallback bucket when `import_job.storage_path` carries no `bucket/` prefix. */
 const DEFAULT_BUCKET = "imports";
+
+/** `storage.list()` page size -- comfortably above a real GedZip's typical
+ * file count, with pagination below in case one ever exceeds it. */
+const STORAGE_LIST_PAGE_SIZE = 1000;
 
 /** Private bucket `media-process` and, now, `gedcom-import` write processed
  * objects into (`20260901111850_media_bucket.sql`) -- same bucket, same path
@@ -63,45 +71,48 @@ export function createSupabaseGateway(supabase: SupabaseClient): ImportGateway {
     },
 
     async downloadSource(storagePath: string): Promise<ImportSource> {
-      const [bucket, key] = splitStoragePath(storagePath);
-      const bytes = await downloadBytes(supabase, bucket, key);
-      // A GedZip (issue #101): the upload carries the media its FILE tags
-      // point at alongside the .ged text, detected by magic bytes rather than
-      // the storage key's extension so a mislabeled upload still works.
-      if (isZip(bytes)) {
-        const zip = readGedZip(bytes);
-        return {
-          gedcomText: zip.gedcomText,
-          mediaEntryNames: zip.mediaEntryNames,
-          // Deliberately re-downloads rather than closing over `bytes`
-          // above: a real GedZip's archive can run to tens of megabytes,
-          // and the edge runtime's per-invocation memory ceiling is fixed
-          // (256 MB locally) regardless of how little of it we've actually
-          // decompressed. Keeping the whole compressed archive alive in a
-          // closure for the rest of the invocation left no headroom for the
-          // media phase's own real cost -- WASM image decode/resize/encode
-          // of full-resolution photos -- and OOM'd the worker even once
-          // decompression itself was already batch-scoped (issue #104). One
-          // extra local-network download of an archive already proven to
-          // exist is worth letting this call's copy of it be freed before
-          // that decode work runs, instead of paying for both at once. The
-          // media phase reinvokes per batch (`importer.ts`), so this doubles
-          // the archive's Storage bandwidth for each of those invocations --
-          // real, but bounded (two downloads per call, not unbounded), and a
-          // Storage read is far cheaper to recover from than an OOM'd worker.
-          readMediaBytes: async (paths) => {
-            if (paths.length === 0) {
-              return new Map();
-            }
-            const archiveBytes = await downloadBytes(supabase, bucket, key);
-            return readMediaEntries(archiveBytes, new Set(paths));
-          },
-        };
-      }
+      // `storagePath` is a job's storage *prefix* (`imports/<jobId>`), not a
+      // single object -- see the constants above. This function never reads
+      // more than one small object at a time: the GEDCOM text, then later,
+      // per media batch, only the handful of photos that batch needs. No
+      // archive is ever downloaded or decompressed here (issue #104) --
+      // that already happened client-side, before upload, where memory is
+      // not capped at 256 MB.
+      const [bucket, prefix] = splitStoragePath(storagePath);
+      const gedcomBytes = await downloadBytes(
+        supabase,
+        bucket,
+        `${prefix}/${GEDCOM_OBJECT_NAME}`,
+      );
+      const mediaPrefix = `${prefix}/${MEDIA_SUBPREFIX}`;
+      const keyByArchivePath = await listMediaObjects(
+        supabase,
+        bucket,
+        mediaPrefix,
+      );
+
       return {
-        gedcomText: new TextDecoder().decode(bytes),
-        mediaEntryNames: [],
-        readMediaBytes: () => Promise.resolve(new Map()),
+        gedcomText: new TextDecoder().decode(gedcomBytes),
+        mediaEntryNames: [...keyByArchivePath.keys()],
+        readMediaBytes: async (paths) => {
+          const found = await Promise.all(
+            paths.map(async (path) => {
+              const key = keyByArchivePath.get(path);
+              if (key === undefined) {
+                return null;
+              }
+              return [
+                path,
+                await downloadBytes(supabase, bucket, key),
+              ] as const;
+            }),
+          );
+          return new Map(
+            found.filter((entry): entry is readonly [string, Uint8Array] =>
+              entry !== null
+            ),
+          );
+        },
       };
     },
 
@@ -233,6 +244,40 @@ async function downloadBytes(
     );
   }
   return new Uint8Array(await data.arrayBuffer());
+}
+
+/** Every media object under a job's `media/` prefix, keyed by the archive
+ * path its storage key decodes to (see `GEDCOM_OBJECT_NAME` comment above).
+ * A plain `.ged` import (no `media/` objects at all) returns an empty map --
+ * `list()` on an empty prefix is not an error. An entry whose key does not
+ * decode (never written by this app) is silently skipped rather than failing
+ * the whole import over one stray object. */
+async function listMediaObjects(
+  supabase: SupabaseClient,
+  bucket: string,
+  mediaPrefix: string,
+): Promise<Map<string, string>> {
+  const keyByArchivePath = new Map<string, string>();
+  for (let offset = 0;; offset += STORAGE_LIST_PAGE_SIZE) {
+    const { data, error } = await supabase.storage
+      .from(bucket)
+      .list(mediaPrefix, { limit: STORAGE_LIST_PAGE_SIZE, offset });
+    if (error !== null) {
+      throw new Error(`list ${bucket}/${mediaPrefix}: ${error.message}`);
+    }
+    for (const entry of data) {
+      const decoded = decodeMediaStorageKey(entry.name);
+      if (decoded !== null) {
+        keyByArchivePath.set(
+          decoded.archivePath,
+          `${mediaPrefix}/${entry.name}`,
+        );
+      }
+    }
+    if (data.length < STORAGE_LIST_PAGE_SIZE) {
+      return keyByArchivePath;
+    }
+  }
 }
 
 function normalizeStats(value: unknown): ImportStats {

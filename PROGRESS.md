@@ -5,6 +5,31 @@ the relevant `docs/SPEC.md` section.
 
 ## Current state
 
+**Issue #104 — GedZip import OOM'd the edge function worker: fixed by moving
+unzip to the browser, staged on branch `feat/client-side-gedzip-unzip`, issue
+still open pending live confirmation.** A real ~61 MB/128-photo GedZip
+crashed `gedcom-import`'s worker (`memory limit reached`) even after an
+earlier same-day fix made archive decompression batch-scoped — the local
+Supabase CLI hardcodes a 256 MB per-invocation ceiling (no `config.toml`
+override) and just downloading a real archive into that budget left no room
+for the media phase's own WASM image-decode cost. Real fix: the browser now
+unzips a GedZip itself (`apps/web/lib/import/prepare-upload.ts`, using
+`readGedZip`/`readMediaEntries` from `@rootward/gedcom` — now a real
+`apps/web` dependency, mirroring the `@rootward/shared` wiring) and uploads
+the GEDCOM text plus each media file as its own small Storage object under
+`imports/<jobId>/`; `gedcom-import/gateway.ts` no longer touches a zip at
+all, just small per-file downloads. The object-name/key contract
+(`packages/gedcom/src/media-storage-keys.ts`) is a new portable module so
+the browser and edge function can't drift on it. Full verify gate is green
+(unit/integration tests, including a real-fflate round-trip), but this
+session could not confirm it live end to end — hit an unrelated local
+Docker/OrbStack container-mount regression (the edge-runtime container
+currently can't see anything outside `supabase/functions/`, breaking every
+function that imports `@rootward/shared`, confirmed pre-existing and
+unrelated to this diff). Next session: confirm the local Docker environment
+is healthy, then actually run a real GedZip through `/import` before closing
+#104.
+
 **Wipe tree: added a "skip the automatic backup" checkbox, staged on branch
 `feat/wipe-tree-skip-backup`, no issue filed (small, same-session request).**
 `WipeTreeSection.tsx` only — decision 33's automatic `manual_gedcom` backup

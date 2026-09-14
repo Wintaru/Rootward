@@ -104,14 +104,16 @@ export interface ImportJobPatch {
 export type NotificationType = "import_finished" | "import_failed";
 
 /** What `downloadSource` reads back from the private bucket: the GEDCOM text
- * always, plus (when the upload was a GedZip, issue #101) every other
- * archive entry's *name*, for the `media` phase to match `FILE` values
- * against -- not its bytes, which can run to tens of megabytes across a
- * whole archive. `readMediaBytes` decompresses only the paths asked for,
- * from the same already-downloaded archive, so a batch that needs three
- * photos pays to inflate three photos, not the other 125 files alongside
- * them. A plain `.ged` upload yields an empty `mediaEntryNames` and a
- * `readMediaBytes` that always resolves to an empty map. */
+ * always, plus (when the upload was a GedZip, issue #101) the archive *path*
+ * of every media file the browser already unzipped and uploaded as its own
+ * object before this job ever ran (issue #104) -- not its bytes, which
+ * across a whole archive can run to tens of megabytes, far more than this
+ * worker's fixed memory budget affords holding at once. `readMediaBytes`
+ * downloads only the paths asked for, one small Storage object each, so a
+ * batch that needs three photos fetches three small files, not the other
+ * 125 alongside them. A plain `.ged` upload yields an empty
+ * `mediaEntryNames` and a `readMediaBytes` that always resolves to an empty
+ * map. */
 export interface ImportSource {
   readonly gedcomText: string;
   readonly mediaEntryNames: readonly string[];
@@ -295,8 +297,8 @@ async function ingest(
   const parsed = readGedcom(source.gedcomText);
   // Only a GedZip upload carries archive entries -- skip the extra round trip
   // (and the index build) entirely for a plain `.ged` import. Building the
-  // index only needs entry *names*, not their (possibly tens-of-megabytes)
-  // decompressed bytes.
+  // index only needs entry *names*, not their (possibly tens-of-megabytes,
+  // in aggregate) bytes.
   const mediaSettings = source.mediaEntryNames.length > 0
     ? await gateway.loadMediaSettings()
     : null;
@@ -364,7 +366,7 @@ async function ingest(
       if (attachingMedia) {
         // Resolve every item's archive match first, in slice order --
         // `matchMediaFile`'s basename-tier claiming is stateful and must run
-        // in order regardless of what gets decompressed. Only once the
+        // in order regardless of which bytes get fetched. Only once the
         // matches are known do we ask for bytes, and only for the (at most
         // `MEDIA_ATTACH_BATCH_SIZE`) archive paths this batch actually
         // needs -- not the whole archive, which is what made a real GedZip's
@@ -419,8 +421,8 @@ async function ingest(
       // between batches small enough to matter. Gated on there being more
       // media left in this phase (`cursor.offset < items.length`) -- without
       // that, the batch that finishes the phase would still force one more,
-      // wholly unnecessary invocation (a full archive re-download/re-unzip
-      // and GEDCOM re-parse) just to discover there is nothing left to do.
+      // wholly unnecessary invocation (a GEDCOM re-download and re-parse)
+      // just to discover there is nothing left to do.
       const moreMediaWork = attachingMedia && cursor.offset < items.length;
       if (
         (moreMediaWork || now() - startedAt > budgetMs) &&
