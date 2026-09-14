@@ -5,6 +5,34 @@ the relevant `docs/SPEC.md` section.
 
 ## Current state
 
+**Issue #107 — Media viewer: rotate and crop without touching the original:
+done, staged on branch `feat/media-rotate-crop`, issue closed.** Josh asked
+for rotate (and crop) controls. Migration `20260914170500_media_transform`
+adds `media.rotation` (0/90/180/270, CHECK) and an all-or-nothing
+`crop_x/y/width/height` rect (CHECK; pgTAP `media_transform_test.sql`). The
+edit is non-destructive: `@rootward/media` gained a pure `transform.ts`
+(`rotateImage` / `cropImage` / `applyTransform`, unit-tested) and a shared
+`generateDerivatives`; the browser (`lib/media/regenerate.ts`) downloads the
+original over its signed URL, decodes it with the same `@jsquash` codecs,
+applies the transform, encodes the thumb/display pair, and uploads it under
+`<id>/thumb-<token>.webp` (a fresh path, because the signed-URL path is the
+browser's cache key). `applyMediaTransformAction` (`app/media/[mediaId]/
+actions.ts`) then repoints the row with an `updated_at` version check and
+removes the superseded objects — the client sends only the random token,
+never a path. UI is `components/media/MediaTransformEditor.tsx` on the
+`/media/[mediaId]` viewer for active moderators with a JPEG/PNG/WebP
+original: rotate left/right, drag-crop (`react-image-crop`, new dependency —
+see `DECISIONS.md` 2026-09-14 17:04), clear crop, reset to original; the
+crop is kept in percent of the rotated preview and carried through rotation
+by `rotateCropPercent`. Confirmed live on the Donner wedding photo: rotate +
+crop saved (row `rotation=90`, crop `605,806 1814×2016`), old
+`thumb.webp`/`display.webp` removed, viewer shows the new derivative;
+reopening seeds the stored crop with Save disabled; "Reset to original" +
+Save restores it. Follow-ups filed: #108 (apply EXIF `Orientation` at
+upload — the likely root cause of sideways photos) and #109 (pgTAP bucket
+and seed tests assume an empty local DB — four files fail on this shared
+stack for that reason alone, CI's fresh DB is unaffected).
+
 **Issue #105 — Tree card shows the person's primary photo: done, staged on
 branch `feat/tree-card-primary-photo`, issue closed.** SPEC §8.2 always said
 the card shows the photo, but #21's card and #34's primary photo were never

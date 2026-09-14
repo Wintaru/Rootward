@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { isRotation, type MediaTransform } from "@rootward/media";
 
 import type { Database } from "./database.types";
 import type { GenealogyDateColumns } from "./genealogy-date";
@@ -21,17 +22,23 @@ type Db = SupabaseClient<Database>;
  */
 
 const MEDIA_COLUMNS =
-  "id, title, original_filename, mime_type, size_bytes, storage_path_display, storage_path_original, date_value_raw, date_kind, date_year1, date_month1, date_day1, date_year2, date_month2, date_day2, date_calendar, date_dual_year, date_phrase";
+  "id, updated_at, title, original_filename, mime_type, size_bytes, storage_path_display, storage_path_original, rotation, crop_x, crop_y, crop_width, crop_height, date_value_raw, date_kind, date_year1, date_month1, date_day1, date_year2, date_month2, date_day2, date_calendar, date_dual_year, date_phrase";
 
 type MediaDbRow = Pick<
   Database["public"]["Tables"]["media"]["Row"],
   | "id"
+  | "updated_at"
   | "title"
   | "original_filename"
   | "mime_type"
   | "size_bytes"
   | "storage_path_display"
   | "storage_path_original"
+  | "rotation"
+  | "crop_x"
+  | "crop_y"
+  | "crop_width"
+  | "crop_height"
   | "date_value_raw"
   | "date_kind"
   | "date_year1"
@@ -58,6 +65,9 @@ export interface MediaDetailLink {
 
 export interface MediaDetail {
   readonly id: string;
+  /** Version stamp for the rotate/crop editor's version-checked save
+   * (decision 26) -- the same `updated_at` guard every edit section uses. */
+  readonly updatedAt: string;
   readonly title: string | null;
   readonly originalFilename: string | null;
   readonly mimeType: string | null;
@@ -65,6 +75,9 @@ export interface MediaDetail {
   readonly date: GenealogyDateColumns;
   readonly storagePathDisplay: string | null;
   readonly storagePathOriginal: string | null;
+  /** The rotate/crop currently baked into the derivatives (migration
+   * `20260914170500_media_transform.sql`). */
+  readonly transform: MediaTransform;
   readonly links: readonly MediaDetailLink[];
 }
 
@@ -135,6 +148,7 @@ export async function getMediaDetail(
 
   return {
     id: media.id,
+    updatedAt: media.updated_at,
     title: media.title,
     originalFilename: media.original_filename,
     mimeType: media.mime_type,
@@ -142,6 +156,7 @@ export async function getMediaDetail(
     date: pickDateColumns(media),
     storagePathDisplay: media.storage_path_display,
     storagePathOriginal: media.storage_path_original,
+    transform: readTransform(media),
     links: links.map((link) => ({
       id: link.id,
       ownerType: link.owner_type,
@@ -154,6 +169,32 @@ export async function getMediaDetail(
           : null,
     })),
   };
+}
+
+/** The row's `rotation` + `crop_*` columns as one {@link MediaTransform}.
+ * The CHECK constraints (`media_rotation_check`, `media_crop_check`) make a
+ * bad rotation or a half-set crop unstorable, so the fallbacks here only
+ * guard the TypeScript side of that contract. */
+export function readTransform(row: {
+  readonly rotation: number;
+  readonly crop_x: number | null;
+  readonly crop_y: number | null;
+  readonly crop_width: number | null;
+  readonly crop_height: number | null;
+}): MediaTransform {
+  const crop =
+    row.crop_x !== null &&
+    row.crop_y !== null &&
+    row.crop_width !== null &&
+    row.crop_height !== null
+      ? {
+          x: row.crop_x,
+          y: row.crop_y,
+          width: row.crop_width,
+          height: row.crop_height,
+        }
+      : null;
+  return { rotation: isRotation(row.rotation) ? row.rotation : 0, crop };
 }
 
 function personDisplayName(person: {

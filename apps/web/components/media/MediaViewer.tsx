@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 
 import type { MediaDetailView } from "@/lib/media/view-model";
 
@@ -6,9 +7,17 @@ import type { MediaDetailView } from "@/lib/media/view-model";
  * Presentational `/media/[mediaId]` viewer (SPEC §8.3, §10 item 34). Every
  * string and URL comes from `buildMediaDetailView` — this file only lays
  * them out, mirroring `PersonProfile`'s server-component-with-no-state
- * shape.
+ * shape. `editor` is the moderator-only rotate/crop control the page
+ * decides whether to render (`MediaTransformEditor`), slotted in below the
+ * image so this component stays free of client state.
  */
-export function MediaViewer({ view }: { readonly view: MediaDetailView }) {
+export function MediaViewer({
+  view,
+  editor = null,
+}: {
+  readonly view: MediaDetailView;
+  readonly editor?: ReactNode;
+}) {
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 px-6 py-12">
       <header className="flex flex-col gap-1">
@@ -34,6 +43,8 @@ export function MediaViewer({ view }: { readonly view: MediaDetailView }) {
           </p>
         )}
       </div>
+
+      {editor}
 
       {view.downloadUrl !== null && (
         <a

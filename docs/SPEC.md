@@ -280,8 +280,10 @@ Republican are stored raw with `date_phrase` set, no conversion.
 | `mime_type` | text | |
 | `size_bytes` | bigint | |
 | `storage_path_original` | text | Path in the private bucket. |
-| `storage_path_thumb` | text | ~240px WebP. |
-| `storage_path_display` | text | ~1200px WebP. |
+| `storage_path_thumb` | text | ~240px WebP. Repointed at a fresh versioned path (`<id>/thumb-<token>.webp`) after a rotate/crop. |
+| `storage_path_display` | text | ~1200px WebP. Same versioning as the thumb. |
+| `rotation` | smallint | `0 · 90 · 180 · 270`, clockwise, default `0`. A non-destructive edit: the original is never rewritten, the derivatives are regenerated with it applied. |
+| `crop_x / crop_y / crop_width / crop_height` | integer | Optional crop rectangle in the *rotated* original's pixel space, all four set or all null (CHECK). Applied after `rotation` when the derivatives are regenerated. |
 | `title` | text | |
 | `date_*` | (embedded date set) | "Date taken". |
 | `exif` | jsonb | GPS stripped when `tree_settings.strip_exif_gps` (default true). |
@@ -665,6 +667,12 @@ rejected file (size, MIME) stays reference-only and is reported in
 - Generates `thumb` (~240px) and `display` (~1200px) WebP. Converts HEIC → WebP.
 - Strips EXIF GPS when `strip_exif_gps`; keeps "date taken" → `media.date_*`.
 - Writes the `media` row + `media_link`.
+- A later rotate/crop (§8.3's `/media` editor) does not go through this
+  function: the browser regenerates the thumb/display pair from the original
+  with `media.rotation` / `media.crop_*` applied (the `@rootward/media`
+  pipeline, client-side as in issue #104), uploads it under a fresh
+  versioned path, and a server action repoints the row and removes the
+  superseded objects. The original object is never modified.
 
 ### `onboarding-match` — decision 24
 
@@ -951,6 +959,9 @@ frontend|auth|edge|infra`, `mvp`, `post-mvp`, `blocked`, `ready`.
 ### Phase 6 — Media
 33. `media-process` edge function (validate, thumb/display, HEIC, EXIF).
 34. Media upload + gallery + primary photo + `/media` viewer + Media section.
+    - *Added 2026-09-14:* rotate/crop on the `/media` viewer (moderators) —
+      non-destructive `media.rotation` + `media.crop_*`, derivatives
+      regenerated in the browser (§4.4, §7 `media-process`).
 
 ### Phase 7 — Moderation & settings
 35. Notification center + bell + Realtime + auto-resolve triggers.

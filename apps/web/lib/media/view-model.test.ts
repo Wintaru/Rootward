@@ -21,6 +21,7 @@ const NO_DATE: GenealogyDateColumns = {
 function fixture(overrides: Partial<MediaDetail> = {}): MediaDetail {
   return {
     id: "media-1",
+    updatedAt: "2026-09-14T00:00:00Z",
     title: null,
     originalFilename: "photo.jpg",
     mimeType: "image/jpeg",
@@ -28,6 +29,7 @@ function fixture(overrides: Partial<MediaDetail> = {}): MediaDetail {
     date: NO_DATE,
     storagePathDisplay: "media-1/display.webp",
     storagePathOriginal: "media-1/original.jpg",
+    transform: { rotation: 0, crop: null },
     links: [],
     ...overrides,
   };

@@ -1,12 +1,14 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 
-import { isApproved } from "@/lib/auth/access";
+import { isActiveModerator, isApproved } from "@/lib/auth/access";
 import { getCurrentAccount } from "@/lib/auth/current-account";
 import { getMediaDetail } from "@/lib/db/media";
 import { getSignedMediaUrl } from "@/lib/db/media-urls";
+import { isEditableMime } from "@/lib/media/transform-editor";
 import { buildMediaDetailView } from "@/lib/media/view-model";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { MediaTransformEditor } from "@/components/media/MediaTransformEditor";
 import { MediaViewer } from "@/components/media/MediaViewer";
 
 export const metadata: Metadata = {
@@ -28,6 +30,11 @@ export const metadata: Metadata = {
  * moderator-only, so even an approved member's own session cannot sign these
  * paths itself. Only paths `getMediaDetail` already returned (already
  * confirmed visible) are ever passed in.
+ *
+ * A moderator also gets the rotate/crop editor (SPEC §8.3) when the
+ * original is a format the browser can decode -- `media_write` RLS is the
+ * real gate; the `isActiveModerator` check only decides whether to render
+ * the control.
  */
 export default async function MediaPage({
   params,
@@ -53,7 +60,26 @@ export default async function MediaPage({
     getSignedMediaUrl(data.storagePathOriginal),
   ]);
 
+  const canEdit =
+    isActiveModerator(current.account) &&
+    data.mimeType !== null &&
+    isEditableMime(data.mimeType) &&
+    originalUrl !== null;
+
   return (
-    <MediaViewer view={buildMediaDetailView(data, displayUrl, originalUrl)} />
+    <MediaViewer
+      view={buildMediaDetailView(data, displayUrl, originalUrl)}
+      editor={
+        canEdit ? (
+          <MediaTransformEditor
+            mediaId={data.id}
+            originalUrl={originalUrl}
+            mimeType={data.mimeType}
+            initial={data.transform}
+            updatedAt={data.updatedAt}
+          />
+        ) : null
+      }
+    />
   );
 }
