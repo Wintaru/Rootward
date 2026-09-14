@@ -377,7 +377,17 @@ export function FamilyTree({
     });
 
     chart.updateMainId(initial.mainId);
-    chart.updateTree({ initial: true, tree_position: "main_to_middle" });
+    // Not `initial: true`: in `family-chart` 0.9 that flag makes the first
+    // draw shrink-to-fit the whole tree regardless of `tree_position`, which
+    // is exactly the illegible all-the-way-out zoom the sync effect below
+    // avoids on a depth change. A zero-length non-initial update
+    // instead lands centred on the main card at full scale; the only
+    // thing given up is the library's staggered card fade-in.
+    chart.updateTree({
+      initial: false,
+      tree_position: "main_to_middle",
+      transition_time: 0,
+    });
     chartRef.current = chart;
 
     // `family-chart` has no teardown API. Clearing the container drops the SVG
@@ -404,7 +414,8 @@ export function FamilyTree({
       isFirstSync.current = false;
       return;
     }
-    // Always re-centre the main card at the current zoom level, never
+    // Always re-centre the main card at full scale (`main_to_middle` resets
+    // the zoom to 1 unless given a `scale`), never
     // shrink-to-fit the whole window (`family-chart`'s `"fit"` position) --
     // a depth-stepper increase on a person with many descendants can pull in
     // dozens of cards, and fitting all of them on screen at once makes every

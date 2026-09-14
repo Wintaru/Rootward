@@ -38,6 +38,15 @@ to Supabase CLI 2.115.0 is the known fix (see `git log` for
 `386c3fa`'s era or ask Josh; the standalone hand-off file for this was
 deleted once the issue was confirmed resolved).
 
+**Tree view: first load no longer shrinks a big tree to fit, staged on
+branch `fix/tree-initial-zoom`, no issue filed (follow-up to `fda42f8`).**
+That earlier fix only covered the depth-stepper path. `family-chart` 0.9's
+`updateTree({ initial: true })` runs its shrink-to-fit regardless of
+`tree_position`, so the initial draw still zoomed all the way out for a focus
+person with many descendants. `FamilyTree.tsx` now draws the first frame as a
+zero-length non-initial `main_to_middle` update — full scale, centred on the
+focus card. Confirmed live on a 97-card view (zoom `k = 1`, main card centred).
+
 **Wipe tree: added a "skip the automatic backup" checkbox, staged on branch
 `feat/wipe-tree-skip-backup`, no issue filed (small, same-session request).**
 `WipeTreeSection.tsx` only — decision 33's automatic `manual_gedcom` backup
