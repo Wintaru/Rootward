@@ -13,8 +13,7 @@
  * item to hang bytes off of, and stays reference-only as it always has.
  */
 
-import { matchMediaFile } from "@rootward/gedcom";
-import type { MediaFileIndex, ParsedMedia } from "@rootward/gedcom";
+import type { MatchedMediaFile, ParsedMedia } from "@rootward/gedcom";
 
 import {
   EXTENSION_FOR_MIME,
@@ -64,29 +63,30 @@ function warn(sink: WarnSink, message: string): void {
 
 /**
  * Attempt to attach archive bytes to `mediaId` (already `upsert`ed by
- * `buildMedia` this same batch). A miss -- no matching archive entry, a match
- * rejected by size/MIME, or an unexpected failure partway through (a
- * transient storage error, say) -- is recorded as a warning and leaves the
- * row reference-only, exactly like a plain `.ged` import with no archive at
- * all. One bad photo must not fail the whole import: everything from
- * `processMediaBytes` on is wrapped so a thrown error degrades to a warning
- * instead of propagating out of the media phase's batch loop.
+ * `buildMedia` this same batch). `match` and `bytes` are resolved by the
+ * caller: matching (`matchMediaFile`, against every item in the batch, in
+ * order) has to happen before any bytes are decompressed, because the
+ * whole batch's worth of needed archive paths gets decompressed in one
+ * targeted pass (`readMediaEntries`) rather than the whole archive up
+ * front -- see `importer.ts`'s media-phase batch loop. A miss -- no
+ * matching archive entry, a match rejected by size/MIME, or an unexpected
+ * failure partway through (a transient storage error, say) -- is recorded
+ * as a warning and leaves the row reference-only, exactly like a plain
+ * `.ged` import with no archive at all. One bad photo must not fail the
+ * whole import: everything from `processMediaBytes` on is wrapped so a
+ * thrown error degrades to a warning instead of propagating out of the
+ * media phase's batch loop.
  */
 export async function attachMediaFromArchive(
   mediaId: string,
   item: ParsedMedia,
-  index: MediaFileIndex,
-  claimedByBasename: Set<string>,
+  match: MatchedMediaFile | null,
+  bytes: Uint8Array | null,
   settings: TreeMediaSettings,
   deps: AttachMediaDeps,
   stats: WarnSink,
 ): Promise<void> {
-  const match = matchMediaFile(
-    item.original_filename,
-    index,
-    claimedByBasename,
-  );
-  if (match === null) {
+  if (match === null || bytes === null) {
     warn(
       stats,
       `media ${item.gedcom_xref}: "${
@@ -98,7 +98,7 @@ export async function attachMediaFromArchive(
 
   try {
     const outcome = await processMediaBytes(
-      match.bytes,
+      bytes,
       settings,
       deps.codec,
       deps.exif,

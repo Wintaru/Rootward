@@ -61,6 +61,10 @@ class FakeGateway implements ImportGateway {
   readonly rootWrites: string[] = [];
   /** Every object `writeMediaObject` was asked to write, path → bytes. */
   readonly writtenObjects = new Map<string, Uint8Array>();
+  /** Every `readMediaBytes` call's requested paths, in order — proof the
+   * engine asks for one batch's worth of archive entries at a time instead
+   * of the whole archive (issue #104). */
+  readonly readMediaBytesCalls: (readonly string[])[] = [];
   readonly mediaUpdates: { mediaId: string; patch: MediaBytesPatch }[] = [];
   loadMediaSettingsCalls = 0;
   private readonly gedcom: string;
@@ -110,7 +114,18 @@ class FakeGateway implements ImportGateway {
   downloadSource(): Promise<ImportSource> {
     return Promise.resolve({
       gedcomText: this.gedcom,
-      mediaFiles: this.mediaFiles,
+      mediaEntryNames: [...this.mediaFiles.keys()],
+      readMediaBytes: (paths: readonly string[]) => {
+        this.readMediaBytesCalls.push(paths);
+        return Promise.resolve(
+          new Map(
+            paths.flatMap((path) => {
+              const bytes = this.mediaFiles.get(path);
+              return bytes === undefined ? [] : [[path, bytes] as const];
+            }),
+          ),
+        );
+      },
     });
   }
 
@@ -662,5 +677,37 @@ Deno.test(
         String(PHOTO_COUNT)
       } photos at batch size 3, got ${String(reinvokes)}`,
     );
+  },
+);
+
+Deno.test(
+  "GedZip: each media batch asks for only that batch's archive entries, not the whole archive",
+  async () => {
+    const mediaFiles = new Map(
+      Array.from({ length: PHOTO_COUNT }, (_, i) => [
+        `photo-${String(i)}.jpg`,
+        JPEG_BYTES,
+      ]),
+    );
+    const gw = new FakeGateway({ gedcom: GEDCOM_MANY_PHOTOS, mediaFiles });
+
+    const outcome = await runToCompletion(gw, () => Promise.resolve());
+
+    assertEquals(outcome.status, "completed");
+    // 7 photos at batch size 3 is three `readMediaBytes` calls (3, 3, 1) --
+    // proof each call decompresses this batch's few entries, never all 7 at
+    // once (the bug that OOM'd the worker on a real, many-photo archive).
+    assertEquals(
+      gw.readMediaBytesCalls.map((paths) => paths.length),
+      [3, 3, 1],
+    );
+    for (const paths of gw.readMediaBytesCalls) {
+      assert(
+        paths.length <= 3,
+        `a single readMediaBytes call asked for ${
+          String(paths.length)
+        } archive entries, more than one batch's worth`,
+      );
+    }
   },
 );

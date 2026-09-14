@@ -55,7 +55,11 @@ class FakeImportGateway implements ImportGateway {
     return Promise.resolve({ ...this.job });
   }
   downloadSource(): Promise<ImportSource> {
-    return Promise.resolve({ gedcomText: this.gedcom, mediaFiles: new Map() });
+    return Promise.resolve({
+      gedcomText: this.gedcom,
+      mediaEntryNames: [],
+      readMediaBytes: () => Promise.resolve(new Map()),
+    });
   }
   loadMediaSettings(): Promise<TreeMediaSettings> {
     // Never called: this fixture never carries archive entries.

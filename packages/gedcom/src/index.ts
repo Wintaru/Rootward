@@ -15,6 +15,7 @@ export {
   isZip,
   matchMediaFile,
   readGedZip,
+  readMediaEntries,
 } from "./gedzip.ts";
 export type {
   GedZipContents,

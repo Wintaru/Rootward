@@ -25,60 +25,84 @@ export interface GedZipContents {
   readonly gedcomText: string;
   /** The archive path the `.ged`/`.gedcom` entry was read from. */
   readonly gedcomEntryName: string;
-  /** Every other entry, keyed by its archive path. */
-  readonly mediaFiles: ReadonlyMap<string, Uint8Array>;
+  /** Every other entry's archive path — bytes are *not* decompressed here.
+   * A real GedZip's media can run to tens of megabytes; a caller that only
+   * needs a handful of files (one import batch's worth) fetches those
+   * through {@link readMediaEntries} instead of paying to inflate the whole
+   * archive up front. */
+  readonly mediaEntryNames: readonly string[];
 }
 
 const GEDCOM_EXTENSIONS = [".ged", ".gedcom"];
 
 /**
- * Unpack a GedZip: the first `.ged`/`.gedcom` entry (by extension, first in
- * archive order) becomes {@link GedZipContents.gedcomText}; everything else
- * is a candidate media file. Throws if the archive has no GEDCOM entry — a
- * zip with only photos in it is not a GedZip.
+ * Read just the GEDCOM text out of a GedZip: the first `.ged`/`.gedcom`
+ * entry (by extension, first in archive order). Every other entry is listed
+ * by name in {@link GedZipContents.mediaEntryNames} but left compressed —
+ * `fflate`'s `unzipSync` inflates an entry only when its `filter` callback
+ * accepts it, and the callback here accepts only the winning GEDCOM entry,
+ * so this call's cost stays proportional to the archive's entry count, not
+ * its total uncompressed size. Throws if the archive has no GEDCOM entry —
+ * a zip with only photos in it is not a GedZip.
  */
 export function readGedZip(bytes: Uint8Array): GedZipContents {
-  const entries = unzipSync(bytes);
-
   let gedcomEntryName: string | null = null;
-  let gedcomBytes: Uint8Array | null = null;
-  const mediaFiles = new Map<string, Uint8Array>();
+  const mediaEntryNames: string[] = [];
 
-  for (const [name, data] of Object.entries(entries)) {
-    if (name.endsWith("/")) {
-      continue; // directory entry
-    }
-    const lower = name.toLowerCase();
-    if (
-      gedcomBytes === null &&
-      GEDCOM_EXTENSIONS.some((ext) => lower.endsWith(ext))
-    ) {
-      gedcomEntryName = name;
-      gedcomBytes = data;
-      continue;
-    }
-    mediaFiles.set(name, data);
-  }
+  const entries = unzipSync(bytes, {
+    filter(file) {
+      if (file.name.endsWith("/")) {
+        return false; // directory entry
+      }
+      const lower = file.name.toLowerCase();
+      if (
+        gedcomEntryName === null &&
+        GEDCOM_EXTENSIONS.some((ext) => lower.endsWith(ext))
+      ) {
+        gedcomEntryName = file.name;
+        return true;
+      }
+      mediaEntryNames.push(file.name);
+      return false;
+    },
+  });
 
-  if (gedcomBytes === null || gedcomEntryName === null) {
+  if (gedcomEntryName === null) {
     throw new Error("GedZip archive has no .ged/.gedcom entry");
   }
+  const gedcomBytes = entries[gedcomEntryName] as Uint8Array;
 
   return {
     gedcomText: new TextDecoder().decode(gedcomBytes),
     gedcomEntryName,
-    mediaFiles,
+    mediaEntryNames,
   };
 }
 
+/**
+ * Decompress just the named archive entries — the current import batch's
+ * worth, typically a handful — instead of the whole archive. Callers first
+ * resolve which entries they need (via {@link matchMediaFile} against a
+ * {@link MediaFileIndex}), then ask for exactly those bytes.
+ */
+export function readMediaEntries(
+  bytes: Uint8Array,
+  paths: ReadonlySet<string>,
+): ReadonlyMap<string, Uint8Array> {
+  if (paths.size === 0) {
+    return new Map();
+  }
+  const entries = unzipSync(bytes, { filter: (file) => paths.has(file.name) });
+  return new Map(Object.entries(entries));
+}
+
 export interface MatchedMediaFile {
-  /** The archive path the bytes were actually found at. */
+  /** The archive path the entry was actually found at. */
   readonly path: string;
-  readonly bytes: Uint8Array;
 }
 
 export interface MediaFileIndex {
-  readonly files: ReadonlyMap<string, Uint8Array>;
+  readonly paths: ReadonlySet<string>;
   readonly byLowerPath: ReadonlyMap<string, string>;
   readonly byLowerBasename: ReadonlyMap<string, readonly string[]>;
 }
@@ -87,14 +111,16 @@ export interface MediaFileIndex {
  * Precompute the lookups {@link matchMediaFile} needs so matching an
  * archive's worth of `FILE` values against it is linear, not quadratic — a
  * media phase with hundreds of `OBJE` records against a similarly large
- * archive would otherwise rescan every entry per record.
+ * archive would otherwise rescan every entry per record. Names only — no
+ * bytes; a match just says *which* archive entry a `FILE` value resolves
+ * to, decompressed later (and only for entries actually matched) via
+ * {@link readMediaEntries}.
  */
-export function buildMediaFileIndex(
-  files: ReadonlyMap<string, Uint8Array>,
-): MediaFileIndex {
+export function buildMediaFileIndex(names: readonly string[]): MediaFileIndex {
+  const paths = new Set(names);
   const byLowerPath = new Map<string, string>();
   const byLowerBasename = new Map<string, string[]>();
-  for (const path of files.keys()) {
+  for (const path of names) {
     byLowerPath.set(path.toLowerCase(), path);
     const base = basename(path).toLowerCase();
     const list = byLowerBasename.get(base);
@@ -104,7 +130,7 @@ export function buildMediaFileIndex(
       list.push(path);
     }
   }
-  return { files, byLowerPath, byLowerBasename };
+  return { paths, byLowerPath, byLowerBasename };
 }
 
 /**
@@ -139,17 +165,13 @@ export function matchMediaFile(
   }
   const normalized = normalizeFilePath(filePath);
 
-  const exact = index.files.get(normalized);
-  if (exact !== undefined) {
-    return { path: normalized, bytes: exact };
+  if (index.paths.has(normalized)) {
+    return { path: normalized };
   }
 
   const ciPath = index.byLowerPath.get(normalized.toLowerCase());
   if (ciPath !== undefined) {
-    const bytes = index.files.get(ciPath);
-    if (bytes !== undefined) {
-      return { path: ciPath, bytes };
-    }
+    return { path: ciPath };
   }
 
   const target = basename(normalized).toLowerCase();
@@ -164,12 +186,8 @@ export function matchMediaFile(
   if (claimedByBasename.has(onlyPath)) {
     return null;
   }
-  const bytes = index.files.get(onlyPath);
-  if (bytes === undefined) {
-    return null;
-  }
   claimedByBasename.add(onlyPath);
-  return { path: onlyPath, bytes };
+  return { path: onlyPath };
 }
 
 /** True for `scheme://...` (`https://`, `ftp://`, …) per RFC 3986's scheme

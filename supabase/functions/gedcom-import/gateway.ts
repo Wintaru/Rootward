@@ -6,7 +6,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { isZip, readGedZip } from "@rootward/gedcom";
+import { isZip, readGedZip, readMediaEntries } from "@rootward/gedcom";
 
 import type { TreeMediaSettings } from "../_shared/media-pipeline.ts";
 import type { MediaBytesPatch } from "./media-attach.ts";
@@ -64,23 +64,44 @@ export function createSupabaseGateway(supabase: SupabaseClient): ImportGateway {
 
     async downloadSource(storagePath: string): Promise<ImportSource> {
       const [bucket, key] = splitStoragePath(storagePath);
-      const { data, error } = await supabase.storage.from(bucket).download(key);
-      if (error !== null || data === null) {
-        throw new Error(
-          `download ${bucket}/${key}: ${error?.message ?? "no data"}`,
-        );
-      }
-      const bytes = new Uint8Array(await data.arrayBuffer());
+      const bytes = await downloadBytes(supabase, bucket, key);
       // A GedZip (issue #101): the upload carries the media its FILE tags
       // point at alongside the .ged text, detected by magic bytes rather than
       // the storage key's extension so a mislabeled upload still works.
       if (isZip(bytes)) {
         const zip = readGedZip(bytes);
-        return { gedcomText: zip.gedcomText, mediaFiles: zip.mediaFiles };
+        return {
+          gedcomText: zip.gedcomText,
+          mediaEntryNames: zip.mediaEntryNames,
+          // Deliberately re-downloads rather than closing over `bytes`
+          // above: a real GedZip's archive can run to tens of megabytes,
+          // and the edge runtime's per-invocation memory ceiling is fixed
+          // (256 MB locally) regardless of how little of it we've actually
+          // decompressed. Keeping the whole compressed archive alive in a
+          // closure for the rest of the invocation left no headroom for the
+          // media phase's own real cost -- WASM image decode/resize/encode
+          // of full-resolution photos -- and OOM'd the worker even once
+          // decompression itself was already batch-scoped (issue #104). One
+          // extra local-network download of an archive already proven to
+          // exist is worth letting this call's copy of it be freed before
+          // that decode work runs, instead of paying for both at once. The
+          // media phase reinvokes per batch (`importer.ts`), so this doubles
+          // the archive's Storage bandwidth for each of those invocations --
+          // real, but bounded (two downloads per call, not unbounded), and a
+          // Storage read is far cheaper to recover from than an OOM'd worker.
+          readMediaBytes: async (paths) => {
+            if (paths.length === 0) {
+              return new Map();
+            }
+            const archiveBytes = await downloadBytes(supabase, bucket, key);
+            return readMediaEntries(archiveBytes, new Set(paths));
+          },
+        };
       }
       return {
         gedcomText: new TextDecoder().decode(bytes),
-        mediaFiles: new Map(),
+        mediaEntryNames: [],
+        readMediaBytes: () => Promise.resolve(new Map()),
       };
     },
 
@@ -198,6 +219,20 @@ function splitStoragePath(path: string): [bucket: string, key: string] {
     return [DEFAULT_BUCKET, path];
   }
   return [path.slice(0, slash), path.slice(slash + 1)];
+}
+
+async function downloadBytes(
+  supabase: SupabaseClient,
+  bucket: string,
+  key: string,
+): Promise<Uint8Array> {
+  const { data, error } = await supabase.storage.from(bucket).download(key);
+  if (error !== null || data === null) {
+    throw new Error(
+      `download ${bucket}/${key}: ${error?.message ?? "no data"}`,
+    );
+  }
+  return new Uint8Array(await data.arrayBuffer());
 }
 
 function normalizeStats(value: unknown): ImportStats {

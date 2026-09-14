@@ -6,6 +6,7 @@ import {
   isZip,
   matchMediaFile,
   readGedZip,
+  readMediaEntries,
 } from "./gedzip.ts";
 
 const text = (s: string) => new TextEncoder().encode(s);
@@ -27,7 +28,7 @@ describe("isZip", () => {
 });
 
 describe("readGedZip", () => {
-  it("splits the .ged entry from the media entries", () => {
+  it("splits the .ged entry from the media entry names", () => {
     const archive = zipSync({
       "tree.ged": text("0 HEAD\n0 TRLR\n"),
       "media/jane.jpg": jpeg("jane"),
@@ -38,7 +39,7 @@ describe("readGedZip", () => {
 
     expect(result.gedcomEntryName).toBe("tree.ged");
     expect(result.gedcomText).toBe("0 HEAD\n0 TRLR\n");
-    expect([...result.mediaFiles.keys()].sort()).toEqual([
+    expect([...result.mediaEntryNames].sort()).toEqual([
       "media/jane.jpg",
       "media/john.jpg",
     ]);
@@ -54,7 +55,7 @@ describe("readGedZip", () => {
     const result = readGedZip(archive);
 
     expect(result.gedcomEntryName).toBe("export.gedcom");
-    expect(result.mediaFiles.size).toBe(1);
+    expect(result.mediaEntryNames).toEqual(["media/jane.jpg"]);
   });
 
   it("throws when the archive has no GEDCOM entry", () => {
@@ -63,12 +64,28 @@ describe("readGedZip", () => {
   });
 });
 
+describe("readMediaEntries", () => {
+  it("decompresses only the requested paths", () => {
+    const archive = zipSync({
+      "tree.ged": text("0 HEAD\n0 TRLR\n"),
+      "media/jane.jpg": jpeg("jane"),
+      "media/john.jpg": jpeg("john"),
+    });
+
+    const result = readMediaEntries(archive, new Set(["media/jane.jpg"]));
+
+    expect([...result.keys()]).toEqual(["media/jane.jpg"]);
+    expect(result.get("media/jane.jpg")).toEqual(jpeg("jane"));
+  });
+
+  it("returns an empty map for an empty request without touching the archive", () => {
+    const archive = zipSync({ "tree.ged": text("0 HEAD\n0 TRLR\n") });
+    expect(readMediaEntries(archive, new Set()).size).toBe(0);
+  });
+});
+
 describe("matchMediaFile", () => {
-  const files = new Map([
-    ["media/jane.jpg", jpeg("jane")],
-    ["media/John Doe.jpg", jpeg("john")],
-  ]);
-  const index = buildMediaFileIndex(files);
+  const index = buildMediaFileIndex(["media/jane.jpg", "media/John Doe.jpg"]);
   const noClaims = () => new Set<string>();
 
   it("returns null for a null or empty path", () => {
@@ -85,7 +102,6 @@ describe("matchMediaFile", () => {
   it("matches an exact zip-relative path", () => {
     const match = matchMediaFile("media/jane.jpg", index, noClaims());
     expect(match?.path).toBe("media/jane.jpg");
-    expect(match?.bytes).toBe(files.get("media/jane.jpg"));
   });
 
   it("matches case-insensitively", () => {
@@ -112,12 +128,7 @@ describe("matchMediaFile", () => {
   });
 
   it("refuses an ambiguous basename match", () => {
-    const ambiguous = buildMediaFileIndex(
-      new Map([
-        ["a/photo.jpg", jpeg("a")],
-        ["b/photo.jpg", jpeg("b")],
-      ]),
-    );
+    const ambiguous = buildMediaFileIndex(["a/photo.jpg", "b/photo.jpg"]);
     expect(
       matchMediaFile("/elsewhere/photo.jpg", ambiguous, noClaims()),
     ).toBeNull();

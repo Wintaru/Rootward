@@ -23,11 +23,13 @@
 
 import {
   buildMediaFileIndex,
+  matchMediaFile,
   normalizePlaceName,
   readGedcom,
 } from "@rootward/gedcom";
 import type {
   GedcomReadResult,
+  MatchedMediaFile,
   ParsedCitation,
   ParsedFamily,
   ParsedMedia,
@@ -103,11 +105,19 @@ export type NotificationType = "import_finished" | "import_failed";
 
 /** What `downloadSource` reads back from the private bucket: the GEDCOM text
  * always, plus (when the upload was a GedZip, issue #101) every other
- * archive entry, keyed by its archive path, for the `media` phase to match
- * `FILE` values against. A plain `.ged` upload yields an empty map. */
+ * archive entry's *name*, for the `media` phase to match `FILE` values
+ * against -- not its bytes, which can run to tens of megabytes across a
+ * whole archive. `readMediaBytes` decompresses only the paths asked for,
+ * from the same already-downloaded archive, so a batch that needs three
+ * photos pays to inflate three photos, not the other 125 files alongside
+ * them. A plain `.ged` upload yields an empty `mediaEntryNames` and a
+ * `readMediaBytes` that always resolves to an empty map. */
 export interface ImportSource {
   readonly gedcomText: string;
-  readonly mediaFiles: ReadonlyMap<string, Uint8Array>;
+  readonly mediaEntryNames: readonly string[];
+  readMediaBytes(
+    paths: readonly string[],
+  ): Promise<ReadonlyMap<string, Uint8Array>>;
 }
 
 export interface ImportGateway extends MediaAttachGateway {
@@ -283,14 +293,15 @@ async function ingest(
 
   const source = await gateway.downloadSource(job.storage_path as string);
   const parsed = readGedcom(source.gedcomText);
-  const mediaFiles = source.mediaFiles;
   // Only a GedZip upload carries archive entries -- skip the extra round trip
-  // (and the index build) entirely for a plain `.ged` import.
-  const mediaSettings = mediaFiles.size > 0
+  // (and the index build) entirely for a plain `.ged` import. Building the
+  // index only needs entry *names*, not their (possibly tens-of-megabytes)
+  // decompressed bytes.
+  const mediaSettings = source.mediaEntryNames.length > 0
     ? await gateway.loadMediaSettings()
     : null;
-  const mediaFileIndex = mediaFiles.size > 0
-    ? buildMediaFileIndex(mediaFiles)
+  const mediaFileIndex = source.mediaEntryNames.length > 0
+    ? buildMediaFileIndex(source.mediaEntryNames)
     : null;
 
   const stats: ImportStats = {
@@ -351,12 +362,38 @@ async function ingest(
       await flush(gateway, byTable);
 
       if (attachingMedia) {
-        for (const m of slice as readonly ParsedMedia[]) {
+        // Resolve every item's archive match first, in slice order --
+        // `matchMediaFile`'s basename-tier claiming is stateful and must run
+        // in order regardless of what gets decompressed. Only once the
+        // matches are known do we ask for bytes, and only for the (at most
+        // `MEDIA_ATTACH_BATCH_SIZE`) archive paths this batch actually
+        // needs -- not the whole archive, which is what made a real GedZip's
+        // media phase OOM the worker (issue #104).
+        const matches = (slice as readonly ParsedMedia[]).map(
+          (
+            m,
+          ): {
+            readonly item: ParsedMedia;
+            readonly match: MatchedMediaFile | null;
+          } => ({
+            item: m,
+            match: matchMediaFile(
+              m.original_filename,
+              mediaFileIndex,
+              claimedByBasename,
+            ),
+          }),
+        );
+        const neededPaths = new Set(
+          matches.flatMap(({ match }) => (match === null ? [] : [match.path])),
+        );
+        const bytesByPath = await source.readMediaBytes([...neededPaths]);
+        for (const { item: m, match } of matches) {
           await attachMediaFromArchive(
             await id(jobId, m.gedcom_xref),
             m,
-            mediaFileIndex,
-            claimedByBasename,
+            match,
+            match === null ? null : bytesByPath.get(match.path) ?? null,
             mediaSettings,
             { gateway, codec: deps.mediaCodec, exif: deps.mediaExif },
             stats,
