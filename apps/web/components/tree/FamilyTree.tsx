@@ -1,6 +1,6 @@
 "use client";
 
-import { createChart } from "family-chart";
+import { createChart, type Datum } from "family-chart";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 
@@ -248,7 +248,8 @@ export function FamilyTree({
       .setOrientationVertical()
       // A missing partner means "outside the fetched neighbourhood", not
       // "unknown" — so no "add spouse" placeholder cards.
-      .setSingleParentEmptyCard(false);
+      .setSingleParentEmptyCard(false)
+      .setSortChildrenFunction(sortChildrenByBirthYear);
 
     const card = chart
       .setCardHtml()
@@ -597,6 +598,49 @@ function cardDataOf(node: unknown): FamilyChartPersonData {
     hiddenPartnerId:
       typeof raw.hiddenPartnerId === "string" ? raw.hiddenPartnerId : null,
   };
+}
+
+/**
+ * Full siblings — the same parent pair — oldest to youngest, left to right.
+ * `family_child.sort_order` (the `CHIL` order a GEDCOM file happened to list
+ * children in) is not reliably birth order, so this ignores it and sorts by
+ * each card's own birth year instead. A child with no recorded birth year
+ * sorts after every dated sibling, by id — there is no better guess, and id
+ * order is at least stable across re-renders.
+ *
+ * Wired in via `family-chart`'s own `setSortChildrenFunction` rather than
+ * pre-sorting the array `to-family-chart.ts` builds: the library re-derives
+ * sibling order itself during layout (interleaving spouses, placing newly
+ * added cards, …), so a plain input-order change would not reliably survive
+ * that pass — this hook is the library's documented integration point for
+ * exactly this.
+ *
+ * Not global across a blended family: `family-chart` runs its own
+ * `sortChildrenWithSpouses` after this comparator, which groups a person's
+ * children by which of their partners the child came from before anything
+ * else. Birth-year order only holds within one of those groups — a younger
+ * child from an earlier marriage can still sort left of an older half-
+ * sibling from a later one. Fixing that would mean also ordering the parent's
+ * partners chronologically (`setSortSpousesFunction`), not attempted here.
+ */
+function sortChildrenByBirthYear(a: Datum, b: Datum): number {
+  const yearA = birthYearOf(a);
+  const yearB = birthYearOf(b);
+  if (yearA === null && yearB === null) {
+    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+  }
+  if (yearA === null) {
+    return 1;
+  }
+  if (yearB === null) {
+    return -1;
+  }
+  return yearA - yearB;
+}
+
+function birthYearOf(datum: Datum): number | null {
+  const year = (datum.data as Partial<FamilyChartPersonData>).birthYear;
+  return typeof year === "number" ? year : null;
 }
 
 function duplicateCountOf(node: unknown): number {
