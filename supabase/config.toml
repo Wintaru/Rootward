@@ -116,8 +116,11 @@ port = 57324
 
 [storage]
 enabled = true
-# The maximum file size allowed (e.g. "5MB", "500KB").
-file_size_limit = "50MiB"
+# The maximum file size allowed (e.g. "5MB", "500KB"). A GedZip (SPEC §6,
+# issue #101) bundles the GEDCOM with its media, so this needs real headroom
+# beyond a text-only GEDCOM upload -- apps/web/app/import/ImportWorkspace.tsx's
+# `MAX_UPLOAD_BYTES` mirrors this value and must be kept in step with it.
+file_size_limit = "500MiB"
 
 # Uncomment to configure local storage buckets
 # [storage.buckets.images]

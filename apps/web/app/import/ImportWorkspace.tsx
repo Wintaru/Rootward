@@ -10,8 +10,9 @@ import { useGedcomImport } from "@/lib/import/useGedcomImport";
 
 import { DeterminateBar, IndeterminateBar, StatusCard } from "./StatusCard";
 
-/** Matches the storage bucket's default `file_size_limit` (supabase/config.toml). */
-const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+/** Matches the storage bucket's `file_size_limit` (supabase/config.toml) --
+ * a GedZip (issue #101) needs real headroom beyond a text-only GEDCOM. */
+const MAX_UPLOAD_BYTES = 500 * 1024 * 1024;
 
 /** The import half of `/import` (SPEC §8.1, §7, issue #60). The page owns the
  * `<main>` and the `h1`; this is one `h2` section beside `ExportPanel`.
