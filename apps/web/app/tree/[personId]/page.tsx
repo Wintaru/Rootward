@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { isApproved } from "@/lib/auth/access";
 import { getCurrentAccount } from "@/lib/auth/current-account";
 import { getDefaultGenerations, getNeighborhood, isUuid } from "@/lib/db";
+import { getPrimaryPhotoUrls } from "@/lib/db/media-urls";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { FamilyTree } from "@/components/tree/FamilyTree";
 import { resolveTreeDepth } from "@/lib/tree/tree-view-params";
@@ -22,6 +23,11 @@ export const metadata: Metadata = {
  * `router.push`, one `get_neighborhood` recursion per navigation, and the back
  * button walks the history. The `FamilyTree` client shell animates between the
  * old and new payloads.
+ *
+ * Each card's photo (issue #105) is a second, batched step after the
+ * neighborhood: `getPrimaryPhotoUrls` reads the primary-photo thumb paths under
+ * the caller's session and signs them with the service role — the same shape
+ * as the profile gallery (`/person/[personId]`), for the same reason.
  */
 export default async function TreePage({
   params,
@@ -62,10 +68,21 @@ export default async function TreePage({
     notFound();
   }
 
+  // Photos are decorative: a signing or lookup failure is logged and the
+  // cards fall back to the silhouette, the tree itself still renders.
+  const photoUrls = await getPrimaryPhotoUrls(
+    supabase,
+    neighborhood.persons.map((person) => person.id),
+  ).catch((error: unknown): Readonly<Record<string, string>> => {
+    console.error("tree photo lookup failed:", error);
+    return {};
+  });
+
   return (
     <main className="flex flex-1 flex-col">
       <FamilyTree
         neighborhood={neighborhood}
+        photoUrls={photoUrls}
         depth={depth}
         depthDefaults={defaults}
       />

@@ -40,7 +40,8 @@ export interface FamilyChartPersonData {
   readonly birthYear: number | null;
   readonly deathYear: number | null;
   readonly isLiving: boolean | null;
-  /** A profile photo when one exists (issue #34); silhouette until then. */
+  /** The primary photo's signed thumb URL when one exists (issues #34, #105);
+   * silhouette until then. */
   readonly avatarUrl: string | null;
   /**
    * Expand-in-place (issue #24, SPEC §8.2): true when this person sits at the
@@ -58,9 +59,14 @@ export interface FamilyChartTree {
   readonly mainId: string;
 }
 
+/** `personId → signed thumb URL` for the persons that have a primary photo —
+ * the shape `getPrimaryPhotoUrls` (`lib/db/media-urls.ts`) returns. */
+export type PhotoUrls = Readonly<Record<string, string>>;
+
 /**
  * Turn one {@link Neighborhood} into the array `family-chart` renders, plus the
- * id it should centre on.
+ * id it should centre on. `photoUrls` is looked up per person; a person with
+ * no entry gets `avatarUrl: null` and the card draws the silhouette.
  *
  * The only reshaping is de-duplication: every id appears once and each `rels`
  * array is a sorted, duplicate-free set. A repeated ancestor (a cousin marriage
@@ -68,7 +74,10 @@ export interface FamilyChartTree {
  * draw once — the graph is keyed by id and a diamond is not a cycle. A genuine
  * self-loop (a person listed among their own family's children) is dropped.
  */
-export function toFamilyChartData(neighborhood: Neighborhood): FamilyChartTree {
+export function toFamilyChartData(
+  neighborhood: Neighborhood,
+  photoUrls: PhotoUrls,
+): FamilyChartTree {
   const rels = buildRels(neighborhood);
   const unresolvedPartners = findUnresolvedPartners(neighborhood);
 
@@ -76,7 +85,11 @@ export function toFamilyChartData(neighborhood: Neighborhood): FamilyChartTree {
     const entry = rels.get(person.id);
     return {
       id: person.id,
-      data: toPersonData(person, unresolvedPartners.get(person.id) ?? null),
+      data: toPersonData(
+        person,
+        unresolvedPartners.get(person.id) ?? null,
+        photoUrls[person.id] ?? null,
+      ),
       rels: {
         parents: sortedIds(entry?.parents),
         spouses: sortedIds(entry?.spouses),
@@ -142,6 +155,7 @@ function buildRels(neighborhood: Neighborhood): Map<string, RelSets> {
 function toPersonData(
   person: NeighborhoodPerson,
   hiddenPartnerId: string | null,
+  avatarUrl: string | null,
 ): FamilyChartPersonData {
   return {
     gender: person.sex === "male" ? "M" : "F",
@@ -152,7 +166,7 @@ function toPersonData(
     birthYear: person.birth_year,
     deathYear: person.death_year,
     isLiving: person.is_living,
-    avatarUrl: null,
+    avatarUrl,
     canExpandUp: person.can_expand_up,
     canExpandDown: person.can_expand_down,
     hiddenPartnerId,

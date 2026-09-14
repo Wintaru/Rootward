@@ -1,6 +1,11 @@
 import "server-only";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
+
+import type { Database } from "./database.types";
+import { getPrimaryPhotoThumbPaths } from "./primary-photos";
 
 /**
  * Signed URLs for the private `media` bucket (SPEC §4.4 / §8.3, §10 item 34).
@@ -64,4 +69,29 @@ export async function getSignedMediaUrl(
   }
   const map = await getSignedMediaUrls([path]);
   return map.get(path) ?? null;
+}
+
+/**
+ * The tree card's photo URLs (SPEC §8.2, issue #105): `personId → signed thumb
+ * URL` for every person in `personIds` that has a visible primary photo with a
+ * thumb. Two round trips for the whole set — one RLS-scoped read under
+ * `client` (the caller's session, which is what makes the paths safe to sign)
+ * and one batched signing call. Persons without a photo are absent; the card
+ * shows the silhouette for them.
+ */
+export async function getPrimaryPhotoUrls(
+  client: SupabaseClient<Database>,
+  personIds: readonly string[],
+): Promise<Readonly<Record<string, string>>> {
+  const thumbPaths = await getPrimaryPhotoThumbPaths(client, personIds);
+  const signed = await getSignedMediaUrls(Object.values(thumbPaths));
+
+  const urls: Record<string, string> = {};
+  for (const [personId, path] of Object.entries(thumbPaths)) {
+    const url = signed.get(path);
+    if (url !== undefined) {
+      urls[personId] = url;
+    }
+  }
+  return urls;
 }

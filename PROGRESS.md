@@ -5,6 +5,21 @@ the relevant `docs/SPEC.md` section.
 
 ## Current state
 
+**Issue #105 — Tree card shows the person's primary photo: done, staged on
+branch `feat/tree-card-primary-photo`, issue closed.** SPEC §8.2 always said
+the card shows the photo, but #21's card and #34's primary photo were never
+joined — `to-family-chart.ts` hardcoded `avatarUrl: null`. No migration: a
+new `lib/db/primary-photos.ts` runs one batched `media_link` ⋈ `media` read
+under the caller's session (RLS decides visibility), `media-urls.ts`'s new
+`getPrimaryPhotoUrls` signs the thumb paths with the service role, and
+`toFamilyChartData(neighborhood, photoUrls)` looks each card up by id. The
+tree page does this for the initial neighborhood; expand-in-place (#24) asks
+a new server action (`app/tree/[personId]/actions.ts`, ids in, signed URLs
+out — never client-supplied paths) for the persons it adds. Confirmed live:
+the focus card renders the 240px thumb, the other cards keep the silhouette,
+and an expand step still merges with no console errors. Not put in the
+`get_neighborhood` RPC on purpose — see `DECISIONS.md` 2026-09-14 16:44.
+
 **Issue #104 — GedZip import OOM'd the edge function worker: fixed, confirmed
 live against the real `Donner.zip`, ready to close.** A real ~61 MB/128-photo
 GedZip crashed `gedcom-import`'s worker even after moving unzip to the

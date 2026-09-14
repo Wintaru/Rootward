@@ -21,7 +21,9 @@ import {
   toFamilyChartData,
   type CardSex,
   type FamilyChartPersonData,
+  type PhotoUrls,
 } from "@/lib/tree/to-family-chart";
+import { fetchPrimaryPhotoUrls } from "@/app/tree/[personId]/actions";
 import {
   MAX_GENERATIONS,
   MIN_GENERATIONS,
@@ -67,6 +69,9 @@ type Chart = ReturnType<typeof createChart>;
 
 interface FamilyTreeProps {
   readonly neighborhood: Neighborhood;
+  /** `personId → signed thumb URL` for the persons in `neighborhood` that have
+   * a primary photo (issue #105); the rest draw the silhouette. */
+  readonly photoUrls: PhotoUrls;
   /** Generations requested for this render (route defaults + `?up` / `?down`). */
   readonly depth: TreeDepth;
   /** The `tree_settings` defaults — an override links back to a clean URL. */
@@ -90,7 +95,10 @@ interface FamilyTreeProps {
  * Expand-in-place (issue #24) is layered on the same mechanism: clicking an
  * affordance fetches one branch via `expandRelatives` and merges it into local
  * state, which flows through the very same derive-then-sync path as a real
- * navigation — the chart never has to know the difference.
+ * navigation — the chart never has to know the difference. The photos for the
+ * persons it adds come from a second, server-side call (`fetchPrimaryPhotoUrls`
+ * — a signed URL cannot be minted in the browser); a failure there is logged
+ * and the new cards fall back to the silhouette, the branch still expands.
  *
  * Opening the profile (issue #52, decision 28) is a separate action from the
  * re-centre: the card's icon button and a double-click on the card body both
@@ -104,6 +112,7 @@ interface FamilyTreeProps {
  */
 export function FamilyTree({
   neighborhood: initialNeighborhood,
+  photoUrls: initialPhotoUrls,
   depth,
   depthDefaults,
 }: FamilyTreeProps) {
@@ -119,12 +128,16 @@ export function FamilyTree({
   // follows React's "adjusting state when a prop changes" pattern (a render-time
   // comparison, not an effect) rather than an effect that would need a second
   // render to take effect: https://react.dev/learn/you-might-not-need-an-effect
+  // `photoUrls` rides along: the server-signed set for the initial
+  // neighbourhood, widened by each expansion, reset by the same navigation.
   const [neighborhood, setNeighborhood] = useState(initialNeighborhood);
+  const [photoUrls, setPhotoUrls] = useState(initialPhotoUrls);
   const [syncedNeighborhood, setSyncedNeighborhood] =
     useState(initialNeighborhood);
   if (initialNeighborhood !== syncedNeighborhood) {
     setSyncedNeighborhood(initialNeighborhood);
     setNeighborhood(initialNeighborhood);
+    setPhotoUrls(initialPhotoUrls);
   }
 
   // Bumped every time a real navigation resets `neighborhood` above (an
@@ -142,7 +155,10 @@ export function FamilyTree({
   }, [initialNeighborhood]);
   const [isExpanding, setIsExpanding] = useState(false);
 
-  const tree = useMemo(() => toFamilyChartData(neighborhood), [neighborhood]);
+  const tree = useMemo(
+    () => toFamilyChartData(neighborhood, photoUrls),
+    [neighborhood, photoUrls],
+  );
 
   // Kept fresh after every render so the card-click handler (bound once, in the
   // build effect) always navigates with the current focus / depth / router
@@ -205,15 +221,38 @@ export function FamilyTree({
       isExpandingRef.current = true;
       setIsExpanding(true);
       expandRelatives(supabase, target, relation)
-        .then((fragment) => {
+        .then(async (fragment) => {
+          // Only the persons not already on screen need a photo lookup — a
+          // fragment can re-list people the window already had.
+          const newIds = fragment.persons
+            .map((person) => person.id)
+            .filter((id) => !neighborhood.persons.some((p) => p.id === id));
           // A navigation or depth change landed while this was in flight —
           // `fragment` is relative to a neighbourhood that no longer exists.
+          // Checked before the photo call too, so a doomed fragment does not
+          // cost a second round trip.
+          if (navigationTokenRef.current !== tokenAtStart) {
+            return;
+          }
+          const fragmentPhotoUrls =
+            newIds.length === 0
+              ? {}
+              : await fetchPrimaryPhotoUrls(newIds).catch(
+                  (error: unknown): PhotoUrls => {
+                    console.error(
+                      "expand-in-place photo lookup failed:",
+                      error,
+                    );
+                    return {};
+                  },
+                );
           if (navigationTokenRef.current !== tokenAtStart) {
             return;
           }
           setNeighborhood((prev) =>
             mergeNeighborhoodFragment(prev, fragment, generation),
           );
+          setPhotoUrls((prev) => ({ ...prev, ...fragmentPhotoUrls }));
         })
         .catch((error: unknown) => {
           console.error("expand-in-place failed:", error);

@@ -64,12 +64,12 @@ const datumById = (tree: ReturnType<typeof toFamilyChartData>, id: string) => {
 
 describe("toFamilyChartData", () => {
   it("carries the focus id through as mainId", () => {
-    const tree = toFamilyChartData(neighborhood("p1", [person("p1")], []));
+    const tree = toFamilyChartData(neighborhood("p1", [person("p1")], []), {});
     expect(tree.mainId).toBe("p1");
   });
 
   it("returns an empty data array for an empty neighborhood", () => {
-    const tree = toFamilyChartData(neighborhood("p1", [], []));
+    const tree = toFamilyChartData(neighborhood("p1", [], []), {});
     expect(tree.data).toEqual([]);
   });
 
@@ -90,6 +90,7 @@ describe("toFamilyChartData", () => {
           }),
         ],
       ),
+      {},
     );
 
     expect(datumById(tree, "dad").rels).toEqual({
@@ -114,6 +115,7 @@ describe("toFamilyChartData", () => {
           }),
         ],
       ),
+      {},
     );
     expect(datumById(tree, "in").rels).toEqual({
       parents: [],
@@ -134,6 +136,7 @@ describe("toFamilyChartData", () => {
         ],
         [],
       ),
+      {},
     );
     expect(datumById(tree, "a").data).toMatchObject({
       gender: "M",
@@ -169,6 +172,7 @@ describe("toFamilyChartData", () => {
         ],
         [],
       ),
+      {},
     );
     expect(datumById(tree, "a").data).toEqual({
       gender: "M",
@@ -186,6 +190,17 @@ describe("toFamilyChartData", () => {
     });
   });
 
+  it("takes avatarUrl from photoUrls by person id, null when absent (issue #105)", () => {
+    const tree = toFamilyChartData(
+      neighborhood("a", [person("a"), person("b")], []),
+      { a: "https://example.test/a-thumb.webp" },
+    );
+    expect(datumById(tree, "a").data.avatarUrl).toBe(
+      "https://example.test/a-thumb.webp",
+    );
+    expect(datumById(tree, "b").data.avatarUrl).toBeNull();
+  });
+
   it("carries can_expand_up / can_expand_down through as canExpandUp / canExpandDown", () => {
     const tree = toFamilyChartData(
       neighborhood(
@@ -193,6 +208,7 @@ describe("toFamilyChartData", () => {
         [person("a", { can_expand_up: true, can_expand_down: true })],
         [],
       ),
+      {},
     );
     expect(datumById(tree, "a").data).toMatchObject({
       canExpandUp: true,
@@ -207,6 +223,7 @@ describe("toFamilyChartData", () => {
         [person("in")],
         [family("f1", { partner1_id: "in", partner2_id: "gone" })],
       ),
+      {},
     );
     expect(datumById(tree, "in").data.hiddenPartnerId).toBe("gone");
   });
@@ -218,6 +235,7 @@ describe("toFamilyChartData", () => {
         [person("a"), person("b")],
         [family("f1", { partner1_id: "a", partner2_id: "b" })],
       ),
+      {},
     );
     expect(datumById(tree, "a").data.hiddenPartnerId).toBeNull();
     expect(datumById(tree, "b").data.hiddenPartnerId).toBeNull();
@@ -249,6 +267,7 @@ describe("toFamilyChartData", () => {
           }),
         ],
       ),
+      {},
     );
 
     const ids = tree.data.map((d) => d.id);
@@ -271,6 +290,7 @@ describe("toFamilyChartData", () => {
           }),
         ],
       ),
+      {},
     );
     expect(datumById(tree, "x").rels.parents).not.toContain("x");
     expect(datumById(tree, "x").rels.children).not.toContain("x");
@@ -295,6 +315,7 @@ describe("toFamilyChartData", () => {
           }),
         ],
       ),
+      {},
     );
     expect(datumById(tree, "kid").rels.parents).toEqual(["bio1", "bio2"]);
   });
