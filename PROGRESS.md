@@ -73,13 +73,38 @@ loader, so neither function has ever run there, local or deployed.
   rather than guessing which side — drop the dead code or wire up a real
   consumer — is right).
 
-**Next: no issue is currently `ready`-labelled.** Per the original §10
-sequence, #39 (deploy docs — no longer blocked by #86) and #40 (README) are
-next. #47 (tooling parity) also remains open from before Phase 9 was
-inserted. A handful of other `mvp`-labeled issues (#82, #83, #85, #87, #88)
-and the new advisory #98 were also filed along the way and are not yet
-triaged into an order — the next session should re-read `docs/SPEC.md` §10
-and the open issue list to pick the next item.
+**Issue #40 — README, CONTRIBUTING, self-host guide, screenshots: done,
+staged on branch `docs/readme-contributing-screenshots`.** SPEC §10 item 40.
+No migration.
+
+- The "Next" note directly below this one (written by the #86 session) said
+  #39 was still open — it was not. #39 was done and merged back on
+  2026-09-01 (`451c968`) but the GitHub issue was never closed (a hand-off
+  gap, the same pattern that commit's own message called out for the earlier
+  stale #37). Closed #39 with a comment pointing at `451c968`; no rework.
+- README: corrected the stale "in development, build has not started" status
+  line (the build has been through Phase 9), added a screenshots section,
+  and linked the new `CONTRIBUTING.md`.
+- Screenshots: signed in as the seeded demo admin through the real
+  magic-link flow (Mailpit) against the already-running shared local stack,
+  and captured `/tree` and a person's edit view with Playwright. Saved to
+  `docs/screenshots/` (separate from `docs/reference/`, which holds pre-build
+  design references, not the shipped app).
+- Added `CONTRIBUTING.md`: how the project's own build process works
+  (WAYFINDER → SPEC → PROGRESS), branch/commit conventions, the verify gate
+  (cross-checked against `.github/workflows/ci.yml` — the gate documented
+  here typechecks all four edge functions, matching CI, not just the two
+  `gedcom-*` ones), migration rules, and the PR expectations.
+- The self-host guide itself (`docs/deploy/docker-compose-self-host.md`) was
+  already written for #39; this issue only needed the cross-link, already in
+  place.
+
+**Next: no issue is currently `ready`-labelled.** #47 (tooling parity)
+remains open from before Phase 9 was inserted. A handful of other
+`mvp`-labeled issues (#82, #83, #85, #87, #88) and the advisory #98 were also
+filed along the way and are not yet triaged into an order — the next session
+should re-read `docs/SPEC.md` §10 and the open issue list to pick the next
+item.
 
 **Issue #65 — Mobile layout pass: done, staged on branch
 `fix/mobile-layout-pass`, issue closed.** SPEC §8.1/§8.2/§8.3. No

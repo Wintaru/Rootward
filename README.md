@@ -5,9 +5,14 @@ family in an animated generational view, edit people in a detailed editor, and
 export a GEDCOM back out. Built for a family to run its own tree — one
 deployment, one tree.
 
-> Status: **in development.** Planning is complete; the build has not started.
-> See [`docs/WAYFINDER.md`](docs/WAYFINDER.md) for the design decisions and
-> [`docs/SPEC.md`](docs/SPEC.md) for the build spec.
+> Status: **MVP built, pre-release.** See [`docs/WAYFINDER.md`](docs/WAYFINDER.md)
+> for the design decisions and [`docs/SPEC.md`](docs/SPEC.md) for the build spec.
+
+## Screenshots
+
+|                                              Tree view                                              |                                           Edit view                                           |
+| :-------------------------------------------------------------------------------------------------: | :-------------------------------------------------------------------------------------------: |
+| ![Tree view: an animated generational chart centered on one person](docs/screenshots/tree-view.png) | ![Edit view: a full-screen multi-section form for one person](docs/screenshots/edit-view.png) |
 
 ## What it does
 
@@ -94,6 +99,10 @@ Two deploy paths, both in [`docs/deploy/`](docs/deploy):
   fastest start, no server to maintain.
 - [Docker Compose self-host](docs/deploy/docker-compose-self-host.md) — run
   it on your own server.
+
+## Contributing
+
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the branch, verify, and PR flow.
 
 ## License
 
