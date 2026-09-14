@@ -32,9 +32,9 @@ export * from "./hide-request";
 export {
   getAllowSelfSignup,
   getDefaultGenerations,
-  getDefaultRootPersonId,
   getLivingThresholdYears,
   getTreeSettings,
+  getVisibleRootPersonId,
   updateTreeSettings,
 } from "./tree-settings";
 export type {

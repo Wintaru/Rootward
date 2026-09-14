@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 
 import { resolveHomeDestination } from "@/lib/auth/auth-redirect";
 import { getCurrentAccount } from "@/lib/auth/current-account";
-import { getDefaultRootPersonId } from "@/lib/db";
+import { getVisibleRootPersonId } from "@/lib/db";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 /**
@@ -18,7 +18,7 @@ export default async function Home() {
 
   const approved = current.account?.status === "active";
   const rootPersonId = approved
-    ? await getDefaultRootPersonId(await createSupabaseServerClient())
+    ? await getVisibleRootPersonId(await createSupabaseServerClient())
     : null;
 
   redirect(resolveHomeDestination({ signedIn: true, approved, rootPersonId }));

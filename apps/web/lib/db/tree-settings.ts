@@ -50,24 +50,47 @@ export async function getDefaultGenerations(
   };
 }
 
+/** Row shape read by {@link getVisibleRootPersonId} — the embedded `person`
+ * comes back `null` both when no root is set and when RLS hides that person
+ * from the caller; {@link extractVisibleRootPersonId} collapses those two
+ * cases on purpose, since both mean "fall through to the deterministic
+ * fallback" (`getFallbackRootPersonId`, issue #82). */
+interface RootPersonEmbedRow {
+  readonly default_root_person: { readonly id: string } | null;
+}
+
+/** Pulls the visible root person's id out of a {@link RootPersonEmbedRow}. */
+export function extractVisibleRootPersonId(
+  row: RootPersonEmbedRow | null,
+): string | null {
+  return row?.default_root_person?.id ?? null;
+}
+
 /**
- * The person the tree view opens on (SPEC §4.6, decision 21). `null` on a fresh
- * deployment with no data yet. Any signed-in account may read `tree_settings`
- * (RLS `tree_settings_select`).
+ * The default root person, but only if the caller can see them (SPEC §8.1,
+ * issue #82). An admin may set `default_root_person_id` to someone whose
+ * `visibility` excludes ordinary members; without this check, `/` and `/tree`
+ * send every such member to a person `/tree/[personId]` 404s on. Embeds
+ * `person` through the FK so RLS applies to the join (not just the
+ * `tree_settings` row) — a hidden root reads back `null`, the same shape as
+ * "no root set", so `/` and `/tree` share one fall-through to
+ * {@link getFallbackRootPersonId}. `null` on a fresh deployment too.
  */
-export async function getDefaultRootPersonId(
+export async function getVisibleRootPersonId(
   client: Db,
 ): Promise<string | null> {
   const { data, error } = await client
     .from("tree_settings")
-    .select("default_root_person_id")
+    .select(
+      "default_root_person:person!tree_settings_default_root_person_id_fkey(id)",
+    )
     .eq("id", TREE_SETTINGS_ID)
     .maybeSingle();
 
   if (error !== null) {
-    throw new Error(`getDefaultRootPersonId: ${error.message}`);
+    throw new Error(`getVisibleRootPersonId: ${error.message}`);
   }
-  return data?.default_root_person_id ?? null;
+  return extractVisibleRootPersonId(data);
 }
 
 /**

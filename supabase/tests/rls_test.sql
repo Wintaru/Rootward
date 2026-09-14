@@ -42,7 +42,7 @@ truncate table
 insert into public.tree_settings (id) values (1);
 reset client_min_messages;
 
-select plan(117);
+select plan(119);
 
 -- ---------------------------------------------------------------------------
 -- Identity switch. set_config(..., is_local => true) lasts to end of the
@@ -107,6 +107,14 @@ insert into public.person (id, given_name, surname, visibility, is_living) value
   ('b0000000-0000-0000-0000-000000000004', 'Della', 'Self',     'everyone_approved', null),  -- the viewer's own node
   ('b0000000-0000-0000-0000-000000000005', 'Ezra',  'Override', 'everyone_approved', false), -- explicit is_living=false
   ('b0000000-0000-0000-0000-000000000006', 'Fin',   'Nodata',   'everyone_approved', null);  -- no events at all
+
+-- Issue #82: the default root is the hidden person, so a PostgREST FK-embed
+-- of `tree_settings.default_root_person_id -> person` reads back null for a
+-- caller `person_is_visible` denies -- reproduced below with a plain LEFT
+-- JOIN, which RLS filters identically to an embed (the policy applies to
+-- `person` no matter how it is reached).
+update public.tree_settings set default_root_person_id =
+  'b0000000-0000-0000-0000-000000000003' where id = 1;
 
 -- The on_auth_user_created trigger (issue #17) already created a pending viewer
 -- account for each auth.users row above; upsert to the role/status this suite
@@ -352,6 +360,12 @@ select is((select count(*)::int from public.account), 1,
   'account SELECT: viewer sees only their own account row');
 select is((select count(*)::int from public.tree_settings), 1,
   'tree_settings SELECT: any signed-in user reads the singleton');
+select is(
+  (select p.id from public.tree_settings ts
+   left join public.person p on p.id = ts.default_root_person_id
+   where ts.id = 1),
+  null,
+  'tree_settings default root SELECT: the hidden root person is null through the embed (issue #82)');
 select is((select count(*)::int from public.audit_log), 0,
   'audit_log SELECT: a non-admin sees nothing');
 select is((select count(*)::int from public.invitation), 0,
@@ -425,6 +439,12 @@ select is((select count(*)::int from public.import_job), 2,
   'import_job SELECT: a moderator sees every job');
 select is((select count(*)::int from public.export_job), 1,
   'export_job SELECT: a moderator sees every job');
+select is(
+  (select p.id from public.tree_settings ts
+   left join public.person p on p.id = ts.default_root_person_id
+   where ts.id = 1),
+  'b0000000-0000-0000-0000-000000000003'::uuid,
+  'tree_settings default root SELECT: a moderator sees the hidden root through the embed (issue #82)');
 
 select pg_temp.act_as('a0000000-0000-0000-0000-000000000001');  -- admin
 select cmp_ok((select count(*)::int from public.audit_log), '>=', 1,

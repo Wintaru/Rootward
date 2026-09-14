@@ -99,12 +99,47 @@ No migration.
   already written for #39; this issue only needed the cross-link, already in
   place.
 
-**Next: no issue is currently `ready`-labelled.** #47 (tooling parity)
-remains open from before Phase 9 was inserted. A handful of other
-`mvp`-labeled issues (#82, #83, #85, #87, #88) and the advisory #98 were also
-filed along the way and are not yet triaged into an order — the next session
-should re-read `docs/SPEC.md` §10 and the open issue list to pick the next
-item.
+**Issue #82 — `/` and `/tree` 404 for non-moderators when the default root is
+hidden from them: done, staged on branch `fix/hidden-root-fallback`, issue
+closed.** SPEC §8.1. No migration. Picked over #47 (open since before Phase 9,
+labeled "not blocking") because #82 is a live correctness bug (a genuine
+member-facing 404) and #49 needs a product decision this session had no
+signal for; no issue was `ready`-labelled, and none of the open issues are
+part of the numbered SPEC §10 list, so this was a judgment call, not a
+mechanical pick — see `DECISIONS.md`.
+
+- `app/page.tsx` and `app/tree/page.tsx` used to read
+  `tree_settings.default_root_person_id` as a bare column and redirect to it
+  unchecked. If an admin's chosen root has `visibility` that excludes
+  ordinary members, that member landed on `/tree/<hidden-id>`, which 404s
+  (empty neighborhood).
+- Fix: `lib/db/tree-settings.ts` replaced `getDefaultRootPersonId` (removed,
+  had no other caller) with `getVisibleRootPersonId`, which reads the root
+  through an FK-embedded `person!…fkey(id)` select — PostgREST/RLS filters
+  the join, so a hidden root reads back `null`, the same shape as "no root
+  set". Both routes now share it; `/tree/page.tsx` already had the #51
+  fallback chain (`getFallbackRootPersonId`) for "no root", which now also
+  covers "root hidden".
+- Added a pure `extractVisibleRootPersonId` (unit-tested,
+  `lib/db/tree-settings.test.ts`) for the row-shape collapse, and two pgTAP
+  cases in `supabase/tests/rls_test.sql` (a viewer sees `null` through the
+  embed for a hidden root, a moderator sees the real id) — the code review
+  flagged that the fix's correctness rests entirely on RLS applying to a
+  PostgREST-style FK embed, which the unit test alone can't prove.
+- Verify gate green (`pnpm typecheck`/`lint`/`format:check`/`build`/`test`,
+  `deno check`/`lint`/`fmt --check`/`test`, `supabase test db` — 312 pgTAP
+  tests). Code review: two should-fix findings (both addressed above), no
+  must-fix.
+
+**Next: no issue is currently `ready`-labelled.** Open, non-post-mvp,
+non-multi-tenant candidates: **#47** (tooling parity, `mvp`, explicitly
+"not blocking"), **#49** (a stuck-notification edge case, needs a product
+call on whether a second pending `access_request` is reachable from the UI
+now that #36 exists), **#83**, **#85**, **#87**, **#88** (small
+frontend/infra consistency cleanups), and the advisory **#98**. None are part
+of the numbered SPEC §10 list (all are audit/review follow-ups) — the next
+session should read the open issue list plus this note and make the same
+kind of judgment call, or ask Josh if it's genuinely unclear.
 
 **Issue #65 — Mobile layout pass: done, staged on branch
 `fix/mobile-layout-pass`, issue closed.** SPEC §8.1/§8.2/§8.3. No
