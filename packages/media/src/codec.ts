@@ -56,20 +56,31 @@ export function createImageCodec(): ImageCodec {
     },
 
     async encodeWebp(image, maxDimension) {
-      const target = computeTargetSize(image, maxDimension);
-      const raster: DecodedImage =
-        target.width === image.width && target.height === image.height
-          ? image
-          : toDecodedImage(
-              await resizePixels(asImageData(image), {
-                width: target.width,
-                height: target.height,
-              }),
-            );
+      const raster = await resizeImage(image, maxDimension);
       const encoded = await encodeWebpBytes(asImageData(raster));
       return new Uint8Array(encoded);
     },
   };
+}
+
+/** Scale `image` down so its longer side is at most `maxDimension` (never
+ * up -- see `computeTargetSize`). Returns the same object when it already
+ * fits. Exported on its own for the rotate/crop editor's preview raster,
+ * which needs the pixels, not a WebP. */
+export async function resizeImage(
+  image: DecodedImage,
+  maxDimension: number,
+): Promise<DecodedImage> {
+  const target = computeTargetSize(image, maxDimension);
+  if (target.width === image.width && target.height === image.height) {
+    return image;
+  }
+  return toDecodedImage(
+    await resizePixels(asImageData(image), {
+      width: target.width,
+      height: target.height,
+    }),
+  );
 }
 
 function toDecodedImage(raw: unknown): DecodedImage {

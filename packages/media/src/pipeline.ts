@@ -68,14 +68,31 @@ export interface ExifTools {
   stripGps(bytes: Uint8Array, mimeType: string): Promise<GpsStripResult>;
 }
 
+export interface MediaDerivatives {
+  readonly thumb: Uint8Array;
+  readonly display: Uint8Array;
+}
+
+/** Encode the ~240px `thumb` and ~1200px `display` WebP pair (decision 25)
+ * from an already-decoded raster -- the one place both sizes are named, so
+ * a first upload and a later rotate/crop regeneration (`transform.ts`)
+ * produce derivatives of the same shape. */
+export async function generateDerivatives(
+  image: DecodedImage,
+  codec: ImageCodec,
+): Promise<MediaDerivatives> {
+  const [thumb, display] = await Promise.all([
+    codec.encodeWebp(image, THUMB_MAX_DIMENSION),
+    codec.encodeWebp(image, DISPLAY_MAX_DIMENSION),
+  ]);
+  return { thumb, display };
+}
+
 export interface ProcessedMediaBytes {
   readonly mimeType: string;
   /** The original bytes, GPS-stripped when that applied. */
   readonly finalBytes: Uint8Array;
-  readonly derivatives: {
-    readonly thumb: Uint8Array;
-    readonly display: Uint8Array;
-  } | null;
+  readonly derivatives: MediaDerivatives | null;
   readonly dateTaken: string | null;
   readonly exif: { readonly hasGps: boolean; readonly gpsStripped: boolean };
   readonly warnings: readonly string[];
@@ -157,11 +174,7 @@ export async function processMediaBytes(
   try {
     const decoded = await codec.decode(finalBytes, mimeType);
     if (decoded !== null) {
-      const [thumb, display] = await Promise.all([
-        codec.encodeWebp(decoded, THUMB_MAX_DIMENSION),
-        codec.encodeWebp(decoded, DISPLAY_MAX_DIMENSION),
-      ]);
-      derivatives = { thumb, display };
+      derivatives = await generateDerivatives(decoded, codec);
     } else {
       warnings.push(`no thumbnail codec for ${mimeType}; stored original only`);
     }

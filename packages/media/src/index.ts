@@ -13,9 +13,14 @@
  * Pure TypeScript. No Node or Deno built-ins (WAYFINDER decision 8).
  */
 
-export { EXTENSION_FOR_MIME, processMediaBytes } from "./pipeline.ts";
+export {
+  EXTENSION_FOR_MIME,
+  generateDerivatives,
+  processMediaBytes,
+} from "./pipeline.ts";
 export type {
   DecodedImage,
+  MediaDerivatives,
   ExifResult,
   ExifTools,
   GpsStripResult,
@@ -26,8 +31,20 @@ export type {
   TreeMediaSettings,
 } from "./pipeline.ts";
 
-export { createImageCodec } from "./codec.ts";
+export { createImageCodec, resizeImage } from "./codec.ts";
 export { createExifTools } from "./exif.ts";
 export { sniffMimeType } from "./mime.ts";
 export { computeTargetSize } from "./image-geometry.ts";
 export type { ImageSize } from "./image-geometry.ts";
+export {
+  applyTransform,
+  clampCrop,
+  cropImage,
+  IDENTITY_TRANSFORM,
+  isIdentityTransform,
+  isRotation,
+  rotatedSize,
+  rotateImage,
+  ROTATIONS,
+} from "./transform.ts";
+export type { CropRect, MediaTransform, Rotation } from "./transform.ts";
