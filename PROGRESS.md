@@ -5,6 +5,13 @@ the relevant `docs/SPEC.md` section.
 
 ## Current state
 
+**Wipe tree: added a "skip the automatic backup" checkbox, staged on branch
+`feat/wipe-tree-skip-backup`, no issue filed (small, same-session request).**
+`WipeTreeSection.tsx` only — decision 33's automatic `manual_gedcom` backup
+before a wipe now has an opt-out, unchecked by default so the safe path stays
+the default; the confirmation copy branches on it too (code review caught the
+copy not doing this in the first pass — fixed before hand-off).
+
 **Issue #101 — GEDCOM import: attach embedded media from a GedZip archive:
 done, staged on branch `feat/gedzip-media-import`, issue closed.** No
 migration — `media`'s existing storage-path columns are all
