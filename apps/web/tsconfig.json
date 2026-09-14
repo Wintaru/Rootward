@@ -24,6 +24,7 @@
     ],
     "paths": {
       "@/*": ["./*"],
+      "@rootward/gedcom": ["../../packages/gedcom/src/index.ts"],
       "@rootward/shared": ["../../packages/shared/src/index.ts"]
     }
   },

@@ -2,11 +2,12 @@ import type { NextConfig } from "next";
 import path from "node:path";
 
 const nextConfig: NextConfig = {
-  // `@rootward/shared` is a workspace package consumed from source (its
-  // `tsconfig.json` path alias points at `packages/shared/src`). Next must
-  // transpile it rather than expect a prebuilt `dist/` — CI runs `typecheck`
-  // and `test` without a package build step.
-  transpilePackages: ["@rootward/shared"],
+  // `@rootward/shared` and `@rootward/gedcom` are workspace packages
+  // consumed from source (their `tsconfig.json` path aliases point at
+  // `packages/*/src`). Next must transpile them rather than expect a
+  // prebuilt `dist/` — CI runs `typecheck` and `test` without a package
+  // build step.
+  transpilePackages: ["@rootward/gedcom", "@rootward/shared"],
   // Docker self-host (issue #39): a minimal `.next/standalone` server, so the
   // production image does not need the whole `node_modules` tree.
   output: "standalone",

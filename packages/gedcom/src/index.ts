@@ -24,6 +24,15 @@ export type {
 } from "./gedzip.ts";
 
 export {
+  decodeMediaStorageKey,
+  encodeMediaStorageKey,
+  GEDCOM_OBJECT_NAME,
+  isSafeArchivePath,
+  MEDIA_SUBPREFIX,
+} from "./media-storage-keys.ts";
+export type { DecodedMediaStorageKey } from "./media-storage-keys.ts";
+
+export {
   buildForest,
   child,
   childPointer,
