@@ -95,9 +95,25 @@ if (flags["keep-data"]) {
 // an empty file behind the way `supabase gen types > file` would.
 
 console.log("\n→ regenerating database types");
+// Pinned to the same Supabase CLI version as package.json's `gen:types`
+// script and .github/workflows/ci.yml's drift check (the CI step carries a
+// matching comment; package.json is JSON and can't). The CLI on PATH here is
+// whatever's locally installed and drifts independently, and different CLI
+// versions emit slightly different generic-type boilerplate for the same
+// schema, which otherwise churns this file on every `dev:up`/`dev:fresh` for
+// no reason -- commit dea7b43 fixed `gen:types` and CI but missed this call.
 const gen = await run(
-  "supabase",
-  ["gen", "types", "typescript", "--local", "--schema", "public"],
+  "npx",
+  [
+    "-y",
+    "supabase@2.116.0",
+    "gen",
+    "types",
+    "typescript",
+    "--local",
+    "--schema",
+    "public",
+  ],
   { capture: true },
 );
 if (gen.code !== 0 || gen.stdout.trim() === "") {
