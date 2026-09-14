@@ -5,6 +5,13 @@ the relevant `docs/SPEC.md` section.
 
 ## Current state
 
+**Wipe tree: added a "skip the automatic backup" checkbox, staged on branch
+`feat/wipe-tree-skip-backup`, no issue filed (small, same-session request).**
+`WipeTreeSection.tsx` only — decision 33's automatic `manual_gedcom` backup
+before a wipe now has an opt-out, unchecked by default so the safe path stays
+the default; the confirmation copy branches on it too (code review caught the
+copy not doing this in the first pass — fixed before hand-off).
+
 **Phase 9 — Gap closure is complete.** #64 (docs), #50 (header), #51
 (`/tree` index), #52 (tree card → profile), #53 (root person by name), #54
 (GEDCOM export UI), #55 (create a person in-app), #56 (Relationships

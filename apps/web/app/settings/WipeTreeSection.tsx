@@ -106,6 +106,10 @@ type Stage =
  * with nothing to restore it from. The finished card offers the same
  * `DownloadButton` the export flow uses: the file lives in the separate
  * `exports` bucket (SPEC §4.8), so it survives the wipe untouched.
+ *
+ * `skipBackup` opts out of that export — unchecked by default, so decision
+ * 33's safety net stays the default path; a moderator who is about to
+ * re-import right away (or already holds a backup) can skip the wait.
  */
 export function WipeTreeSection({
   personCount,
@@ -116,7 +120,9 @@ export function WipeTreeSection({
 }) {
   const router = useRouter();
   const inputId = useId();
+  const skipBackupId = useId();
   const [confirmText, setConfirmText] = useState("");
+  const [skipBackup, setSkipBackup] = useState(false);
   const [stage, setStage] = useState<Stage>({ status: "idle" });
 
   const confirmed = confirmText === CONFIRM_PHRASE;
@@ -144,6 +150,11 @@ export function WipeTreeSection({
       // (a page-load snapshot): another moderator could complete an import
       // in the gap between render and this click, and skipping the backup
       // on a now-populated tree would defeat decision 33's safety net.
+      if (skipBackup) {
+        await runWipe(null);
+        return;
+      }
+
       const freshCount = await getPersonCount(supabase);
       if (freshCount === 0) {
         await runWipe(null);
@@ -192,10 +203,28 @@ export function WipeTreeSection({
       ) : (
         <div className="border-destructive/50 flex flex-col gap-3 rounded-md border p-4">
           <p className="text-muted-foreground text-sm">
-            {personCount > 0
-              ? `This tree has ${personCount.toLocaleString()} ${personCount === 1 ? "person" : "people"}. A backup GEDCOM export runs first, automatically — the wipe only proceeds once it succeeds.`
-              : "This tree is already empty. No backup is needed."}
+            {personCount === 0
+              ? "This tree is already empty. No backup is needed."
+              : skipBackup
+                ? "No backup will be made — the tree wipes immediately."
+                : `This tree has ${personCount.toLocaleString()} ${personCount === 1 ? "person" : "people"}. A backup GEDCOM export runs first, automatically — the wipe only proceeds once it succeeds.`}
           </p>
+          {personCount > 0 && (
+            <label
+              htmlFor={skipBackupId}
+              className="flex items-center gap-2 text-sm font-medium"
+            >
+              <input
+                id={skipBackupId}
+                type="checkbox"
+                checked={skipBackup}
+                onChange={(e) => setSkipBackup(e.target.checked)}
+                disabled={busy}
+              />
+              Skip the automatic backup (no export is kept — only do this if you
+              already have one, or are about to re-import right away)
+            </label>
+          )}
           <Field
             label={`Type "${CONFIRM_PHRASE}" to confirm`}
             htmlFor={inputId}
