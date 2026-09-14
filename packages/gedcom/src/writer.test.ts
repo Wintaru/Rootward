@@ -5,7 +5,7 @@ import {
   GEDCOM_70,
   GEDCOM_EMPTY,
   GEDCOM_NAME_SUBTAGS,
-} from "./fixtures";
+} from "./fixtures.ts";
 import {
   CHILD_RELATION_KEYWORD,
   EVENT_TAG_FOR,
@@ -17,10 +17,15 @@ import {
   mapChildRelation,
   mapNameType,
   mapSex,
-} from "./mapping";
-import { readGedcom } from "./reader";
-import { writeGedcom } from "./writer";
-import type { ChildRelation, GedcomReadResult, NameType, Sex } from "./types";
+} from "./mapping.ts";
+import { readGedcom } from "./reader.ts";
+import { writeGedcom } from "./writer.ts";
+import type {
+  ChildRelation,
+  GedcomReadResult,
+  NameType,
+  Sex,
+} from "./types.ts";
 
 const FIXTURES: ReadonlyArray<readonly [string, string]> = [
   ["GEDCOM 5.5.1", GEDCOM_551],

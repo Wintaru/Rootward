@@ -12,25 +12,74 @@ section), #57 (family events), #58 (person visibility + living override),
 #59 (delete a person), #60 (wipe tree + block import on a non-empty tree),
 #61 ("hide my record" request), #62 (person search + `/people`), #63
 (invite to claim from the profile), #73 (the `/settings` and `/moderation`
-500), and #65 (mobile layout pass) are all done and closed. #65 is staged on
-branch `fix/mobile-layout-pass`, not yet merged — the next session should
-confirm it landed on `origin/main` first. A 2026-09-12 audit found that every
-§10 item was built but the app was not usable: no sign-out, no navigation, no
-way to open a profile from the tree, a 404 on a fresh deploy, and no way to
-create a person or a relationship without a GEDCOM. Milestone **Phase 9 —
-Gap closure** (#50–#65, label `phase:9`) held the fixes, and a second
-product-lens pass added #66–#72 to the Post-MVP milestone. The build
-contract for Phase 9 was `docs/SPEC.md` §10 "Phase 9" plus §8.1 / §8.3 / §7,
-and WAYFINDER decision 36 + the **Journeys** section. The audit itself is in
-`GAP-AUDIT-HANDOFF.md` (gitignored).
+500), and #65 (mobile layout pass) are all done and closed. #65 landed on
+`origin/main` (commit `5a23b36`), confirmed at the start of this session. A
+2026-09-12 audit found that every §10 item was built but the app was not
+usable: no sign-out, no navigation, no way to open a profile from the tree, a
+404 on a fresh deploy, and no way to create a person or a relationship
+without a GEDCOM. Milestone **Phase 9 — Gap closure** (#50–#65, label
+`phase:9`) held the fixes, and a second product-lens pass added #66–#72 to
+the Post-MVP milestone. The build contract for Phase 9 was `docs/SPEC.md`
+§10 "Phase 9" plus §8.1 / §8.3 / §7, and WAYFINDER decision 36 + the
+**Journeys** section. The audit itself is in `GAP-AUDIT-HANDOFF.md`
+(gitignored).
+
+**Issue #86 — `gedcom-import`/`gedcom-export` cannot boot in the Supabase
+edge runtime: done, staged on branch `fix/gedcom-edge-runtime-imports`, issue
+closed.** No migration. `packages/gedcom/src` and `packages/shared/src` used
+extensionless relative imports (`from "./reader"`) and relied on Deno's
+`sloppy-imports` unstable flag — honored by the Deno CLI (so `deno
+check`/`deno test` passed) but not by the actual edge runtime's module
+loader, so neither function has ever run there, local or deployed.
+
+- Added explicit `.ts` extensions to every relative import across both
+  packages (10 files, 27 imports — production and test files). Dropped
+  `"unstable": ["sloppy-imports"]` from `supabase/functions/deno.json`.
+- `tsconfig.base.json` gained `allowImportingTsExtensions: true` and
+  `rewriteRelativeImportExtensions: true` — the latter because both
+  packages' `build` script (`tsc -p tsconfig.build.json`) actually emits JS
+  to `dist/`, and without it `.ts`-suffixed imports would break that emit;
+  verified `dist/reader.js` now imports `./mapping.js`, not `./mapping.ts`.
+  `apps/web/tsconfig.json` (Next.js-generated, does not extend
+  `tsconfig.base.json`) needed its own `allowImportingTsExtensions: true` —
+  `apps/web/lib/db/place-normalize-parity.test.ts` imports `reader.ts`
+  directly (a deliberate duplicate-implementation parity test, see
+  `place.ts`'s comment) and so transitively typechecks its `.ts`-suffixed
+  imports too.
+- Updated `supabase/functions/README.md` and this repo's `CLAUDE.md` to drop
+  stale `sloppy-imports` mentions.
+- **Not verified live**: actually serving the functions with the import map
+  (the command is below) and exercising Export/Import GEDCOM through the
+  browser, per the issue's "Done when" list. This repo's
+  CLAUDE.md reserves that command for Josh — it can restart containers other
+  sessions share, and 13 other Trillian sessions (several on this repo) were
+  live on the machine during this session. The fix itself (explicit `.ts`
+  extensions) is the standard, well-documented resolution for this class of
+  Deno module-loader failure; confidence rests on that plus the full verify
+  gate being green, not on an observed served-function run. **Josh: please
+  run `supabase functions serve --import-map supabase/functions/deno.json`
+  once free, then click Export GEDCOM on `/import` and download the file,
+  and try a real `/import` upload — that's the one check this session
+  couldn't do itself.**
+- Verify gate green: `pnpm typecheck` + `deno check` (both edge functions),
+  `pnpm lint` + `deno lint`, `pnpm format:check` + `deno fmt --check`,
+  `pnpm build` (confirmed the `dist/` emit above), `pnpm test` (666 vitest),
+  and `deno test` (81, all four edge functions).
+- Code review: clean, no must-fix/should-fix findings. One advisory finding
+  — `packages/gedcom`'s and `packages/shared`'s `dist`/build step looks like
+  dead code now that every consumer (apps/web, the edge function import map)
+  resolves `src/` directly — filed as **#98**, not fixed here (out of scope
+  for #86, and the review agent recommended leaving the build step in place
+  rather than guessing which side — drop the dead code or wire up a real
+  consumer — is right).
 
 **Next: no issue is currently `ready`-labelled.** Per the original §10
-sequence, #39 (deploy docs), #40 (README — now unblocked, Phase 9 has
-landed), and #47 (tooling parity) remain open from before Phase 9 was
-inserted. A handful of other `mvp`-labeled issues (#82, #83, #85, #86, #87,
-#88) were also filed along the way and are not yet triaged into an order —
-the next session should re-read `docs/SPEC.md` §10 and the open issue list
-to pick the next item.
+sequence, #39 (deploy docs — no longer blocked by #86) and #40 (README) are
+next. #47 (tooling parity) also remains open from before Phase 9 was
+inserted. A handful of other `mvp`-labeled issues (#82, #83, #85, #87, #88)
+and the new advisory #98 were also filed along the way and are not yet
+triaged into an order — the next session should re-read `docs/SPEC.md` §10
+and the open issue list to pick the next item.
 
 **Issue #65 — Mobile layout pass: done, staged on branch
 `fix/mobile-layout-pass`, issue closed.** SPEC §8.1/§8.2/§8.3. No

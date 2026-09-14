@@ -9,7 +9,7 @@
 
 import type { GenealogyDateFields } from "@rootward/shared";
 
-import type { RawGedcomNode } from "./nodes";
+import type { RawGedcomNode } from "./nodes.ts";
 
 export type GedcomVersion = "5.5.1" | "7.0" | "unknown";
 

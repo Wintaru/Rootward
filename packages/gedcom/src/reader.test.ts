@@ -5,9 +5,9 @@ import {
   GEDCOM_70,
   GEDCOM_EMPTY,
   GEDCOM_NAME_SUBTAGS,
-} from "./fixtures";
-import { readGedcom } from "./reader";
-import type { GedcomReadResult, ParsedFamily, ParsedPerson } from "./types";
+} from "./fixtures.ts";
+import { readGedcom } from "./reader.ts";
+import type { GedcomReadResult, ParsedFamily, ParsedPerson } from "./types.ts";
 
 function must<T>(value: T | null | undefined, label: string): T {
   if (value === null || value === undefined) {

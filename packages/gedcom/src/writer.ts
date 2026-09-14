@@ -28,8 +28,8 @@ import {
   FACT_TAG_FOR,
   NAME_TYPE_KEYWORD,
   SEX_KEYWORD,
-} from "./mapping";
-import type { RawGedcomNode } from "./nodes";
+} from "./mapping.ts";
+import type { RawGedcomNode } from "./nodes.ts";
 import type {
   GedcomReadResult,
   GedcomVersion,
@@ -45,7 +45,7 @@ import type {
   ParsedRepository,
   ParsedSource,
   PartnerRole,
-} from "./types";
+} from "./types.ts";
 
 export interface GedcomWriteOptions {
   /**

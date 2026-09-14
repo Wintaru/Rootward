@@ -8,7 +8,7 @@ import {
   nodeToRaw,
   tokenizeGedcom,
   type GedcomNode,
-} from "./nodes";
+} from "./nodes.ts";
 
 /** Narrow away `undefined` in a test without a non-null assertion. */
 function must<T>(value: T | null | undefined, label: string): T {

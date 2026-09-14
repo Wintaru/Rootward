@@ -73,9 +73,9 @@ the issues and fix `PROGRESS.md`.
   `packages/shared` use pure TypeScript — no Deno or Node built-ins — so a C#
   port stays possible (WAYFINDER decision 8).
 - **Edge functions are Deno, not pnpm.** `supabase/functions/` sits outside the
-  workspace; `deno.json` holds its import map and `sloppy-imports`. Split each
-  function into a portable engine (injected gateway, unit-tested) and a thin
-  `Deno.serve` shell — see `supabase/functions/README.md`.
+  workspace; `deno.json` holds its import map. Split each function into a
+  portable engine (injected gateway, unit-tested) and a thin `Deno.serve`
+  shell — see `supabase/functions/README.md`.
 - **Data access:** explicit column lists, filter/paginate/aggregate in Postgres,
   one round trip where possible. The tree view fetches only the visible
   neighborhood (WAYFINDER decision 9).

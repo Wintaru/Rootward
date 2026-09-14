@@ -6,9 +6,9 @@
  * C#/iDesign service later (WAYFINDER decision 8).
  */
 
-export { readGedcom, normalizePlaceName } from "./reader";
-export { writeGedcom } from "./writer";
-export type { GedcomWriteOptions } from "./writer";
+export { readGedcom, normalizePlaceName } from "./reader.ts";
+export { writeGedcom } from "./writer.ts";
+export type { GedcomWriteOptions } from "./writer.ts";
 
 export {
   buildForest,
@@ -20,8 +20,8 @@ export {
   rawChildrenOnly,
   tokenizeGedcom,
   unhandledChildren,
-} from "./nodes";
-export type { GedcomLine, GedcomNode, RawGedcomNode } from "./nodes";
+} from "./nodes.ts";
+export type { GedcomLine, GedcomNode, RawGedcomNode } from "./nodes.ts";
 
 export type {
   ChildRelation,
@@ -46,4 +46,4 @@ export type {
   PartnerRole,
   Sex,
   UnionType,
-} from "./types";
+} from "./types.ts";

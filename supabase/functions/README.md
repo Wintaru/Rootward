@@ -1,9 +1,8 @@
 # Supabase Edge Functions
 
 Deno runtime (SPEC §7). This tree is **not** part of the pnpm workspace — `deno`
-owns it. `deno.json` holds the import map, the `sloppy-imports` flag (the
-portable `packages/*` use extensionless relative imports), lint/format config,
-and the task shortcuts.
+owns it. `deno.json` holds the import map, lint/format config, and the task
+shortcuts.
 
 ## Prerequisites
 
@@ -40,10 +39,9 @@ The directory entries (`"@rootward/gedcom/"`, `"@rootward/shared/"`) exist for
 that bind. A bare file entry binds only `index.ts`, and its sibling modules do
 not resolve.
 
-Known gap: the edge runtime does not honour `sloppy-imports`, so the
-extensionless relative imports inside `packages/*` (`from "./reader"`) still
-fail to load there. Until those imports carry `.ts` extensions, the two GEDCOM
-functions boot only under the Deno CLI (tests) — issue #86.
+`packages/*`'s relative imports all carry explicit `.ts` extensions (issue #86),
+so the edge runtime's module loader — which never honoured `sloppy-imports` —
+resolves them the same way the Deno CLI does.
 
 ## Layout of a function
 

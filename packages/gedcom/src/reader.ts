@@ -23,7 +23,7 @@ import {
   mapNameType,
   mapSex,
   unionType,
-} from "./mapping";
+} from "./mapping.ts";
 import {
   buildForest,
   child,
@@ -33,8 +33,8 @@ import {
   rawChildrenOnly,
   tokenizeGedcom,
   unhandledChildren,
-} from "./nodes";
-import type { GedcomNode, RawGedcomNode } from "./nodes";
+} from "./nodes.ts";
+import type { GedcomNode, RawGedcomNode } from "./nodes.ts";
 import type {
   EventType,
   FactType,
@@ -54,7 +54,7 @@ import type {
   ParsedRepository,
   ParsedSource,
   PartnerRole,
-} from "./types";
+} from "./types.ts";
 
 const EVENT_TAGS: readonly string[] = Object.keys(EVENT_TYPES);
 const FACT_TAGS: readonly string[] = Object.keys(FACT_TYPES);

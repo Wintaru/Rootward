@@ -13,7 +13,7 @@ import type {
   NameType,
   Sex,
   UnionType,
-} from "./types";
+} from "./types.ts";
 
 /** GEDCOM individual / family event tags → `event_type`. */
 export const EVENT_TYPES: Readonly<Record<string, EventType>> = {

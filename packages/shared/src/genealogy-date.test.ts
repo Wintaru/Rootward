@@ -6,7 +6,7 @@ import {
   parseGenealogyDate,
   type GenealogyDateFields,
   type GenealogyDateKind,
-} from "./genealogy-date";
+} from "./genealogy-date.ts";
 
 /**
  * One row per fixture: the raw GEDCOM value, the fields we expect, and the

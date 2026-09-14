@@ -11,9 +11,9 @@ export {
   GENEALOGY_DATE_KINDS,
   formatGenealogyDate,
   parseGenealogyDate,
-} from "./genealogy-date";
+} from "./genealogy-date.ts";
 export type {
   Calendar,
   GenealogyDateFields,
   GenealogyDateKind,
-} from "./genealogy-date";
+} from "./genealogy-date.ts";
