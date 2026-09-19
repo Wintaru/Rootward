@@ -43,3 +43,8 @@ DECISIONS.md
 
 # Playwright MCP browser-session scratch
 .playwright-mcp/
+
+# Playwright e2e run artifacts (saved sessions, reports, traces)
+e2e/.auth/
+e2e/test-results/
+e2e/playwright-report/

@@ -1,0 +1,23 @@
+{
+  "name": "@rootward/e2e",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Playwright end-to-end suite for the Rootward web app.",
+  "scripts": {
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:report": "playwright show-report",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@supabase/supabase-js": "^2.112.4",
+    "@types/node": "^22",
+    "eslint": "^9",
+    "eslint-config-prettier": "10.1.8",
+    "typescript": "^5",
+    "typescript-eslint": "8.68.0"
+  }
+}
