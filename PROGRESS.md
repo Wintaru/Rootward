@@ -12,10 +12,44 @@ themes as token sets on one shared chassis, each with a light and a dark
 side. The build contract is `docs/SPEC.md` §10 "Phase 10" plus §8.1 "Themed
 chrome", and WAYFINDER decision **38** (the issues say 37 — that number was
 taken by hosted multi-tenancy the day after they were filed). Order is one
-session each: #74 (docs, done) → #75 (token contract, registry, Flexoki as
-the proof theme) → #76 → #77 → #78 → #79 → #80 → #81. **Next session: #75.**
+session each: #74 (docs, done) → #75 (token contract, done) → #76 → #77 →
+#78 → #79 → #80 → #81. **Next session: #76.**
 Bug issues #120 and #121 stay open and may be taken between phase items
 when Josh asks.
+
+**Issue #75 — Theme contract (tokens, `data-theme` / `.dark`, chassis
+attributes, registry, fonts, Flexoki as the proof theme): done, staged on
+branch `feat/theme-contract` (stacked on `docs/phase-10-theme-system`),
+issue closed.** `lib/theme/registry.ts` (`THEME_IDS`, `ThemeId`, `THEMES`,
+`DEFAULT_THEME = "flexoki"`, `isThemeId`, `themeById`, `chassisAttributes`),
+`lib/theme/preference.ts` (`rw-theme` / `rw-mode` cookies → `{ theme, mode }`,
+unknown values fall back), `lib/theme/fonts.ts` (`next/font/google` loaders
+for Newsreader + IBM Plex Sans — `variable` must be a literal, so this file
+is the single source of the `--font-*` names), `lib/theme/mode-script.ts`
+(inline pre-paint script for `system` mode), `app/themes/flexoki.css`
+(values verbatim from #76). `globals.css`: theme import, Rootward tokens in
+`@theme inline` (`bg-accent-2`, `bg-sex-*`, `rounded-control|avatar|pill`,
+`shadow-card`), `font-sans` rebound to `--font-body`, `font-display` as an
+`@utility` (a same-named `@theme` variable is a self-reference — verified
+against Tailwind 4.3.3's output), the neutral `:root` / `.dark` fallback
+moved into `@layer base` with `color-scheme` and `--rw-*` fallbacks so a
+theme file wins regardless of import order. `layout.tsx` sets `data-theme`,
+the five `data-*` chassis switches, `.dark` for `mode=dark`, every font
+`.variable` class, and `suppressHydrationWarning` (the `system` script adds
+`.dark` before paint). `registry.test.ts` holds registry ↔ `app/themes/`
+in step both ways, checks both mode blocks per file, and checks every
+`var(--font-…)` a theme uses against `fonts.ts` — confirmed red with the
+file removed. Verified live: `/login` in Flexoki light and dark under
+emulated `prefers-color-scheme`, no hydration warning. **#76 also deletes
+the neutral values from `:root` / `.dark`** (the issue assigns that step to
+the theme-file issue) — keep `--destructive`, `--chart-*`, `--sidebar-*`,
+which are outside the contract.
+Two notes from the review for later issues: (1) #76 / #77 must pass
+`preload: false` on every font face the default theme does not use — a
+root-layout loader preloads its files on every route; (2) #80's picker must
+toggle `.dark` on the client itself after saving `system` mode, because a
+`router.refresh()` rewrites `className` without the class and a `<script>`
+React inserts client-side does not execute.
 
 **Issue #74 — Docs: record Phase 10 in SPEC §10 and WAYFINDER decision 38:
 done, staged on branch `docs/phase-10-theme-system`, issue closed.** Docs

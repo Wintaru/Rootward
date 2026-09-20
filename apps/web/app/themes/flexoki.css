@@ -1,0 +1,64 @@
+/*
+ * Flexoki — ink on paper. Palette: Flexoki (stephango.com/flexoki), MIT,
+ * by Steph Ango. Values generated from the redesign token file (#76);
+ * do not retune by eye. Contract: `app/globals.css` and #75.
+ */
+[data-theme="flexoki"] {
+  --font-display: var(--font-newsreader), Georgia, "Times New Roman", serif;
+  --font-body: var(--font-ibm-plex-sans), "Helvetica Neue", Arial, sans-serif;
+  --radius: 0.375rem;
+  --rw-radius-control: 5px;
+  --rw-radius-avatar: 5px;
+  --rw-radius-pill: 5px;
+  --background: #f2f0e5;
+  --foreground: #100f0f;
+  --card: #fffcf0;
+  --card-foreground: #100f0f;
+  --popover: #fffcf0;
+  --popover-foreground: #100f0f;
+  --primary: #bc5215;
+  --primary-foreground: #fffcf0;
+  --secondary: #e6e4d9;
+  --secondary-foreground: #100f0f;
+  --muted: #e6e4d9;
+  --muted-foreground: #6f6e69;
+  --accent: #e6e4d9;
+  --accent-foreground: #100f0f;
+  --border: #dad8ce;
+  --input: #dad8ce;
+  --ring: #bc5215;
+  --rw-accent-2: #ad8301;
+  --rw-male: #205ea6;
+  --rw-female: #a02f6f;
+  --rw-neutral: #878580;
+  --rw-band: rgba(16, 15, 15, 0.035);
+  --rw-link: rgba(16, 15, 15, 0.3);
+  --rw-shadow: 0 1px 2px rgba(16, 15, 15, 0.1);
+}
+
+[data-theme="flexoki"].dark {
+  --background: #100f0f;
+  --foreground: #cecdc3;
+  --card: #1c1b1a;
+  --card-foreground: #cecdc3;
+  --popover: #1c1b1a;
+  --popover-foreground: #cecdc3;
+  --primary: #da702c;
+  --primary-foreground: #100f0f;
+  --secondary: #282726;
+  --secondary-foreground: #cecdc3;
+  --muted: #282726;
+  --muted-foreground: #878580;
+  --accent: #282726;
+  --accent-foreground: #cecdc3;
+  --border: #343331;
+  --input: #343331;
+  --ring: #da702c;
+  --rw-accent-2: #d0a215;
+  --rw-male: #4385be;
+  --rw-female: #ce5d97;
+  --rw-neutral: #9f9d96;
+  --rw-band: rgba(206, 205, 195, 0.04);
+  --rw-link: rgba(206, 205, 195, 0.3);
+  --rw-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}

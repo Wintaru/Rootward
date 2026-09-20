@@ -1096,7 +1096,10 @@ contract, #81 goes last because it measures what the others drew.
   class; the shadcn tokens plus the Rootward set (`--font-display`,
   `--font-body`, `--rw-radius-control|avatar|pill`, `--rw-accent-2`,
   `--rw-male|female|neutral`, `--rw-band`, `--rw-link`, `--rw-shadow`)
-  mapped in `@theme inline` as Tailwind utilities; chassis switches as
+  mapped in `@theme inline` as Tailwind utilities (`font-display` through
+  `@utility`, since a same-named `@theme` variable is a self-reference);
+  the neutral fallback sits in `@layer base` so a theme file always wins;
+  chassis switches as
   `data-nav|avatar|name-font|mark|ground` attributes; `lib/theme/registry.ts`
   (`ThemeId`, `THEMES`, `DEFAULT_THEME`, `isThemeId`, per-theme `preview`
   hexes for the picker); `app/layout.tsx` reads a cookie, sets the

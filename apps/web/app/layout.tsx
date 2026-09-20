@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import Link from "next/link";
 import "./globals.css";
 
@@ -10,6 +11,10 @@ import { getCurrentAccount } from "@/lib/auth/current-account";
 import { type HeaderNavLink, resolveHeaderNav } from "@/lib/auth/header-nav";
 import { getUnreadNotificationCount } from "@/lib/db/notifications";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { FONT_VARIABLE_CLASSES } from "@/lib/theme/fonts";
+import { SYSTEM_MODE_SCRIPT } from "@/lib/theme/mode-script";
+import { resolveThemePreference } from "@/lib/theme/preference";
+import { chassisAttributes, themeById } from "@/lib/theme/registry";
 
 import { signOutAction } from "./auth/actions";
 
@@ -28,8 +33,25 @@ export const metadata: Metadata = {
  * moderator+ (SPEC §8.5: "moderators subscribe app-wide"), and a sign-out
  * form. A signed-out visitor gets no header at all, no layout shift — they
  * can reach only `/login` and the `/auth/*` handlers.
+ *
+ * Theme (#75, decision 38): `<html>` carries `data-theme`, the chassis
+ * `data-*` switches, and `.dark`, all resolved server-side from the
+ * preference cookies so the first paint is already themed. In `system`
+ * mode the class is added client-side before paint by `SYSTEM_MODE_SCRIPT`,
+ * so the server-rendered `className` and the hydrated one legitimately
+ * differ — `suppressHydrationWarning` covers exactly that one element.
  */
 export default async function RootLayout({ children }: LayoutProps<"/">) {
+  const cookieStore = await cookies();
+  const preference = resolveThemePreference(
+    (name) => cookieStore.get(name)?.value,
+  );
+  const theme = themeById(preference.theme);
+  const htmlClassName = [
+    "h-full antialiased",
+    ...FONT_VARIABLE_CLASSES,
+    ...(preference.mode === "dark" ? ["dark"] : []),
+  ].join(" ");
   const current = await getCurrentAccount();
   const navLinks = current !== null ? resolveHeaderNav(current) : [];
   const showBell = current !== null && isActiveModerator(current.account);
@@ -41,7 +63,18 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
     : 0;
 
   return (
-    <html lang="en" className="h-full antialiased">
+    <html
+      lang="en"
+      className={htmlClassName}
+      data-theme={theme.id}
+      {...chassisAttributes(theme.chassis)}
+      suppressHydrationWarning
+    >
+      {preference.mode === "system" && (
+        <head>
+          <script dangerouslySetInnerHTML={{ __html: SYSTEM_MODE_SCRIPT }} />
+        </head>
+      )}
       <body className="bg-background text-foreground flex min-h-full flex-col">
         {current !== null && (
           <header className="border-border flex flex-wrap items-center justify-between gap-4 border-b px-4 py-2">
