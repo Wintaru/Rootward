@@ -288,6 +288,12 @@ export function FamilyTree({
       // A missing partner means "outside the fetched neighbourhood", not
       // "unknown" — so no "add spouse" placeholder cards.
       .setSingleParentEmptyCard(false)
+      // Off by default in family-chart. `get_neighborhood` fetches the focus
+      // person's siblings (SPEC §8.2) and `toFamilyChartData` links them to
+      // the same parents; without this the layout never places them (#115).
+      // The library places a sibling relative to a drawn parent, so with
+      // `up=0` (or no recorded parent) the fetched siblings stay undrawn.
+      .setShowSiblingsOfMain(true)
       .setSortChildrenFunction(sortChildrenByBirthYear);
 
     const card = chart
@@ -630,6 +636,11 @@ function cardDataOf(node: unknown): FamilyChartPersonData {
     (node as { data?: { data?: Partial<FamilyChartPersonData> } }).data?.data ??
     {};
   const sex = CARD_SEXES.find((value) => value === raw.sex) ?? "neutral";
+  // A sibling-of-main node (`setShowSiblingsOfMain`) is built by family-chart
+  // *after* it has attached spouses to the tree, so a partner resolved for a
+  // sibling is merged into the data and never drawn. Offer no "Show partner"
+  // on such a card rather than a button that fetches into a void (#115).
+  const isSiblingNode = (node as { sibling?: unknown }).sibling === true;
   return {
     // "male → M, everyone else → F" — same fold as `toPersonData`.
     gender: raw.gender === "M" ? "M" : "F",
@@ -646,7 +657,9 @@ function cardDataOf(node: unknown): FamilyChartPersonData {
     canExpandUp: raw.canExpandUp === true,
     canExpandDown: raw.canExpandDown === true,
     hiddenPartnerId:
-      typeof raw.hiddenPartnerId === "string" ? raw.hiddenPartnerId : null,
+      !isSiblingNode && typeof raw.hiddenPartnerId === "string"
+        ? raw.hiddenPartnerId
+        : null,
   };
 }
 

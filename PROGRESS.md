@@ -8,9 +8,21 @@ the relevant `docs/SPEC.md` section.
 **E2E bug sweep — working through the ten bugs the end-to-end suite filed
 (#110–#119, plus #106), one branch each, each closed by its own failing
 Playwright test going green.** Order: #110, #113, #111 done (#112 fell out
-of #111), #114 done; next is #115 (tree never draws siblings), then #116,
+of #111), #114, #115 done; next is #116 (media section dirty on load), then
 #117, #118, #119, #106. The
 inventory, each bug's test, and the fix direction are in `E2E-BUG-REPORT.md`.
+
+**Issue #115 — the tree never drew the focus person's siblings: done,
+staged on branch `fix/tree-siblings`, issue closed.** The neighborhood
+already carried them, linked to the same parents; `family-chart` only lays
+out siblings of the main card when `show_siblings_of_main` is on, and
+`FamilyTree.tsx` never set it. Now `setShowSiblingsOfMain(true)`. Review
+caught a consequence: a married sibling's card would show a "Show partner"
+button that fetches and draws nothing (the library attaches spouses before
+it builds sibling nodes), so `cardDataOf` drops `hiddenPartnerId` on a
+`sibling: true` node. Known limit, commented in code: at `up=0` or with no
+recorded parent the siblings stay undrawn, since the library places them
+relative to a parent card. `tree.spec.ts` is fully green.
 
 **Issue #114 — a page past the end returned HTTP 500: done, staged on
 branch `fix/people-page-past-end`, issue closed.** PostgREST answers an
