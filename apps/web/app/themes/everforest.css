@@ -1,0 +1,65 @@
+/*
+ * Everforest — soft forest. Palette: Everforest
+ * (github.com/sainnhe/everforest), MIT, by Sainnhe Park, medium contrast.
+ * Values generated from the redesign token file (#76); do not retune by
+ * eye. Contract: `app/globals.css`, #75.
+ */
+[data-theme="everforest"] {
+  --font-display: var(--font-alegreya), Georgia, "Times New Roman", serif;
+  --font-body: var(--font-alegreya-sans), "Helvetica Neue", Arial, sans-serif;
+  --radius: 0.625rem;
+  --rw-radius-control: 8px;
+  --rw-radius-avatar: 9999px;
+  --rw-radius-pill: 9999px;
+  --background: #efebd4;
+  --foreground: #5c6a72;
+  --card: #fdf6e3;
+  --card-foreground: #5c6a72;
+  --popover: #fdf6e3;
+  --popover-foreground: #5c6a72;
+  --primary: #8da101;
+  --primary-foreground: #fdf6e3;
+  --secondary: #e6e2cc;
+  --secondary-foreground: #5c6a72;
+  --muted: #e6e2cc;
+  --muted-foreground: #829181;
+  --accent: #e6e2cc;
+  --accent-foreground: #5c6a72;
+  --border: #e0dcc7;
+  --input: #e0dcc7;
+  --ring: #8da101;
+  --rw-accent-2: #dfa000;
+  --rw-male: #3a94c5;
+  --rw-female: #f57d26;
+  --rw-neutral: #939f91;
+  --rw-band: rgba(92, 106, 114, 0.05);
+  --rw-link: rgba(92, 106, 114, 0.3);
+  --rw-shadow: 0 1px 3px rgba(92, 106, 114, 0.1);
+}
+
+[data-theme="everforest"].dark {
+  --background: #232a2e;
+  --foreground: #d3c6aa;
+  --card: #2d353b;
+  --card-foreground: #d3c6aa;
+  --popover: #2d353b;
+  --popover-foreground: #d3c6aa;
+  --primary: #a7c080;
+  --primary-foreground: #232a2e;
+  --secondary: #3d484d;
+  --secondary-foreground: #d3c6aa;
+  --muted: #3d484d;
+  --muted-foreground: #9da9a0;
+  --accent: #3d484d;
+  --accent-foreground: #d3c6aa;
+  --border: #475258;
+  --input: #475258;
+  --ring: #a7c080;
+  --rw-accent-2: #dbbc7f;
+  --rw-male: #7fbbb3;
+  --rw-female: #e69875;
+  --rw-neutral: #859289;
+  --rw-band: rgba(211, 198, 170, 0.04);
+  --rw-link: rgba(211, 198, 170, 0.3);
+  --rw-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}

@@ -12,10 +12,32 @@ themes as token sets on one shared chassis, each with a light and a dark
 side. The build contract is `docs/SPEC.md` §10 "Phase 10" plus §8.1 "Themed
 chrome", and WAYFINDER decision **38** (the issues say 37 — that number was
 taken by hosted multi-tenancy the day after they were filed). Order is one
-session each: #74 (docs, done) → #75 (token contract, done) → #76 → #77 →
-#78 → #79 → #80 → #81. **Next session: #76.**
+session each: #74 (docs, done) → #75 (token contract, done) → #76 (themes
+A, done) → #77 → #78 → #79 → #80 → #81. **Next session: #77.**
 Bug issues #120 and #121 stay open and may be taken between phase items
 when Josh asks.
+
+**Issue #76 — Themes A (Flexoki, Rosé Pine, Gruvbox, Everforest): done,
+staged on branch `feat/themes-a` (stacked on `feat/theme-contract`), issue
+closed.** Four commits: the `:root` fallback, then one per new theme.
+`app/themes/{rosepine,gruvbox,everforest}.css` hold the issue's values
+verbatim, imported from `globals.css`; one registry entry each (`THEME_IDS`
+is now four); six more `next/font/google` loaders in `lib/theme/fonts.ts`
+(Young Serif, Nunito Sans, Zilla Slab, Public Sans, Alegreya, Alegreya Sans),
+all `preload: false` so only the default theme's two faces preload — checked
+live: two `<link rel="preload" as="font">` on the page whatever the theme.
+`README.md` gains a Credits section for the four MIT palettes. The step #75
+deferred here is done: the neutral shadcn values are gone from `globals.css`
+(`:root` / `.dark` keep only `color-scheme`, `--destructive`, `--chart-*`,
+`--sidebar-*`), and the default theme's file doubles as the fallback through
+`:where(:root), [data-theme="flexoki"]` / `:where(.dark), …` — zero
+specificity, so any other theme's rule beats it whatever the import order
+(`DECISIONS.md` 2026-09-20 16:09). `registry.test.ts` asserts the
+`DEFAULT_THEME` file, and only it, carries that pair; the existing guards
+(files ↔ ids ↔ `@import`s, mode blocks, preview hexes ↔ CSS, font refs ↔
+loaders) now cover all four. Verified live: `/login` under each theme
+cookie, light and dark, correct tokens and faces, no console warnings.
+Nothing in the tree or chrome reads the new tokens yet — that is #78 / #79.
 
 **Issue #75 — Theme contract (tokens, `data-theme` / `.dark`, chassis
 attributes, registry, fonts, Flexoki as the proof theme): done, staged on

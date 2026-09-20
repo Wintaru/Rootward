@@ -1,4 +1,6 @@
 import {
+  Alegreya,
+  Alegreya_Sans,
   IBM_Plex_Sans,
   Newsreader,
   Nunito_Sans,
@@ -70,6 +72,23 @@ const publicSans = Public_Sans({
   preload: false,
 });
 
+// Everforest
+const alegreya = Alegreya({
+  subsets: ["latin"],
+  variable: "--font-alegreya",
+  display: "swap",
+  style: ["normal", "italic"],
+  preload: false,
+});
+
+const alegreyaSans = Alegreya_Sans({
+  subsets: ["latin"],
+  variable: "--font-alegreya-sans",
+  display: "swap",
+  weight: ["400", "500", "700"],
+  preload: false,
+});
+
 /** Every loader's `.variable` class, for `<html className>`. */
 export const FONT_VARIABLE_CLASSES: readonly string[] = [
   newsreader.variable,
@@ -78,4 +97,6 @@ export const FONT_VARIABLE_CLASSES: readonly string[] = [
   nunitoSans.variable,
   zillaSlab.variable,
   publicSans.variable,
+  alegreya.variable,
+  alegreyaSans.variable,
 ];

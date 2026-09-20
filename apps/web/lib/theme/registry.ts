@@ -13,7 +13,12 @@
  * that component CSS selects on — never a per-theme JSX branch.
  */
 
-export const THEME_IDS = ["flexoki", "rosepine", "gruvbox"] as const;
+export const THEME_IDS = [
+  "flexoki",
+  "rosepine",
+  "gruvbox",
+  "everforest",
+] as const;
 export type ThemeId = (typeof THEME_IDS)[number];
 
 export const NAV_STYLES = ["underline", "pill", "caps"] as const;
@@ -151,6 +156,39 @@ export const THEMES: readonly ThemeDefinition[] = [
         accent: "#fe8019",
         male: "#83a598",
         female: "#d3869b",
+      },
+    },
+  },
+  {
+    id: "everforest",
+    label: "Everforest",
+    tagline: "Soft forest — green-grey, gentle contrast",
+    credit:
+      "Palette: Everforest (github.com/sainnhe/everforest) — medium contrast",
+    fonts: { display: "Alegreya", body: "Alegreya Sans" },
+    chassis: {
+      nav: "underline",
+      avatar: "ring",
+      nameFont: "body",
+      mark: "sprig",
+      ground: "flat",
+    },
+    preview: {
+      light: {
+        bg: "#efebd4",
+        surface: "#fdf6e3",
+        ink: "#5c6a72",
+        accent: "#8da101",
+        male: "#3a94c5",
+        female: "#f57d26",
+      },
+      dark: {
+        bg: "#232a2e",
+        surface: "#2d353b",
+        ink: "#d3c6aa",
+        accent: "#a7c080",
+        male: "#7fbbb3",
+        female: "#e69875",
       },
     },
   },

@@ -4,6 +4,7 @@
 @import "./themes/flexoki.css";
 @import "./themes/rosepine.css";
 @import "./themes/gruvbox.css";
+@import "./themes/everforest.css";
 
 @custom-variant dark (&:is(.dark *));
 
