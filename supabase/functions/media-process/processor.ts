@@ -83,6 +83,11 @@ export interface MediaLinkInsert {
   readonly mediaId: string;
   readonly ownerType: MediaOwner;
   readonly ownerId: string;
+  /** Position among the owner's links — one past the highest the owner
+   * already has, so the new one lands last. The edit view's Media section
+   * compares this against each row's list index; a null here reads as a
+   * pending reorder on every load (#116). */
+  readonly sortOrder: number;
 }
 
 export interface MediaProcessGateway {
@@ -95,6 +100,12 @@ export interface MediaProcessGateway {
   ): Promise<void>;
   removeObject(path: string): Promise<void>;
   insertMedia(row: MediaRowInsert): Promise<void>;
+  /** One past the highest `sort_order` among `ownerId`'s links, `0` when it
+   * has none — gap-proof, unlike a row count. */
+  nextMediaLinkSortOrder(
+    ownerType: MediaOwner,
+    ownerId: string,
+  ): Promise<number>;
   insertMediaLink(link: MediaLinkInsert): Promise<void>;
 }
 
@@ -182,6 +193,10 @@ export async function runMediaProcess(
     mediaId,
     ownerType: input.ownerType,
     ownerId: input.ownerId,
+    sortOrder: await deps.gateway.nextMediaLinkSortOrder(
+      input.ownerType,
+      input.ownerId,
+    ),
   });
 
   await deps.gateway.removeObject(input.stagingPath);

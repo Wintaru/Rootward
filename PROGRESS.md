@@ -8,9 +8,24 @@ the relevant `docs/SPEC.md` section.
 **E2E bug sweep — working through the ten bugs the end-to-end suite filed
 (#110–#119, plus #106), one branch each, each closed by its own failing
 Playwright test going green.** Order: #110, #113, #111 done (#112 fell out
-of #111), #114, #115 done; next is #116 (media section dirty on load), then
-#117, #118, #119, #106. The
+of #111), #114, #115, #116 done; next is #117 (stale expand arrow), then
+#118, #119, #106. The
 inventory, each bug's test, and the fix direction are in `E2E-BUG-REPORT.md`.
+
+**Issue #116 — the Media section reported unsaved changes on load: done,
+staged on branch `fix/media-link-sort-order`, issue closed.** `media-process`
+inserted `media_link` without `sort_order`, and `diffMediaLinks` read the
+null as a pending reorder. The engine now asks the gateway for one past the
+owner's highest `sort_order` (`nextMediaLinkSortOrder`, gap-proof) and
+writes it on insert (Deno tests cover a second upload and a gap). Migration
+`20260920100000_media_link_sort_order_backfill` numbers the rows already
+null, per owner in display order after any numbered row (pgTAP
+`media_link_sort_order_test.sql`) — without it every pre-fix upload kept
+the bug. The e2e test "leaves the section clean right after an upload"
+passes with the edge functions served
+(`supabase functions serve --import-map supabase/functions/deno.json`).
+Follow-up filed: #120 (making a photo primary leaves `sort_order` stale —
+same symptom, different cause).
 
 **Issue #115 — the tree never drew the focus person's siblings: done,
 staged on branch `fix/tree-siblings`, issue closed.** The neighborhood

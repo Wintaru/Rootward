@@ -85,6 +85,16 @@ function createFakeGateway(
       state.media.push(row);
       return Promise.resolve();
     },
+    nextMediaLinkSortOrder: (ownerType, ownerId) => {
+      const owned = state.links.filter(
+        (link) => link.ownerType === ownerType && link.ownerId === ownerId,
+      );
+      return Promise.resolve(
+        owned.length === 0
+          ? 0
+          : Math.max(...owned.map((link) => link.sortOrder)) + 1,
+      );
+    },
     insertMediaLink: (link) => {
       state.links.push(link);
       return Promise.resolve();
@@ -199,8 +209,53 @@ Deno.test(
     assertEquals(row.date?.date_year1, 2020);
 
     assertEquals(state.links, [
-      { mediaId: "m1", ownerType: "person", ownerId: BASE_INPUT.ownerId },
+      {
+        mediaId: "m1",
+        ownerType: "person",
+        ownerId: BASE_INPUT.ownerId,
+        sortOrder: 0,
+      },
     ]);
+  },
+);
+
+Deno.test(
+  "runMediaProcess: a second upload for the same owner lands last (#116)",
+  async () => {
+    const state = newState();
+    // A gap (a deleted middle link) must not be reused: the new row lands
+    // past the highest position, not at the row count.
+    state.links.push({
+      mediaId: "m0",
+      ownerType: "person",
+      ownerId: BASE_INPUT.ownerId,
+      sortOrder: 4,
+    });
+    state.links.push({
+      mediaId: "mx",
+      ownerType: "person",
+      ownerId: "someone-else",
+      sortOrder: 0,
+    });
+    const staging = stagePath(state, PNG_BYTES, "staging/upload-3.png");
+    await runMediaProcess(
+      { ...BASE_INPUT, stagingPath: staging, originalFilename: "second.png" },
+      {
+        gateway: createFakeGateway(state),
+        codec: createFakeCodec(state),
+        exif: createFakeExif(state),
+        newId: () => "m3",
+      },
+    );
+
+    // Only this owner's links count — the other person's photo is not in
+    // the way.
+    assertEquals(state.links.at(-1), {
+      mediaId: "m3",
+      ownerType: "person",
+      ownerId: BASE_INPUT.ownerId,
+      sortOrder: 5,
+    });
   },
 );
 

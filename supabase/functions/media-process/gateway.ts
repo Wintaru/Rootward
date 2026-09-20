@@ -9,6 +9,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type {
   MediaLinkInsert,
+  MediaOwner,
   MediaProcessGateway,
   MediaRowInsert,
   TreeMediaSettings,
@@ -107,11 +108,33 @@ export function createSupabaseGateway(
       }
     },
 
+    async nextMediaLinkSortOrder(
+      ownerType: MediaOwner,
+      ownerId: string,
+    ): Promise<number> {
+      const { data, error } = await supabase
+        .from("media_link")
+        .select("sort_order")
+        .eq("owner_type", ownerType)
+        .eq("owner_id", ownerId)
+        .order("sort_order", { ascending: false, nullsFirst: false })
+        .limit(1)
+        .maybeSingle();
+      if (error !== null) {
+        throw new Error(
+          `read media_link sort_order for ${ownerType} ${ownerId}: ${error.message}`,
+        );
+      }
+      const highest = data?.sort_order ?? null;
+      return highest === null ? 0 : highest + 1;
+    },
+
     async insertMediaLink(link: MediaLinkInsert): Promise<void> {
       const { error } = await supabase.from("media_link").insert({
         media_id: link.mediaId,
         owner_type: link.ownerType,
         owner_id: link.ownerId,
+        sort_order: link.sortOrder,
       });
       if (error !== null) {
         throw new Error(
