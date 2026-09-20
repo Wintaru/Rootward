@@ -8,9 +8,18 @@ the relevant `docs/SPEC.md` section.
 **E2E bug sweep — working through the ten bugs the end-to-end suite filed
 (#110–#119, plus #106), one branch each, each closed by its own failing
 Playwright test going green.** Order: #110, #113, #111 done (#112 fell out
-of #111), #114, #115, #116, #117 done; next is #118 (unnamed selects), then
-#119, #106. The
+of #111), #114, #115, #116, #117, #118 done; next is #119 (tree has no h1),
+then #106. The
 inventory, each bug's test, and the fix direction are in `E2E-BUG-REPORT.md`.
+
+**Issue #118 — six Relationships selects had no accessible name: done,
+staged on branch `fix/relationships-select-names`, issue closed.**
+`PartnerRoleSelect` / `ChildRelationSelect` take a required `label` prop
+rendered as `aria-label`, naming the person ("Role of Vera Qatestsson",
+"Vera Qatestsson: Relation to child", "Relation of Cora Qatestsson to Vera
+Qatestsson") so a screen reader can tell them apart. The visible phrase is
+kept verbatim inside the name (WCAG 2.5.3, caught in review). The a11y e2e
+test for the section passes.
 
 **Issue #117 — a tree card kept its expand arrow after the expansion: done,
 staged on branch `fix/tree-expand-affordance`, issue closed.**

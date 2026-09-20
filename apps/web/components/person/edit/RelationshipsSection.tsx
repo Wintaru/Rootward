@@ -137,17 +137,26 @@ const removeButton =
   "text-destructive w-fit rounded-md px-2 py-1 text-xs font-medium disabled:opacity-40";
 const selectClass = "border-border rounded-md border px-2 py-1 text-xs";
 
+/** Both selects below sit beside their description as plain text ("Relation
+ * to child:", "to Vera:") with nothing that associates it, so each takes an
+ * explicit `label` for its accessible name — naming the person too, so a
+ * screen reader can tell several otherwise identical comboboxes apart
+ * (#118). Keep the visible phrase inside the name verbatim: a voice-control
+ * user speaks what they see (WCAG 2.5.3). */
 function PartnerRoleSelect({
+  label,
   value,
   disabled,
   onChange,
 }: {
+  readonly label: string;
   readonly value: PartnerRole | null;
   readonly disabled: boolean;
   readonly onChange: (value: PartnerRole) => void;
 }) {
   return (
     <select
+      aria-label={label}
       value={value ?? ""}
       disabled={disabled}
       onChange={(e) => {
@@ -176,16 +185,19 @@ function isPartnerRole(value: string): value is PartnerRole {
 }
 
 function ChildRelationSelect({
+  label,
   value,
   disabled,
   onChange,
 }: {
+  readonly label: string;
   readonly value: ChildRelation | null;
   readonly disabled: boolean;
   readonly onChange: (value: ChildRelation | null) => void;
 }) {
   return (
     <select
+      aria-label={label}
       value={value ?? ""}
       disabled={disabled}
       onChange={(e) =>
@@ -347,6 +359,7 @@ function ParentFamilyCard({
           Relation to child:
         </span>
         <ChildRelationSelect
+          label={`${partner.name}: Relation to child`}
           value={relation}
           disabled={busy}
           onChange={(value) =>
@@ -507,6 +520,7 @@ function UnionFamilyCard({
       <div className="flex flex-wrap items-center gap-2">
         <PartnerLine partner={partner} />
         <PartnerRoleSelect
+          label={`Role of ${partner.name}`}
           value={partner.role}
           disabled={busy}
           onChange={(role) =>
@@ -667,6 +681,7 @@ function ChildrenList({
               to {family.partner1?.name ?? "partner 1"}:
             </span>
             <ChildRelationSelect
+              label={`Relation of ${child.personName} to ${family.partner1?.name ?? "partner 1"}`}
               value={child.relationToPartner1}
               disabled={busy}
               onChange={(relation) =>
@@ -685,6 +700,7 @@ function ChildrenList({
               to {family.partner2?.name ?? "partner 2"}:
             </span>
             <ChildRelationSelect
+              label={`Relation of ${child.personName} to ${family.partner2?.name ?? "partner 2"}`}
               value={child.relationToPartner2}
               disabled={busy}
               onChange={(relation) =>
