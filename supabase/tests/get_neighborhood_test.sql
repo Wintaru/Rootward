@@ -8,7 +8,7 @@
 -- fixture row that genuinely exists so a deny never passes vacuously.
 
 begin;
-select plan(23);
+select plan(28);
 
 create function pg_temp.act_as(p_uid uuid)
 returns void
@@ -57,6 +57,15 @@ as $$
   select coalesce(array_agg(c order by c), array[]::text[])
   from jsonb_array_elements(p -> 'families') f
   cross join lateral jsonb_array_elements_text(f -> 'child_ids') c
+  where f ->> 'id' = p_family::text
+$$;
+
+create function pg_temp.family_field(p jsonb, p_family uuid, p_field text)
+returns text
+language sql
+as $$
+  select f ->> p_field
+  from jsonb_array_elements(p -> 'families') f
   where f ->> 'id' = p_family::text
 $$;
 
@@ -143,6 +152,16 @@ insert into public.event (id, owner_type, person_id, type, date_year1) values
   ('40000000-0000-0000-0000-000000000002', 'person', '10000000-0000-0000-0000-000000000001', 'birth', 1890),
   ('40000000-0000-0000-0000-000000000003', 'person', '10000000-0000-0000-0000-000000000001', 'death', 1960);
 
+-- Ended unions (issue #122): the grandparents' family both divorced and had
+-- the marriage annulled (annulment must win); the parents' family divorced;
+-- the focus person's own family stands.
+insert into public.event (id, owner_type, family_id, type, date_year1) values
+  ('40000000-0000-0000-0000-000000000010', 'family', '20000000-0000-0000-0000-000000000001', 'divorce', 1920),
+  ('40000000-0000-0000-0000-000000000011', 'family', '20000000-0000-0000-0000-000000000001', 'annulment', 1921),
+  ('40000000-0000-0000-0000-000000000012', 'family', '20000000-0000-0000-0000-000000000010', 'marriage', 1980),
+  ('40000000-0000-0000-0000-000000000013', 'family', '20000000-0000-0000-0000-000000000010', 'divorce', 1990),
+  ('40000000-0000-0000-0000-000000000014', 'family', '20000000-0000-0000-0000-000000000020', 'marriage', 2010);
+
 set local role authenticated;
 
 -- ===========================================================================
@@ -195,8 +214,8 @@ select is(
    from jsonb_object_keys(
      (public.get_neighborhood('10000000-0000-0000-0000-000000000020', 2, 2) -> 'families') -> 0
    ) as k),
-  array['child_ids', 'id', 'partner1_id', 'partner1_role', 'partner2_id',
-        'partner2_role', 'relationship_type']::text[],
+  array['child_ids', 'ended_by', 'id', 'partner1_id', 'partner1_role',
+        'partner2_id', 'partner2_role', 'relationship_type']::text[],
   'families[] element carries exactly the documented keys'
 );
 
@@ -274,6 +293,44 @@ select is(
     '20000000-0000-0000-0000-000000000040'),
   array[]::text[],
   'families: a grandchild''s family drops the out-of-window great-grandchild'
+);
+
+-- Ended unions (issue #122): `ended_by` is derived from the family's divorce /
+-- annulment events, never from `relationship_type` (every fixture family is
+-- 'married').
+select is(
+  pg_temp.family_field(
+    public.get_neighborhood('10000000-0000-0000-0000-000000000020', 2, 2),
+    '20000000-0000-0000-0000-000000000010', 'ended_by'),
+  'divorce',
+  'ended_by: a family with a divorce event reports divorce'
+);
+select is(
+  pg_temp.family_field(
+    public.get_neighborhood('10000000-0000-0000-0000-000000000020', 2, 2),
+    '20000000-0000-0000-0000-000000000001', 'ended_by'),
+  'annulment',
+  'ended_by: annulment wins when a family has both events'
+);
+select is(
+  pg_temp.family_field(
+    public.get_neighborhood('10000000-0000-0000-0000-000000000020', 2, 2),
+    '20000000-0000-0000-0000-000000000020', 'ended_by'),
+  null,
+  'ended_by: a family with only a marriage event is null'
+);
+select is(
+  pg_temp.family_field(
+    public.get_neighborhood('10000000-0000-0000-0000-000000000020', 2, 2),
+    '20000000-0000-0000-0000-000000000030', 'ended_by'),
+  null,
+  'ended_by: a family with no events at all is null'
+);
+select is(
+  (select public.ended_by(f) from public.family f
+   where f.id = '20000000-0000-0000-0000-000000000010'),
+  'divorce',
+  'ended_by: the PostgREST computed field on family gives the same answer'
 );
 
 -- ===========================================================================

@@ -1417,6 +1417,7 @@ export type Database = {
         Returns: Json
       }
       fact_is_visible: { Args: { p_fact_id: string }; Returns: boolean }
+      family_ended_by: { Args: { p_family: string }; Returns: string }
       family_is_visible: { Args: { p_family_id: string }; Returns: boolean }
       genealogy_date_sort_key: {
         Args: { p_day: number; p_month: number; p_year: number }

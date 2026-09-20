@@ -9,7 +9,7 @@
 -- superuser pg_prove connects as, identity switched with a fake JWT.
 
 begin;
-select plan(18);
+select plan(19);
 
 create function pg_temp.act_as(p_uid uuid)
 returns void
@@ -112,6 +112,10 @@ insert into public.family_child (family_id, person_id, sort_order) values
   ('21000000-0000-0000-0000-000000000020', '11000000-0000-0000-0000-000000000041', 1),
   ('21000000-0000-0000-0000-000000000040', '11000000-0000-0000-0000-000000000050', 0);
 
+-- Ended union (issue #122): Foc and Spo divorced.
+insert into public.event (id, owner_type, family_id, type, date_year1) values
+  ('41000000-0000-0000-0000-000000000001', 'family', '21000000-0000-0000-0000-000000000020', 'divorce', 2015);
+
 set local role authenticated;
 
 -- ===========================================================================
@@ -177,8 +181,8 @@ select is(
    from jsonb_object_keys(
      (public.expand_relatives('11000000-0000-0000-0000-000000000020', 'parents') -> 'families') -> 0
    ) as k),
-  array['child_ids', 'id', 'partner1_id', 'partner1_role', 'partner2_id',
-        'partner2_role', 'relationship_type']::text[],
+  array['child_ids', 'ended_by', 'id', 'partner1_id', 'partner1_role',
+        'partner2_id', 'partner2_role', 'relationship_type']::text[],
   'families[] element carries exactly the documented keys'
 );
 
@@ -207,6 +211,16 @@ select is(
     '11000000-0000-0000-0000-000000000041'
   ]::text[],
   'children: family child_ids is unfiltered, unlike get_neighborhood''s window-scoped set'
+);
+
+select is(
+  (select f ->> 'ended_by'
+   from jsonb_array_elements(
+     public.expand_relatives('11000000-0000-0000-0000-000000000020', 'children') -> 'families'
+   ) f
+   where f ->> 'id' = '21000000-0000-0000-0000-000000000020'),
+  'divorce',
+  'children: the family carries ended_by from its divorce event (#122)'
 );
 
 select is(
