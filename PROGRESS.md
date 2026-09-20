@@ -5,12 +5,24 @@ the relevant `docs/SPEC.md` section.
 
 ## Current state
 
-**E2E bug sweep — working through the ten bugs the end-to-end suite filed
-(#110–#119, plus #106), one branch each, each closed by its own failing
-Playwright test going green.** Order: #110, #113, #111 done (#112 fell out
-of #111), #114, #115, #116, #117, #118, #119 done; last is #106 ("Show
-partner" draws no card). The
-inventory, each bug's test, and the fix direction are in `E2E-BUG-REPORT.md`.
+**E2E bug sweep — complete.** All ten bugs the end-to-end suite filed
+(#110–#119, plus #106) are fixed, one branch each, each closed by its own
+Playwright test going green. The full suite (`pnpm test:e2e`, both
+projects, with the edge functions served) passes: 430 tests, none skipped.
+Follow-ups filed along the way: #120 (make-primary leaves `sort_order`
+stale), #121 (a hidden focus with visible relatives slips past the tree's
+404 guard). Next session: pick the lowest-numbered open issue as usual.
+
+**Issue #106 — "Show partner" resolved the person but drew no card: done,
+staged on branch `fix/tree-show-partner`, issue closed.** `family-chart`
+attaches spouses only to cards on the descendant side of the root; the
+reported case was the focus's father's second wife (an ancestor). The badge
+is now offered only where a press draws a card (`cardDataOf` reads the
+library's `is_ancestry` / `added` / `sibling` node flags —
+`SPOUSELESS_LAYOUT_FLAGS`, generalising #115's sibling gate). An ancestor's
+other marriage is reached by re-centring on that ancestor. Two new e2e
+tests in `tree-controls.spec.ts` ("Show partner"), built from scratch
+persons, cover both sides. SPEC §8.2 updated.
 
 **Issue #119 — the tree view had no level-1 heading: done, staged on
 branch `fix/tree-page-heading`, issue closed.** `/tree/[personId]` now

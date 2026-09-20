@@ -1,6 +1,8 @@
 import type { Page } from "@playwright/test";
 
 import { fixtureIds, fixtureNames } from "../support/fixture-data";
+import { scratchPersons } from "../support/scratch";
+import { admin } from "../support/supabase-admin";
 import { expect, test } from "../support/test";
 
 /**
@@ -211,5 +213,96 @@ test.describe("the card affordances", () => {
     );
     await expect(card).toContainText(fixtureNames.grandfather);
     await expect(card).toContainText("1901");
+  });
+});
+
+/**
+ * "Show partner" (#106). `family-chart` attaches spouses only to cards on
+ * the descendant side of the root, so the badge can honour its promise on
+ * the root and its descendants and nowhere else. The reported case was an
+ * ancestor's second marriage: the fetch succeeded, the badge vanished, and
+ * no card appeared. The rule now is that the badge is offered only where a
+ * press can draw something.
+ *
+ * Both scenes are built from throwaway people so the shared fixture family
+ * is untouched while other workers assert on it.
+ */
+test.describe("Show partner", () => {
+  const scratch = scratchPersons();
+
+  test.afterEach(async () => {
+    await scratch.remove();
+  });
+
+  /** `parentIds` become the family's partners, `childIds` its children. */
+  async function family(
+    parentIds: readonly [string, string | null],
+    childIds: readonly string[] = [],
+  ): Promise<void> {
+    const familyId = crypto.randomUUID();
+    const inserted = await admin.from("family").insert({
+      id: familyId,
+      partner1_id: parentIds[0],
+      partner2_id: parentIds[1],
+      relationship_type: "married",
+    });
+    if (inserted.error !== null) {
+      throw new Error(`family insert failed: ${inserted.error.message}`);
+    }
+    if (childIds.length > 0) {
+      const linked = await admin.from("family_child").insert(
+        childIds.map((personId) => ({
+          family_id: familyId,
+          person_id: personId,
+        })),
+      );
+      if (linked.error !== null) {
+        throw new Error(`family_child insert failed: ${linked.error.message}`);
+      }
+    }
+  }
+
+  test("draws a descendant's spouse when pressed", async ({ viewerPage }) => {
+    const root = await scratch.create("Rootly", "male");
+    const child = await scratch.create("Childly", "female");
+    const spouse = await scratch.create("Spousely", "male");
+    await family([root, null], [child]);
+    await family([spouse, child]);
+
+    await openTree(viewerPage, root, "?up=1&down=1");
+    const badge = viewerPage.locator(
+      `[data-expand-relation="self"][data-expand-target="${spouse}"]`,
+    );
+    await expect(badge).toBeVisible({ timeout: 20_000 });
+    await expect(
+      viewerPage.locator(`[data-person-id="${spouse}"]`),
+    ).toHaveCount(0);
+    await badge.click();
+
+    await expect(
+      viewerPage.locator(`[data-person-id="${spouse}"]`),
+      "the resolved partner must be drawn, not just fetched",
+    ).toBeVisible({ timeout: 20_000 });
+  });
+
+  test("is not offered on an ancestor, whose other marriage the layout cannot draw", async ({
+    viewerPage,
+  }) => {
+    const root = await scratch.create("Rootly", "male");
+    const father = await scratch.create("Fatherly", "male");
+    const stepmother = await scratch.create("Steply", "female");
+    await family([father, null], [root]);
+    await family([father, stepmother]);
+
+    await openTree(viewerPage, root, "?up=1&down=1");
+    await expect(
+      viewerPage.locator(`[data-person-id="${father}"]`),
+    ).toBeVisible();
+    await expect(
+      viewerPage.locator(
+        `[data-expand-relation="self"][data-expand-target="${stepmother}"]`,
+      ),
+      "a badge whose press draws nothing must not be offered",
+    ).toHaveCount(0);
   });
 });

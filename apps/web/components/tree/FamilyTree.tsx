@@ -628,6 +628,21 @@ function drawGenerationBands(
 const CARD_SEXES: readonly CardSex[] = ["male", "female", "neutral"];
 
 /**
+ * family-chart (0.9.0) attaches spouses only to hierarchy nodes on the
+ * descendant side (`setupSpouses` skips `is_ancestry`), never walks the
+ * spouses of a spouse node it `added` itself, and builds sibling-of-main
+ * nodes after that pass. These are its own flags on the tree node it hands
+ * the card creator — internals, so a version bump can rename them without a
+ * type error. The "Show partner" describe in `e2e/tests/tree-controls.spec.ts`
+ * is the guard: re-run it after upgrading.
+ */
+const SPOUSELESS_LAYOUT_FLAGS: readonly string[] = [
+  "is_ancestry",
+  "added",
+  "sibling",
+];
+
+/**
  * `family-chart` hands the card creator its own tree node. `node.data.data` is
  * the object we built in `toFamilyChartData`. We control what went in, but the
  * library can also synthesise its own nodes (e.g. a spouse placeholder), so the
@@ -639,11 +654,13 @@ function cardDataOf(node: unknown): FamilyChartPersonData {
     (node as { data?: { data?: Partial<FamilyChartPersonData> } }).data?.data ??
     {};
   const sex = CARD_SEXES.find((value) => value === raw.sex) ?? "neutral";
-  // A sibling-of-main node (`setShowSiblingsOfMain`) is built by family-chart
-  // *after* it has attached spouses to the tree, so a partner resolved for a
-  // sibling is merged into the data and never drawn. Offer no "Show partner"
-  // on such a card rather than a button that fetches into a void (#115).
-  const isSiblingNode = (node as { sibling?: unknown }).sibling === true;
+  // A partner resolved for a card the layout will not attach spouses to
+  // (`SPOUSELESS_LAYOUT_FLAGS`) is merged into the data and never drawn — an
+  // ancestor's second marriage is the reported case (#106), a married
+  // sibling the other (#115). Offer "Show partner" only where a press draws
+  // a card; re-centring on that person makes them the root, where every
+  // spouse is drawn.
+  const layoutDrawsSpouses = !isLayoutFlagSet(node, SPOUSELESS_LAYOUT_FLAGS);
   return {
     // "male → M, everyone else → F" — same fold as `toPersonData`.
     gender: raw.gender === "M" ? "M" : "F",
@@ -660,10 +677,16 @@ function cardDataOf(node: unknown): FamilyChartPersonData {
     canExpandUp: raw.canExpandUp === true,
     canExpandDown: raw.canExpandDown === true,
     hiddenPartnerId:
-      !isSiblingNode && typeof raw.hiddenPartnerId === "string"
+      layoutDrawsSpouses && typeof raw.hiddenPartnerId === "string"
         ? raw.hiddenPartnerId
         : null,
   };
+}
+
+/** True when family-chart set any of `flags` to `true` on its tree node. */
+function isLayoutFlagSet(node: unknown, flags: readonly string[]): boolean {
+  const record = (node ?? {}) as Record<string, unknown>;
+  return flags.some((flag) => record[flag] === true);
 }
 
 /**

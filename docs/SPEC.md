@@ -757,7 +757,11 @@ pages enforce access server-side. Every route is usable at 390 px wide (#65).
   uses the same delegation pattern as the expand buttons (`data-*` attribute,
   a real `<button>`, `stopPropagation` so it does not also re-center).
 - **Expand affordance** on any card with relatives outside the current window →
-  loads one more level for that branch without re-centering.
+  loads one more level for that branch without re-centering. The partner
+  affordance is offered only on the focus person and their descendants:
+  `family-chart` draws spouses only on that side of the root, so an
+  ancestor's other marriage is reached by re-centering on that ancestor
+  (#106).
 - Extended family (aunts/uncles/cousins) — a later toggle, not in v1.
 
 ### 8.3 Edit view — decisions 10, 21, 26

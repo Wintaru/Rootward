@@ -116,7 +116,9 @@ function mergeFamily(
  * Person ids in `neighborhood.persons` whose family names a partner the
  * fetched window did not resolve — a descendant's spouse, say (SPEC §8.4).
  * The tree view shows a "resolve partner" affordance on the known partner's
- * card; expanding it calls `expandRelatives(hiddenPartnerId, "self")`.
+ * card when the layout can draw the result (the focus person and their
+ * descendants — `FamilyTree`'s `cardDataOf` decides, #106); expanding it
+ * calls `expandRelatives(hiddenPartnerId, "self")`.
  *
  * One entry per known partner: a person married more than once, with more
  * than one off-window spouse, surfaces only the last family walked. Same
