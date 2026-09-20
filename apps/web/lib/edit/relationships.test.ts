@@ -16,6 +16,7 @@ function union(
     partner1: { id: "p1", name: "Jane Doe", role: "wife" },
     partner2: { id: "p2", name: "John Smith", role: "husband" },
     relationshipType: "married",
+    endedBy: null,
     ...overrides,
   };
 }

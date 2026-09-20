@@ -750,6 +750,8 @@ pages enforce access server-side. Every route is usable at 390 px wide (#65).
   focus, ancestors to `up`, descendants to `down`, focus's siblings, focus's
   partners (decision 28). `up`/`down` from `tree_settings` defaults, overridable
   in-session.
+- **Ended unions** (#122): a divorced or annulled couple's spouse link is
+  drawn dashed and faded (`ended_by` on the family payload — §8.3).
 - **Click** a card → `router.push('/tree/<id>')`; `family-chart` animates the
   re-center. Focus person in the URL (decision 28) — back button works.
 - **Open the profile** (decision 28, #52): an icon button on the card and a
@@ -786,12 +788,32 @@ Influential Persons, DNA, Stories, ToDos, Numbering System — decision 21.)
   family. Removing the last member deletes the family row and its family
   events. `family` rows carry `updated_at` and take the same version check as
   every other row. `get_neighborhood` needs no change — the tree reflects the
-  new rows on return.
+  new rows on return. Each union card also shows a **status line** built
+  from the family's events — `Married — 12 Jun 1990, Springfield ·
+  Divorced — 2003` — with a link to Events for editing the dates, and a
+  **Record a divorce** button (#122) that writes one `divorce` family event
+  with a `DateInput` date, in place. The button shows only while the union
+  stands (see *Ended unions* below) and both partners are set.
 - **Family events** (decision 21 as amended by 36, #57) — marriage, divorce,
   engagement, annulment appear in the Events section under a **Union with
   \<partner\>** group, one per `family` the person is a partner in. Writes go
   to `event` with `family_id` set and `person_id` null. Same `DateInput`,
   `PlaceInput`, citations, notes, and version check as person events.
+- **Ended unions** (#122) — "divorced" is derived, never stored:
+  `family_ended_by(family_id)` returns `divorce` or `annulment` (annulment
+  wins when both exist) from the family's events, or null while the union
+  stands. Event order is ignored — a remarriage to the same person is a
+  second `family` row, not a later marriage event on the ended one.
+  `relationship_type` is the kind of union, not its state, and is never
+  changed by a divorce. The derivation is exposed twice from one
+  function: as `ended_by` on every family in the `get_neighborhood` /
+  `expand_relatives` payloads (the tree and the edit shell's relatives
+  strip need no second fetch), and as the PostgREST computed field
+  `ended_by` on `family` rows (the Relationships section). Surfaces: the
+  profile's partner line reads `Married — 1990 · Divorced — 2003`, the edit
+  shell's strip reads `Divorced`, the tree draws the couple's spouse link
+  dashed and faded, and the union card's status line and button follow it.
+  Widowed (a partner's death) is a separate derivation, not yet built.
 - **Visibility and living** (decisions 6, 7, #58) — two controls in Name &
   Gender. Visibility offers `everyone_approved`, `moderators_only`, `hidden`
   in the MVP (`close_family` is post-MVP, #43 — hidden or shown disabled).
@@ -834,7 +856,8 @@ Influential Persons, DNA, Stories, ToDos, Numbering System — decision 21.)
   round trip, `SECURITY INVOKER` so RLS applies. `up` / `down` clamp to `0..10`.
   Returned `persons` are exactly the decision-28 set; a returned `family` row may
   still name a `partner*_id` outside that set (a descendant's spouse), which the
-  expand-in-place path (§10 item 24) resolves on demand.
+  expand-in-place path (§10 item 24) resolves on demand. Each family carries
+  `ended_by` (§8.3 *Ended unions*, #122).
 
 ### 8.5 Realtime
 

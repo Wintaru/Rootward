@@ -3,7 +3,15 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "./database.types";
 import { personSearchLabel } from "./person-search";
 import { createPerson } from "./person-create";
-import type { ChildRelation, PartnerRole, Sex, UnionType } from "./types";
+import { getFamilyEventsForFamilies, type EventEditRow } from "./event-edit";
+import {
+  UNION_ENDING_EVENT_TYPES,
+  type ChildRelation,
+  type PartnerRole,
+  type Sex,
+  type UnionEndedBy,
+  type UnionType,
+} from "./types";
 
 type Db = SupabaseClient<Database>;
 
@@ -77,11 +85,18 @@ export interface UnionFamilySummary {
   readonly partner1: FamilyEditPartner | null;
   readonly partner2: FamilyEditPartner | null;
   readonly relationshipType: UnionType | null;
+  /** The event that ended the union, or `null` while it stands (issue
+   * #122). Read through the `ended_by` computed field on `family` — the
+   * same `family_ended_by` rule the tree RPCs use, never re-derived here. */
+  readonly endedBy: UnionEndedBy | null;
 }
 
-/** One family `personId` is a partner in — a union, with its children. */
+/** One family `personId` is a partner in — a union, with its children and
+ * its own events (marriage, divorce, …) so the card can show the union's
+ * status and record a divorce in place (issue #122). */
 export interface UnionFamilyEditRow extends UnionFamilySummary {
   readonly children: readonly FamilyChildEditRow[];
+  readonly events: readonly EventEditRow[];
 }
 
 export interface RelationshipsEditData {
@@ -134,7 +149,11 @@ type ParentFamilyDbRow = {
   } | null;
 };
 
-const UNION_FAMILY_COLUMNS = `id, updated_at, partner1_id, partner2_id, partner1_role, partner2_role, relationship_type, ${PARTNER_EMBED_COLUMNS}`;
+// `ended_by` is not a column: it is the `public.ended_by(family)` function,
+// which PostgREST exposes as a computed field on the row (migration
+// 20260920114500). The generated `Database` type does not know it, which is
+// one more reason the result goes through the `as unknown as` cast below.
+const UNION_FAMILY_COLUMNS = `id, updated_at, partner1_id, partner2_id, partner1_role, partner2_role, relationship_type, ended_by, ${PARTNER_EMBED_COLUMNS}`;
 
 type UnionFamilyDbRow = {
   id: string;
@@ -144,9 +163,24 @@ type UnionFamilyDbRow = {
   partner1_role: PartnerRole | null;
   partner2_role: PartnerRole | null;
   relationship_type: UnionType | null;
+  ended_by: string | null;
   partner1: PersonNameCols | null;
   partner2: PersonNameCols | null;
 };
+
+/** Narrow the computed field's `text` to the values `family_ended_by` can
+ * return — anything else means the SQL and `UNION_ENDING_EVENT_TYPES` have
+ * drifted, which is worth failing loudly on. */
+function toEndedBy(value: string | null): UnionEndedBy | null {
+  if (value === null) {
+    return null;
+  }
+  const match = UNION_ENDING_EVENT_TYPES.find((type) => type === value);
+  if (match === undefined) {
+    throw new Error(`family.ended_by: unexpected value ${value}`);
+  }
+  return match;
+}
 
 const FAMILY_CHILD_COLUMNS =
   "id, family_id, person_id, updated_at, relation_to_partner1, relation_to_partner2, sort_order, person:person_id(given_name,surname,nickname)";
@@ -199,17 +233,19 @@ export async function getUnionFamilySummaries(
     partner1: toPartner(row.partner1_id, row.partner1_role, row.partner1),
     partner2: toPartner(row.partner2_id, row.partner2_role, row.partner2),
     relationshipType: row.relationship_type,
+    endedBy: toEndedBy(row.ended_by),
   }));
 }
 
 /** Every family `personId` is a child in or a partner in, with each union's
- * children — everything the Relationships section shows (SPEC §8.3, issue
- * #56). Three round trips: parent families (with their partners embedded),
- * union families (with their partners embedded, via
- * {@link getUnionFamilySummaries}), then every child of every union family in
- * one batched fetch — genealogy-sized data, not worth collapsing further.
- * Runs under the caller's identity; RLS (`family_select` / `family_child_select`)
- * is the boundary, same as every other section's read. */
+ * children and events — everything the Relationships section shows (SPEC
+ * §8.3, issues #56, #122). Four round trips: parent families (with their
+ * partners embedded), union families (with their partners embedded, via
+ * {@link getUnionFamilySummaries}), then every child and every event of
+ * every union family, each in one batched fetch — genealogy-sized data, not
+ * worth collapsing further. Runs under the caller's identity; RLS
+ * (`family_select` / `family_child_select` / `event_select`) is the
+ * boundary, same as every other section's read. */
 export async function getRelationshipsEditData(
   client: Db,
   personId: string,
@@ -261,13 +297,18 @@ export async function getRelationshipsEditData(
   const unionFamilyIds = unionFamilySummaries.map((row) => row.familyId);
 
   const childrenByFamily = new Map<string, FamilyChildEditRow[]>();
+  let eventsByFamily: ReadonlyMap<string, readonly EventEditRow[]> = new Map();
   if (unionFamilyIds.length > 0) {
-    const childRes = await client
-      .from("family_child")
-      .select(FAMILY_CHILD_COLUMNS)
-      .in("family_id", unionFamilyIds)
-      .order("sort_order", { ascending: true, nullsFirst: false })
-      .order("created_at", { ascending: true });
+    const [childRes, fetchedEvents] = await Promise.all([
+      client
+        .from("family_child")
+        .select(FAMILY_CHILD_COLUMNS)
+        .in("family_id", unionFamilyIds)
+        .order("sort_order", { ascending: true, nullsFirst: false })
+        .order("created_at", { ascending: true }),
+      getFamilyEventsForFamilies(client, unionFamilyIds),
+    ]);
+    eventsByFamily = fetchedEvents;
 
     if (childRes.error !== null) {
       throw new Error(
@@ -285,6 +326,7 @@ export async function getRelationshipsEditData(
     (summary) => ({
       ...summary,
       children: childrenByFamily.get(summary.familyId) ?? [],
+      events: eventsByFamily.get(summary.familyId) ?? [],
     }),
   );
 

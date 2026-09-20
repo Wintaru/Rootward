@@ -5,6 +5,25 @@ the relevant `docs/SPEC.md` section.
 
 ## Current state
 
+**Issue #122 — ended unions (divorce shown everywhere, "Record a divorce"
+on the union card): done, staged on branch `feat/ended-unions`, issue
+closed.** A divorce was recordable (#57) but nothing read it back. Now
+`family_ended_by(family_id)` (migration `20260920114500`) derives `divorce`
+/ `annulment` from the family's events — no status column, `relationship_type`
+untouched — and both tree RPCs return it as `ended_by` per family, plus a
+PostgREST computed field of the same name on `family` rows for the
+Relationships section. Surfaces: profile partner line (`Married — 1990 ·
+Divorced — 2003`), edit-shell strip (`Divorced`), tree spouse link dashed
+and faded (`ended-union-links.ts` tags `path.link` in the chart's
+`afterUpdate`; `family-chart` 0.9 has no per-link hook), and the union card's
+new status line + "Record a divorce" button (`recordUnionEndAction`, one
+`divorce` event, refused once the union has ended). pgTAP: both RPC suites
+assert `ended_by` and the "documented keys" guards learned the field. SPEC
+§8.2 / §8.3 / §8.4 updated. Not built: "Widowed" (partner death) — a
+separate derivation, file it when wanted. Verified live on James Donner:
+the James–Julie union now carries an undated `divorce` event (Josh: add the
+date under Events).
+
 **E2E bug sweep — complete.** All ten bugs the end-to-end suite filed
 (#110–#119, plus #106) are fixed, one branch each, each closed by its own
 Playwright test going green. The full suite (`pnpm test:e2e`, both

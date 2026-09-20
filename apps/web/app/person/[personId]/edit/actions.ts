@@ -63,8 +63,11 @@ import {
   type SourceDeleteInput,
   type SourceInsertInput,
   type SourceUpdateInput,
+  type UnionEndedBy,
   type UnionType,
+  UNION_ENDING_EVENT_TYPES,
 } from "@/lib/db";
+import { dateColumnsFromRaw } from "@/lib/edit/events";
 import { toPersonRef, type PersonRefInput } from "@/lib/edit/relationships";
 import {
   saveMediaLinks as persistMediaLinks,
@@ -771,6 +774,78 @@ export async function removePartnerFromFamilyAction(input: {
   revalidatePath(`/person/${input.personId}/edit`);
   revalidatePath(`/person/${input.personId}`);
   return toRelationshipActionResult(result);
+}
+
+/** "Record a divorce" on a union card (issue #122): one `divorce` (or
+ * `annulment`) event written against the family, the same row the Events
+ * section's "Union with <partner>" group would produce — this is a shortcut
+ * to that write, not a second representation. Returns the Relationships
+ * section's own result shape so the card's `useFamilyAction` drives it. A
+ * union already ended is refused: the second ending would just be a
+ * duplicate event, and editing the existing one belongs in Events. */
+export async function recordUnionEndAction(input: {
+  readonly personId: string;
+  readonly familyId: string;
+  readonly endedBy: UnionEndedBy;
+  readonly dateRaw: string;
+}): Promise<RelationshipActionResult> {
+  const access = await resolveEditAccess();
+  if (access.kind !== "allowed") {
+    return {
+      status: "error",
+      message: "You do not have permission to edit this person.",
+    };
+  }
+  if (
+    !isUuid(input.personId) ||
+    !isUuid(input.familyId) ||
+    !UNION_ENDING_EVENT_TYPES.some((type) => type === input.endedBy)
+  ) {
+    return { status: "error", message: "Invalid request." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const existing = await supabase
+    .from("family")
+    .select("id, ended_by")
+    .eq("id", input.familyId)
+    .maybeSingle();
+  if (existing.error !== null) {
+    return { status: "error", message: existing.error.message };
+  }
+  if (existing.data === null) {
+    return { status: "error", message: "Family not found." };
+  }
+  // `ended_by` is the computed field, unknown to the generated row type —
+  // see `family-edit.ts`'s `UNION_FAMILY_COLUMNS`.
+  const alreadyEnded = (existing.data as { ended_by?: string | null }).ended_by;
+  if (alreadyEnded != null) {
+    return {
+      status: "error",
+      message: "This union has already ended. Edit the event under Events.",
+    };
+  }
+
+  await persistFamilyEvents(supabase, {
+    familyId: input.familyId,
+    inserts: [
+      {
+        id: crypto.randomUUID(),
+        type: input.endedBy,
+        typeOther: null,
+        value: null,
+        ageText: null,
+        date: dateColumnsFromRaw(input.dateRaw),
+        placeName: null,
+      },
+    ],
+    updates: [],
+    deletes: [],
+  });
+
+  revalidatePath(`/person/${input.personId}/edit`);
+  revalidatePath(`/person/${input.personId}`);
+  return { status: "ok" };
 }
 
 export async function updateFamilyRelationshipTypeAction(input: {

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useId, useState } from "react";
 
@@ -8,6 +9,7 @@ import {
   addParentAction,
   addPartnerAction,
   fillFamilyPartnerSlotAction,
+  recordUnionEndAction,
   removeFamilyChildAction,
   removePartnerFromFamilyAction,
   reorderFamilyChildrenAction,
@@ -32,12 +34,15 @@ import type {
   UnionType,
 } from "@/lib/db/types";
 import { defaultPartnerRoleForSex } from "@/lib/edit/relationships";
+import { editSectionHref } from "@/lib/edit/sections";
+import { unionStatusLine } from "@/lib/edit/union-status";
 import {
   childRelationLabel,
   enumTokenLabel,
   partnerRoleLabel,
 } from "@/lib/person/labels";
 
+import { DateInput } from "./DateInput";
 import { PersonPickerOrCreate } from "./PersonPickerOrCreate";
 
 /**
@@ -593,6 +598,13 @@ function UnionFamilyCard({
         </select>
       </label>
 
+      <UnionStatusPanel
+        personId={personId}
+        family={family}
+        busy={busy}
+        run={run}
+      />
+
       <ChildrenList personId={personId} family={family} />
 
       {addingChild ? (
@@ -623,6 +635,112 @@ function UnionFamilyCard({
       )}
 
       <ActionError message={error} />
+    </div>
+  );
+}
+
+/**
+ * The union's status line — "Married — 1990 · Divorced — 2003" — and the
+ * "Record a divorce" shortcut (issue #122). The dates themselves are events
+ * on the family, edited in full under Events; this card only reads them and
+ * offers the one write people look for here, because a divorce buried under
+ * Events alone is not where anyone expects to record it. Whether the union
+ * has ended is `family.endedBy`, the server's call — the button hides once
+ * it has, and the line links to Events for editing the dates.
+ */
+function UnionStatusPanel({
+  personId,
+  family,
+  busy,
+  run,
+}: {
+  readonly personId: string;
+  readonly family: UnionFamilyEditRow;
+  readonly busy: boolean;
+  readonly run: (
+    action: () => Promise<RelationshipActionResult>,
+  ) => Promise<void>;
+}) {
+  const [recording, setRecording] = useState(false);
+  const [dateRaw, setDateRaw] = useState("");
+  const dateId = useId();
+  const status = unionStatusLine(family);
+  const canRecordEnd =
+    family.endedBy === null &&
+    family.partner1 !== null &&
+    family.partner2 !== null;
+
+  function submit() {
+    setRecording(false);
+    setDateRaw("");
+    void run(() =>
+      recordUnionEndAction({
+        personId,
+        familyId: family.familyId,
+        endedBy: "divorce",
+        dateRaw,
+      }),
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-muted-foreground text-xs">
+        {[status.standing ?? "No union date recorded", status.ended]
+          .filter((part): part is string => part !== null)
+          .join(" · ")}
+        {" · "}
+        <Link
+          href={editSectionHref(personId, "events")}
+          className="underline underline-offset-2"
+        >
+          Edit dates in Events
+        </Link>
+      </p>
+
+      {canRecordEnd &&
+        (recording ? (
+          <form
+            className="border-border flex flex-col gap-2 rounded-md border p-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              submit();
+            }}
+          >
+            <DateInput
+              id={dateId}
+              label="Divorce date"
+              value={dateRaw}
+              disabled={busy}
+              onChange={setDateRaw}
+            />
+            <div className="flex gap-2">
+              <button type="submit" disabled={busy} className={smallButton}>
+                Record divorce
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  setRecording(false);
+                  setDateRaw("");
+                }}
+                className={smallButton}
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        ) : (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => setRecording(true)}
+            className={smallButton}
+          >
+            Record a divorce
+          </button>
+        ))}
     </div>
   );
 }
