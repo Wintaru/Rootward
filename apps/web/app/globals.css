@@ -3,6 +3,7 @@
 @import "shadcn/tailwind.css";
 @import "./themes/flexoki.css";
 @import "./themes/rosepine.css";
+@import "./themes/gruvbox.css";
 
 @custom-variant dark (&:is(.dark *));
 

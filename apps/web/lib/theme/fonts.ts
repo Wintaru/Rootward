@@ -2,7 +2,9 @@ import {
   IBM_Plex_Sans,
   Newsreader,
   Nunito_Sans,
+  Public_Sans,
   Young_Serif,
+  Zilla_Slab,
 } from "next/font/google";
 
 /**
@@ -52,10 +54,28 @@ const nunitoSans = Nunito_Sans({
   preload: false,
 });
 
+// Gruvbox
+const zillaSlab = Zilla_Slab({
+  subsets: ["latin"],
+  variable: "--font-zilla-slab",
+  display: "swap",
+  weight: ["500", "600", "700"],
+  preload: false,
+});
+
+const publicSans = Public_Sans({
+  subsets: ["latin"],
+  variable: "--font-public-sans",
+  display: "swap",
+  preload: false,
+});
+
 /** Every loader's `.variable` class, for `<html className>`. */
 export const FONT_VARIABLE_CLASSES: readonly string[] = [
   newsreader.variable,
   ibmPlexSans.variable,
   youngSerif.variable,
   nunitoSans.variable,
+  zillaSlab.variable,
+  publicSans.variable,
 ];

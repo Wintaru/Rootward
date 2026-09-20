@@ -106,10 +106,11 @@ See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the branch, verify, and PR flow.
 
 ## Credits
 
-Two of the themes use palettes published under the MIT license:
+Three of the themes use palettes published under the MIT license:
 
 - **Flexoki** by Steph Ango — <https://stephango.com/flexoki>
 - **Rosé Pine** (Dawn / Moon) — <https://rosepinetheme.com>
+- **Gruvbox** by Pavel Pertsev — <https://github.com/morhetz/gruvbox>
 
 ## License
 

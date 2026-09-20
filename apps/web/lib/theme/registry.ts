@@ -13,7 +13,7 @@
  * that component CSS selects on — never a per-theme JSX branch.
  */
 
-export const THEME_IDS = ["flexoki", "rosepine"] as const;
+export const THEME_IDS = ["flexoki", "rosepine", "gruvbox"] as const;
 export type ThemeId = (typeof THEME_IDS)[number];
 
 export const NAV_STYLES = ["underline", "pill", "caps"] as const;
@@ -119,6 +119,38 @@ export const THEMES: readonly ThemeDefinition[] = [
         accent: "#ea9a97",
         male: "#3e8fb0",
         female: "#eb6f92",
+      },
+    },
+  },
+  {
+    id: "gruvbox",
+    label: "Gruvbox",
+    tagline: "Retro groove — cream and amber, high contrast",
+    credit: "Palette: Gruvbox (github.com/morhetz/gruvbox)",
+    fonts: { display: "Zilla Slab", body: "Public Sans" },
+    chassis: {
+      nav: "caps",
+      avatar: "fill",
+      nameFont: "display",
+      mark: "none",
+      ground: "flat",
+    },
+    preview: {
+      light: {
+        bg: "#fbf1c7",
+        surface: "#f9f5d7",
+        ink: "#3c3836",
+        accent: "#af3a03",
+        male: "#076678",
+        female: "#8f3f71",
+      },
+      dark: {
+        bg: "#282828",
+        surface: "#32302f",
+        ink: "#ebdbb2",
+        accent: "#fe8019",
+        male: "#83a598",
+        female: "#d3869b",
       },
     },
   },
