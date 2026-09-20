@@ -7,9 +7,21 @@ the relevant `docs/SPEC.md` section.
 
 **E2E bug sweep — working through the ten bugs the end-to-end suite filed
 (#110–#119, plus #106), one branch each, each closed by its own failing
-Playwright test going green.** Order: #110 done; next is #113 (full-name
-search), then #111, #114, #112, #115, #116, #117, #118, #119, #106. The
+Playwright test going green.** Order: #110 and #113 done; next is #111
+(surname search 500s), then #114, #112, #115, #116, #117, #118, #119, #106. The
 inventory, each bug's test, and the fix direction are in `E2E-BUG-REPORT.md`.
+
+**Issue #113 — searching a full name found nobody: done, staged on branch
+`fix/full-name-search`, issue closed.** The whole query was one `ILIKE`
+pattern applied to each name column separately, and no column holds
+`given surname`. `nameQueryFilters` now splits the query on whitespace and
+yields one `nameIlikeFilter` per word; callers chain them as separate
+`.or()` calls, which PostgREST ANDs (confirmed live). Single-word queries
+build the exact pattern they did before. Both `searchPersons` and
+`resolveMatchingPersonIds` use it, so the header box and `/people` agree.
+The e2e "finds a person by the full name the app displays" tests (both
+surfaces) are green. #111/#112/#114 in the same file are still open — the
+word list is what #111's single-query fix will take as its parameter.
 
 **Issue #110 — sign-in at 127.0.0.1 could never succeed: done, staged on
 branch `fix/auth-callback-origin`, issue closed.** `/auth/callback` built its

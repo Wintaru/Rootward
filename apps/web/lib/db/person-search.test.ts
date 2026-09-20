@@ -4,6 +4,7 @@ import {
   compareBySurnameThenGiven,
   formatLifespan,
   nameIlikeFilter,
+  nameQueryFilters,
   personSearchLabel,
   summarizeLifespans,
 } from "./person-search";
@@ -61,6 +62,31 @@ describe("nameIlikeFilter", () => {
     expect(nameIlikeFilter('%"Bud"%')).toBe(
       'given_name.ilike."%\\"Bud\\"%",surname.ilike."%\\"Bud\\"%",nickname.ilike."%\\"Bud\\"%"',
     );
+  });
+});
+
+describe("nameQueryFilters", () => {
+  it("returns nothing for an empty or whitespace-only query", () => {
+    expect(nameQueryFilters("")).toEqual([]);
+    expect(nameQueryFilters("   ")).toEqual([]);
+  });
+
+  it("wraps a single word as one substring filter", () => {
+    expect(nameQueryFilters("Gideon")).toEqual([nameIlikeFilter("%Gideon%")]);
+  });
+
+  it("yields one filter per word so a full name matches across columns", () => {
+    expect(nameQueryFilters("  Gideon   Qatestsson ")).toEqual([
+      nameIlikeFilter("%Gideon%"),
+      nameIlikeFilter("%Qatestsson%"),
+    ]);
+  });
+
+  it("escapes LIKE wildcards inside each word", () => {
+    expect(nameQueryFilters("50% Bud_dy")).toEqual([
+      nameIlikeFilter("%50\\%%"),
+      nameIlikeFilter("%Bud\\_dy%"),
+    ]);
   });
 });
 

@@ -86,6 +86,32 @@ export function nameIlikeFilter(pattern: string): string {
   return `given_name.ilike.${quoted},surname.ilike.${quoted},nickname.ilike.${quoted}`;
 }
 
+/** One {@link nameIlikeFilter} per whitespace-separated word of `query`,
+ * each a substring pattern. The caller chains them as separate `.or()`
+ * calls; PostgREST ANDs repeated logical params, so every word must match
+ * *some* name column while no single column has to hold the whole query.
+ * That is what lets `"Gideon Qatestsson"` — the name every list row and
+ * heading prints — find Gideon (#113): no column ever holds `given surname`
+ * together. The AND is per *row*: a `person_name` variant that carries only
+ * a nickname will not combine with the `person` row's surname. Empty /
+ * whitespace-only query → `[]`. */
+export function nameQueryFilters(query: string): readonly string[] {
+  return query
+    .split(/\s+/)
+    .filter((word) => word !== "")
+    .map((word) => nameIlikeFilter(`%${escapeLikePattern(word)}%`));
+}
+
+/** Apply every filter from {@link nameQueryFilters} to a query builder.
+ * Typed over the builder's own `.or()` so the same helper serves `person`
+ * and `person_name` (the columns are the same three on both). */
+function applyNameFilters<B extends { or(filters: string): B }>(
+  builder: B,
+  filters: readonly string[],
+): B {
+  return filters.reduce((acc, filter) => acc.or(filter), builder);
+}
+
 interface PersonRow {
   readonly id: string;
   readonly given_name: string | null;
@@ -123,7 +149,8 @@ export function compareBySurnameThenGiven(
  * Name search behind every `PersonPicker` (`/moderation`'s approve /
  * reassign, `/settings`' default root, issue #53, and the edit view's
  * Relationships section) plus the header search box and `/people` (#62).
- * Case-insensitive substring match on given name, surname, or nickname —
+ * Case-insensitive substring match, per word (`nameQueryFilters`), on given
+ * name, surname, or nickname —
  * `personSearchLabel` falls back to nickname when neither name part is set,
  * so the search has to cover it too, or a nickname-only person (common for
  * an infant or an unidentified relative) would be unreachable through this
@@ -140,25 +167,23 @@ export async function searchPersons(
   query: string,
   limit: number = PERSON_SEARCH_LIMIT,
 ): Promise<readonly PersonSearchOption[]> {
-  const trimmed = query.trim();
-  if (trimmed === "") {
+  const filters = nameQueryFilters(query);
+  if (filters.length === 0) {
     return [];
   }
-  const pattern = `%${escapeLikePattern(trimmed)}%`;
-  const filter = nameIlikeFilter(pattern);
 
   const [primary, variants] = await Promise.all([
-    client
-      .from("person")
-      .select("id, given_name, surname, nickname, sex")
-      .or(filter)
+    applyNameFilters(
+      client.from("person").select("id, given_name, surname, nickname, sex"),
+      filters,
+    )
       .order("surname", { ascending: true, nullsFirst: false })
       .limit(limit),
     // No `.limit()` here: several matching `person_name` rows can belong to
     // the same person (multiple AKAs), so capping before dedup could drop a
     // distinct person entirely. The final `.slice(0, limit)` below re-caps
     // the already-deduplicated set.
-    client.from("person_name").select("person_id").or(filter),
+    applyNameFilters(client.from("person_name").select("person_id"), filters),
   ]);
 
   if (primary.error !== null) {
@@ -295,15 +320,14 @@ async function resolveMatchingPersonIds(
   client: Db,
   query: string,
 ): Promise<readonly string[] | null> {
-  const trimmed = query.trim();
-  if (trimmed === "") {
+  const filters = nameQueryFilters(query);
+  if (filters.length === 0) {
     return null;
   }
-  const filter = nameIlikeFilter(`%${escapeLikePattern(trimmed)}%`);
 
   const [primary, variants] = await Promise.all([
-    client.from("person").select("id").or(filter),
-    client.from("person_name").select("person_id").or(filter),
+    applyNameFilters(client.from("person").select("id"), filters),
+    applyNameFilters(client.from("person_name").select("person_id"), filters),
   ]);
   if (primary.error !== null) {
     throw new Error(`resolveMatchingPersonIds: ${primary.error.message}`);
