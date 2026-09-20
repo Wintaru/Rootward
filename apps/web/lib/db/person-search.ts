@@ -78,6 +78,11 @@ export function nameQueryWords(query: string): readonly string[] {
 
 const PERSON_SEARCH_COLUMNS = "id, given_name, surname, nickname, sex";
 
+/** PostgREST's "Requested range not satisfiable": the `offset` is past the
+ * row count. Answered with HTTP 416, which postgrest-js turns into an error
+ * and drops the `Content-Range` total with it. */
+const PGRST_RANGE_NOT_SATISFIABLE = "PGRST103";
+
 interface PersonRow {
   readonly id: string;
   readonly given_name: string | null;
@@ -216,11 +221,34 @@ export interface PersonListPage {
   readonly total: number;
 }
 
+/** How many people match `query` — the same `search_persons` call as the
+ * page itself with zero rows asked for, so the count comes back in
+ * `Content-Range` and nothing else does. Deliberately not `head: true`:
+ * a HEAD rpc puts the arguments in the URL as a bare Postgres array literal,
+ * so a word with a comma or a quote (`Smith,`) is a `22P02` malformed
+ * literal and `null` becomes SQL NULL — the POST body stays JSON, the same
+ * shape the page request sends. */
+async function countPersons(client: Db, query: string): Promise<number> {
+  const { error, count } = await client
+    .rpc(
+      "search_persons",
+      { p_words: [...nameQueryWords(query)] },
+      { count: "exact" },
+    )
+    .select("id")
+    .limit(0);
+  if (error !== null) {
+    throw new Error(`countPersons: ${error.message}`);
+  }
+  return count ?? 0;
+}
+
 /**
  * `/people` — everyone, sorted by surname then given name, paginated at the
  * source (SPEC #62: 50 per page). `query` matches the same way the header
  * search box does (given name, surname, nickname, and `person_name`
- * variants).
+ * variants). A `page` past the end is not an error: the result carries the
+ * true `total` with no rows, and the route redirects to the last real page.
  */
 export async function listPersons(
   client: Db,
@@ -252,7 +280,14 @@ export async function listPersons(
     .range(from, to);
 
   if (error !== null) {
-    throw new Error(`listPersons: ${error.message}`);
+    if (error.code !== PGRST_RANGE_NOT_SATISFIABLE) {
+      throw new Error(`listPersons: ${error.message}`);
+    }
+    // A page past the end — a stale link after the query narrowed, or a
+    // hand-edited URL (#114). Not a failure: report the true total with no
+    // rows, so the route's redirect to the last real page gets its turn. The
+    // extra count-only round trip is paid only on this path.
+    return { total: await countPersons(client, options.query ?? ""), rows: [] };
   }
 
   const rows = data ?? [];

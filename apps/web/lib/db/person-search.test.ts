@@ -1,7 +1,11 @@
-import { describe, expect, it } from "vitest";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { describe, expect, it, vi } from "vitest";
+
+import type { Database } from "./database.types";
 
 import {
   formatLifespan,
+  listPersons,
   nameQueryWords,
   personSearchLabel,
   summarizeLifespans,
@@ -97,5 +101,70 @@ describe("summarizeLifespans", () => {
       [{ person_id: "a", type: "birth", date_year1: null }],
     );
     expect(result.get("a")).toEqual({ birthYear: null, deathYear: null });
+  });
+});
+
+describe("listPersons", () => {
+  /** A `client.rpc()` stand-in whose chained builder resolves to the next
+   * canned response — enough of the PostgREST builder for `listPersons`'s two
+   * `search_persons` calls, and nothing else. */
+  function clientAnswering(
+    responses: readonly {
+      data?: unknown[];
+      error?: { code: string; message: string } | null;
+      count?: number | null;
+    }[],
+  ) {
+    const queue = [...responses];
+    const rpc = vi.fn(() => {
+      const response = queue.shift();
+      if (response === undefined) {
+        throw new Error("unexpected rpc call");
+      }
+      const resolved = {
+        data: response.data ?? null,
+        error: response.error ?? null,
+        count: response.count ?? null,
+      };
+      const builder = {
+        select: () => builder,
+        order: () => builder,
+        range: () => builder,
+        limit: () => builder,
+        then: (onFulfilled: (value: typeof resolved) => unknown) =>
+          Promise.resolve(resolved).then(onFulfilled),
+      };
+      return builder;
+    });
+    return { rpc } as unknown as SupabaseClient<Database>;
+  }
+
+  it("turns a range past the end into the true total and no rows (#114)", async () => {
+    const client = clientAnswering([
+      {
+        error: {
+          code: "PGRST103",
+          message: "Requested range not satisfiable",
+        },
+      },
+      { data: [], count: 3 },
+    ]);
+    await expect(
+      listPersons(client, { query: "x", page: 99 }),
+    ).resolves.toEqual({
+      total: 3,
+      rows: [],
+    });
+    expect(client.rpc).toHaveBeenCalledTimes(2);
+  });
+
+  it("still throws on any other error", async () => {
+    const client = clientAnswering([
+      { error: { code: "42501", message: "permission denied" } },
+    ]);
+    await expect(listPersons(client, { page: 1 })).rejects.toThrow(
+      "permission denied",
+    );
+    expect(client.rpc).toHaveBeenCalledTimes(1);
   });
 });

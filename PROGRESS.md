@@ -8,9 +8,21 @@ the relevant `docs/SPEC.md` section.
 **E2E bug sweep — working through the ten bugs the end-to-end suite filed
 (#110–#119, plus #106), one branch each, each closed by its own failing
 Playwright test going green.** Order: #110, #113, #111 done (#112 fell out
-of #111 — its tests are green on that branch, close it with #111); next is
-#114 (page past the end 500s), then #115, #116, #117, #118, #119, #106. The
+of #111), #114 done; next is #115 (tree never draws siblings), then #116,
+#117, #118, #119, #106. The
 inventory, each bug's test, and the fix direction are in `E2E-BUG-REPORT.md`.
+
+**Issue #114 — a page past the end returned HTTP 500: done, staged on
+branch `fix/people-page-past-end`, issue closed.** PostgREST answers an
+offset past the row count with 416 / `PGRST103`; postgrest-js turns that
+into an error and drops the `Content-Range` total with it, so `listPersons`
+threw before `page.tsx`'s redirect-to-last-page guard could run. Now that
+one code is caught, the true total is fetched with the same `search_persons`
+rpc as a POST with `.limit(0)` (not `head: true` — see `DECISIONS.md`
+2026-09-20: HEAD serialises the words as a bare array literal and a comma
+still 500s), and `{ total, rows: [] }` lets the guard redirect. Unit tests
+stub `client.rpc` for the 416 branch and the still-throws branch. The whole
+`people.spec.ts` is green now.
 
 **Issue #111 — a common surname returned HTTP 500: done, staged on branch
 `fix/people-filter-single-query`, issue closed.** `listPersons` resolved
