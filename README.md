@@ -104,6 +104,13 @@ Two deploy paths, both in [`docs/deploy/`](docs/deploy):
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the branch, verify, and PR flow.
 
+## Credits
+
+Two of the themes use palettes published under the MIT license:
+
+- **Flexoki** by Steph Ango — <https://stephango.com/flexoki>
+- **Rosé Pine** (Dawn / Moon) — <https://rosepinetheme.com>
+
 ## License
 
 [MIT](LICENSE).

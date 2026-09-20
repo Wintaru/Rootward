@@ -13,7 +13,7 @@
  * that component CSS selects on — never a per-theme JSX branch.
  */
 
-export const THEME_IDS = ["flexoki"] as const;
+export const THEME_IDS = ["flexoki", "rosepine"] as const;
 export type ThemeId = (typeof THEME_IDS)[number];
 
 export const NAV_STYLES = ["underline", "pill", "caps"] as const;
@@ -87,6 +87,38 @@ export const THEMES: readonly ThemeDefinition[] = [
         accent: "#DA702C",
         male: "#4385BE",
         female: "#CE5D97",
+      },
+    },
+  },
+  {
+    id: "rosepine",
+    label: "Rosé Pine",
+    tagline: "Soft and rosy — Dawn by day, Moon by night",
+    credit: "Palette: Rosé Pine (rosepinetheme.com) — Dawn / Moon variants",
+    fonts: { display: "Young Serif", body: "Nunito Sans" },
+    chassis: {
+      nav: "pill",
+      avatar: "ring",
+      nameFont: "body",
+      mark: "circle",
+      ground: "flat",
+    },
+    preview: {
+      light: {
+        bg: "#faf4ed",
+        surface: "#fffaf3",
+        ink: "#575279",
+        accent: "#d7827e",
+        male: "#286983",
+        female: "#b4637a",
+      },
+      dark: {
+        bg: "#232136",
+        surface: "#2a273f",
+        ink: "#e0def4",
+        accent: "#ea9a97",
+        male: "#3e8fb0",
+        female: "#eb6f92",
       },
     },
   },

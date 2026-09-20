@@ -1,0 +1,64 @@
+/*
+ * Rosé Pine — soft and rosy. Palette: Rosé Pine (rosepinetheme.com), MIT,
+ * Dawn (light) and Moon (dark) variants. Values generated from the redesign
+ * token file (#76); do not retune by eye. Contract: `app/globals.css`, #75.
+ */
+[data-theme="rosepine"] {
+  --font-display: var(--font-young-serif), Georgia, "Times New Roman", serif;
+  --font-body: var(--font-nunito-sans), "Helvetica Neue", Arial, sans-serif;
+  --radius: 0.875rem;
+  --rw-radius-control: 10px;
+  --rw-radius-avatar: 9999px;
+  --rw-radius-pill: 9999px;
+  --background: #faf4ed;
+  --foreground: #575279;
+  --card: #fffaf3;
+  --card-foreground: #575279;
+  --popover: #fffaf3;
+  --popover-foreground: #575279;
+  --primary: #d7827e;
+  --primary-foreground: #fffaf3;
+  --secondary: #f2e9e1;
+  --secondary-foreground: #575279;
+  --muted: #f2e9e1;
+  --muted-foreground: #797593;
+  --accent: #f2e9e1;
+  --accent-foreground: #575279;
+  --border: #dfdad9;
+  --input: #dfdad9;
+  --ring: #d7827e;
+  --rw-accent-2: #ea9d34;
+  --rw-male: #286983;
+  --rw-female: #b4637a;
+  --rw-neutral: #9893a5;
+  --rw-band: rgba(87, 82, 121, 0.04);
+  --rw-link: rgba(87, 82, 121, 0.3);
+  --rw-shadow: 0 2px 6px rgba(87, 82, 121, 0.08);
+}
+
+[data-theme="rosepine"].dark {
+  --background: #232136;
+  --foreground: #e0def4;
+  --card: #2a273f;
+  --card-foreground: #e0def4;
+  --popover: #2a273f;
+  --popover-foreground: #e0def4;
+  --primary: #ea9a97;
+  --primary-foreground: #232136;
+  --secondary: #393552;
+  --secondary-foreground: #e0def4;
+  --muted: #393552;
+  --muted-foreground: #908caa;
+  --accent: #393552;
+  --accent-foreground: #e0def4;
+  --border: #44415a;
+  --input: #44415a;
+  --ring: #ea9a97;
+  --rw-accent-2: #f6c177;
+  --rw-male: #3e8fb0;
+  --rw-female: #eb6f92;
+  --rw-neutral: #6e6a86;
+  --rw-band: rgba(224, 222, 244, 0.04);
+  --rw-link: rgba(224, 222, 244, 0.3);
+  --rw-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
