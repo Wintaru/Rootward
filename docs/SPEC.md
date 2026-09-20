@@ -1022,7 +1022,11 @@ the build contract for #55–#57.
   *Depends on #58.*
 - **#62** Person search in the header + `/people` index: `searchPersons` in
   `lib/db` (generalised from the moderation search), RLS-scoped, capped
-  results; `/people` paginated at the source (§8.1).
+  results; `/people` paginated at the source (§8.1). The match itself is the
+  `search_persons(words)` SQL function (SECURITY INVOKER; #111): every word a
+  substring of some name column of the `person` row or of one `person_name`
+  variant, wildcards escaped in SQL, so the ids never ride in the request
+  URI and the page and count are one round trip.
 - **#63** Invite to claim from the person profile (`/moderation?invite=`,
   §9.2).
 - **#65** Mobile layout pass: every route usable at 390 px, screenshots on the

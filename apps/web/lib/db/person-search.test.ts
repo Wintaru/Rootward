@@ -1,10 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  compareBySurnameThenGiven,
   formatLifespan,
-  nameIlikeFilter,
-  nameQueryFilters,
+  nameQueryWords,
   personSearchLabel,
   summarizeLifespans,
 } from "./person-search";
@@ -51,64 +49,21 @@ describe("formatLifespan", () => {
   });
 });
 
-describe("nameIlikeFilter", () => {
-  it("quotes the pattern so a comma stays inside the operand", () => {
-    expect(nameIlikeFilter("%Smith, Jr%")).toBe(
-      'given_name.ilike."%Smith, Jr%",surname.ilike."%Smith, Jr%",nickname.ilike."%Smith, Jr%"',
-    );
-  });
-
-  it("escapes a literal double quote in the pattern", () => {
-    expect(nameIlikeFilter('%"Bud"%')).toBe(
-      'given_name.ilike."%\\"Bud\\"%",surname.ilike."%\\"Bud\\"%",nickname.ilike."%\\"Bud\\"%"',
-    );
-  });
-});
-
-describe("nameQueryFilters", () => {
+describe("nameQueryWords", () => {
   it("returns nothing for an empty or whitespace-only query", () => {
-    expect(nameQueryFilters("")).toEqual([]);
-    expect(nameQueryFilters("   ")).toEqual([]);
+    expect(nameQueryWords("")).toEqual([]);
+    expect(nameQueryWords("   ")).toEqual([]);
   });
 
-  it("wraps a single word as one substring filter", () => {
-    expect(nameQueryFilters("Gideon")).toEqual([nameIlikeFilter("%Gideon%")]);
-  });
-
-  it("yields one filter per word so a full name matches across columns", () => {
-    expect(nameQueryFilters("  Gideon   Qatestsson ")).toEqual([
-      nameIlikeFilter("%Gideon%"),
-      nameIlikeFilter("%Qatestsson%"),
+  it("splits on any run of whitespace and trims the ends", () => {
+    expect(nameQueryWords("  Gideon \t Qatestsson ")).toEqual([
+      "Gideon",
+      "Qatestsson",
     ]);
   });
 
-  it("escapes LIKE wildcards inside each word", () => {
-    expect(nameQueryFilters("50% Bud_dy")).toEqual([
-      nameIlikeFilter("%50\\%%"),
-      nameIlikeFilter("%Bud\\_dy%"),
-    ]);
-  });
-});
-
-describe("compareBySurnameThenGiven", () => {
-  it("sorts alphabetically by surname", () => {
-    const a = { surname: "Ashby", given_name: "Cornelius" };
-    const b = { surname: "Doyle", given_name: "Katherine" };
-    expect(compareBySurnameThenGiven(a, b)).toBeLessThan(0);
-    expect(compareBySurnameThenGiven(b, a)).toBeGreaterThan(0);
-  });
-
-  it("sorts a null (nickname-only) surname after every real surname", () => {
-    const nicknameOnly = { surname: null, given_name: null };
-    const named = { surname: "Ashby", given_name: "Cornelius" };
-    expect(compareBySurnameThenGiven(nicknameOnly, named)).toBeGreaterThan(0);
-    expect(compareBySurnameThenGiven(named, nicknameOnly)).toBeLessThan(0);
-  });
-
-  it("breaks a surname tie on given name", () => {
-    const first = { surname: "Ashby", given_name: "Alice" };
-    const second = { surname: "Ashby", given_name: "Bertram" };
-    expect(compareBySurnameThenGiven(first, second)).toBeLessThan(0);
+  it("leaves LIKE wildcards alone — the SQL side escapes them", () => {
+    expect(nameQueryWords("50% Bud_dy")).toEqual(["50%", "Bud_dy"]);
   });
 });
 

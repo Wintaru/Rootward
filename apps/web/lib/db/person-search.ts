@@ -1,6 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { escapeLikePattern } from "./place";
 import type { Database } from "./database.types";
 import type { Sex } from "./types";
 
@@ -68,49 +67,16 @@ export function formatLifespan(
   return "";
 }
 
-/** PostgREST reads `,` `.` `(` `)` as filter-grammar punctuation inside an
- * `.or()`/`.and()` combinator — a name containing one ("Smith, Jr.", a
- * parenthetical nickname) would otherwise split the operand mid-value and
- * 400 the request. Wrapping the value in double quotes (escaping any literal
- * `"` first) is PostgREST's own documented escape hatch for exactly this. */
-function quotePostgrestValue(value: string): string {
-  return `"${value.replace(/"/g, '\\"')}"`;
+/** The whitespace-separated words of a query — the `p_words` argument of the
+ * `search_persons` RPC (migration 20260920090000), which owns the matching
+ * rule and the wildcard escaping. Empty / whitespace-only query → `[]`,
+ * which callers treat as "no round trip" (autocomplete) or "no filter" (the
+ * `/people` browse). */
+export function nameQueryWords(query: string): readonly string[] {
+  return query.split(/\s+/).filter((word) => word !== "");
 }
 
-/** `.or()` filter matching a name pattern across `given_name`, `surname`, and
- * `nickname` — the same three columns on both `person` and `person_name`
- * (SPEC #62: "Name search over `person` + `person_name`"), so one filter
- * string works against either table. */
-export function nameIlikeFilter(pattern: string): string {
-  const quoted = quotePostgrestValue(pattern);
-  return `given_name.ilike.${quoted},surname.ilike.${quoted},nickname.ilike.${quoted}`;
-}
-
-/** One {@link nameIlikeFilter} per whitespace-separated word of `query`,
- * each a substring pattern. The caller chains them as separate `.or()`
- * calls; PostgREST ANDs repeated logical params, so every word must match
- * *some* name column while no single column has to hold the whole query.
- * That is what lets `"Gideon Qatestsson"` — the name every list row and
- * heading prints — find Gideon (#113): no column ever holds `given surname`
- * together. The AND is per *row*: a `person_name` variant that carries only
- * a nickname will not combine with the `person` row's surname. Empty /
- * whitespace-only query → `[]`. */
-export function nameQueryFilters(query: string): readonly string[] {
-  return query
-    .split(/\s+/)
-    .filter((word) => word !== "")
-    .map((word) => nameIlikeFilter(`%${escapeLikePattern(word)}%`));
-}
-
-/** Apply every filter from {@link nameQueryFilters} to a query builder.
- * Typed over the builder's own `.or()` so the same helper serves `person`
- * and `person_name` (the columns are the same three on both). */
-function applyNameFilters<B extends { or(filters: string): B }>(
-  builder: B,
-  filters: readonly string[],
-): B {
-  return filters.reduce((acc, filter) => acc.or(filter), builder);
-}
+const PERSON_SEARCH_COLUMNS = "id, given_name, surname, nickname, sex";
 
 interface PersonRow {
   readonly id: string;
@@ -124,101 +90,43 @@ function toSearchOption(row: PersonRow): PersonSearchOption {
   return { id: row.id, name: personSearchLabel(row), sex: row.sex };
 }
 
-/** `nullsFirst: false` ordering, done client-side for the merged
- * primary+variant set below — a null surname (a nickname-only person) sorts
- * after every real surname instead of before it (bare `??  ""` would put it
- * first), with `given_name` as the tie-break to match `listPersons`. */
-function compareNullableStrings(a: string | null, b: string | null): number {
-  if (a === b) return 0;
-  if (a === null) return 1;
-  if (b === null) return -1;
-  return a.localeCompare(b);
-}
-
-export function compareBySurnameThenGiven(
-  a: { readonly surname: string | null; readonly given_name: string | null },
-  b: { readonly surname: string | null; readonly given_name: string | null },
-): number {
-  const bySurname = compareNullableStrings(a.surname, b.surname);
-  return bySurname !== 0
-    ? bySurname
-    : compareNullableStrings(a.given_name, b.given_name);
-}
-
 /**
  * Name search behind every `PersonPicker` (`/moderation`'s approve /
  * reassign, `/settings`' default root, issue #53, and the edit view's
  * Relationships section) plus the header search box and `/people` (#62).
- * Case-insensitive substring match, per word (`nameQueryFilters`), on given
- * name, surname, or nickname —
- * `personSearchLabel` falls back to nickname when neither name part is set,
- * so the search has to cover it too, or a nickname-only person (common for
- * an infant or an unidentified relative) would be unreachable through this
- * picker. Also matches a `person_name` variant (maiden name, AKA, etc.) —
- * that table carries the same three columns, so the same pattern is applied
- * to it and the matched `person_id`s are folded into the same result set.
- * Empty query → no round trip, no results. Each route wraps this in its own
- * access-gated call; RLS (`person_select` / `person_name_select`, both
- * `person_is_visible()`) is the real boundary, so a viewer's search never
- * surfaces a person they could not otherwise see.
+ * Case-insensitive substring match, per word (`nameQueryWords`), on given
+ * name, surname, or nickname — `personSearchLabel` falls back to nickname
+ * when neither name part is set, so the search has to cover it too, or a
+ * nickname-only person (common for an infant or an unidentified relative)
+ * would be unreachable through this picker. Also matches a `person_name`
+ * variant (maiden name, AKA, etc.). All of that is the `search_persons`
+ * RPC's job — one round trip, ordered and capped at the source, no id list
+ * riding back and forth in the request URI (#111). Empty query → no round
+ * trip, no results. Each route wraps this in its own access-gated call; RLS
+ * (`person_select` / `person_name_select`, both `person_is_visible()`) is
+ * the real boundary — the function is SECURITY INVOKER — so a viewer's
+ * search never surfaces a person they could not otherwise see.
  */
 export async function searchPersons(
   client: Db,
   query: string,
   limit: number = PERSON_SEARCH_LIMIT,
 ): Promise<readonly PersonSearchOption[]> {
-  const filters = nameQueryFilters(query);
-  if (filters.length === 0) {
+  const words = nameQueryWords(query);
+  if (words.length === 0) {
     return [];
   }
 
-  const [primary, variants] = await Promise.all([
-    applyNameFilters(
-      client.from("person").select("id, given_name, surname, nickname, sex"),
-      filters,
-    )
-      .order("surname", { ascending: true, nullsFirst: false })
-      .limit(limit),
-    // No `.limit()` here: several matching `person_name` rows can belong to
-    // the same person (multiple AKAs), so capping before dedup could drop a
-    // distinct person entirely. The final `.slice(0, limit)` below re-caps
-    // the already-deduplicated set.
-    applyNameFilters(client.from("person_name").select("person_id"), filters),
-  ]);
-
-  if (primary.error !== null) {
-    throw new Error(`searchPersons: ${primary.error.message}`);
+  const { data, error } = await client
+    .rpc("search_persons", { p_words: [...words] })
+    .select(PERSON_SEARCH_COLUMNS)
+    .order("surname", { ascending: true, nullsFirst: false })
+    .order("given_name", { ascending: true, nullsFirst: false })
+    .limit(limit);
+  if (error !== null) {
+    throw new Error(`searchPersons: ${error.message}`);
   }
-  if (variants.error !== null) {
-    throw new Error(`searchPersons: ${variants.error.message}`);
-  }
-
-  const primaryRows = primary.data ?? [];
-  const knownIds = new Set(primaryRows.map((row) => row.id));
-  const variantOnlyIds = [
-    ...new Set(
-      (variants.data ?? [])
-        .map((row) => row.person_id)
-        .filter((id) => !knownIds.has(id)),
-    ),
-  ];
-
-  let variantRows: readonly PersonRow[] = [];
-  if (variantOnlyIds.length > 0) {
-    const { data, error } = await client
-      .from("person")
-      .select("id, given_name, surname, nickname, sex")
-      .in("id", variantOnlyIds);
-    if (error !== null) {
-      throw new Error(`searchPersons: ${error.message}`);
-    }
-    variantRows = data ?? [];
-  }
-
-  return [...primaryRows, ...variantRows]
-    .sort(compareBySurnameThenGiven)
-    .slice(0, limit)
-    .map(toSearchOption);
+  return (data ?? []).map(toSearchOption);
 }
 
 /** Compute the earliest recorded birth year and earliest recorded death year
@@ -308,48 +216,11 @@ export interface PersonListPage {
   readonly total: number;
 }
 
-/** Every `person.id` matching `pattern` on either `person` or `person_name`
- * — unlimited, unlike {@link searchPersons}'s capped autocomplete, since this
- * feeds a paginated count-and-slice below rather than a dropdown. `null`
- * means "no filter" (match everyone) rather than an empty array. Split out
- * of `listPersons` so the same query the header search runs is the one
- * `/people` filters by — the header's "See all results" link prefills this
- * exact box, and a person visible in the dropdown must not vanish from the
- * full list. */
-async function resolveMatchingPersonIds(
-  client: Db,
-  query: string,
-): Promise<readonly string[] | null> {
-  const filters = nameQueryFilters(query);
-  if (filters.length === 0) {
-    return null;
-  }
-
-  const [primary, variants] = await Promise.all([
-    applyNameFilters(client.from("person").select("id"), filters),
-    applyNameFilters(client.from("person_name").select("person_id"), filters),
-  ]);
-  if (primary.error !== null) {
-    throw new Error(`resolveMatchingPersonIds: ${primary.error.message}`);
-  }
-  if (variants.error !== null) {
-    throw new Error(`resolveMatchingPersonIds: ${variants.error.message}`);
-  }
-
-  return [
-    ...new Set([
-      ...(primary.data ?? []).map((row) => row.id),
-      ...(variants.data ?? []).map((row) => row.person_id),
-    ]),
-  ];
-}
-
 /**
  * `/people` — everyone, sorted by surname then given name, paginated at the
  * source (SPEC #62: 50 per page). `query` matches the same way the header
  * search box does (given name, surname, nickname, and `person_name`
- * variants) — the browse index's filter box is the same box, prefilled from
- * the header's "See all results" link.
+ * variants).
  */
 export async function listPersons(
   client: Db,
@@ -363,22 +234,19 @@ export async function listPersons(
   const from = (options.page - 1) * pageSize;
   const to = from + pageSize - 1;
 
-  const matchingIds = await resolveMatchingPersonIds(
-    client,
-    options.query ?? "",
-  );
-  if (matchingIds !== null && matchingIds.length === 0) {
-    return { total: 0, rows: [] };
-  }
-
-  let queryBuilder = client
-    .from("person")
-    .select("id, given_name, surname, nickname, sex", { count: "exact" });
-  if (matchingIds !== null) {
-    queryBuilder = queryBuilder.in("id", matchingIds);
-  }
-
-  const { data, error, count } = await queryBuilder
+  // The same `search_persons` call the header box makes — the header's "See
+  // all results" link prefills this exact box, and a person visible in the
+  // dropdown must not vanish from the full list. An empty word list is the
+  // unfiltered browse: the function then matches everyone. PostgREST pages
+  // and counts a set-returning function's rows like a table's, so the match
+  // and the page are one round trip (#111).
+  const { data, error, count } = await client
+    .rpc(
+      "search_persons",
+      { p_words: [...nameQueryWords(options.query ?? "")] },
+      { count: "exact" },
+    )
+    .select(PERSON_SEARCH_COLUMNS)
     .order("surname", { ascending: true, nullsFirst: false })
     .order("given_name", { ascending: true, nullsFirst: false })
     .range(from, to);

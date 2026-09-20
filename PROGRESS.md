@@ -7,9 +7,28 @@ the relevant `docs/SPEC.md` section.
 
 **E2E bug sweep — working through the ten bugs the end-to-end suite filed
 (#110–#119, plus #106), one branch each, each closed by its own failing
-Playwright test going green.** Order: #110 and #113 done; next is #111
-(surname search 500s), then #114, #112, #115, #116, #117, #118, #119, #106. The
+Playwright test going green.** Order: #110, #113, #111 done (#112 fell out
+of #111 — its tests are green on that branch, close it with #111); next is
+#114 (page past the end 500s), then #115, #116, #117, #118, #119, #106. The
 inventory, each bug's test, and the fix direction are in `E2E-BUG-REPORT.md`.
+
+**Issue #111 — a common surname returned HTTP 500: done, staged on branch
+`fix/people-filter-single-query`, issue closed.** `listPersons` resolved
+the matching ids client-side and re-queried with `.in("id", …)`, so the id
+list rode in the request URI and overflowed it past ~209 matches. New SQL
+function `search_persons(p_words text[]) returns setof person` (migration
+`20260920090000`, SECURITY INVOKER so `person_select`/`person_name_select`
+apply, pgTAP `search_persons_test.sql`) does the per-word match over the
+`person` row or one `person_name` variant, escapes `%`/`_`/`\` in SQL, and
+matches everyone for an empty word list. Both `searchPersons` and
+`listPersons` call it through `.rpc()` and let PostgREST order / `range` /
+`count: exact` the function's rows as they did the table — one round trip,
+no id list. The dead PostgREST filter-string helpers and the client-side
+comparator went with it. Confirmed live: 358 "Donner" matches page as
+`Content-Range: 50-52/358`. Side effect: #112 (wildcards) is fixed here
+too — its two e2e tests pass on this branch. #114 (offset past the end →
+`PGRST103`) is deliberately still open. `DECISIONS.md` 2026-09-20 has the
+rejected shapes.
 
 **Issue #113 — searching a full name found nobody: done, staged on branch
 `fix/full-name-search`, issue closed.** The whole query was one `ILIKE`

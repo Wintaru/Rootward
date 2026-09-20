@@ -1453,6 +1453,35 @@ export type Database = {
         Args: { p_person_id: string; p_reason?: string }
         Returns: undefined
       }
+      search_persons: {
+        Args: { p_words?: string[] }
+        Returns: {
+          ancestral_file_number: string | null
+          created_at: string
+          created_by: string | null
+          familysearch_id: string | null
+          gedcom_xref: string | null
+          given_name: string | null
+          id: string
+          is_living: boolean | null
+          name_prefix: string | null
+          name_suffix: string | null
+          nickname: string | null
+          raw_gedcom: Json | null
+          sex: Database["public"]["Enums"]["sex"] | null
+          surname: string | null
+          updated_at: string
+          updated_by: string | null
+          user_reference_number: string | null
+          visibility: Database["public"]["Enums"]["person_visibility"]
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "person"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       wipe_tree: { Args: never; Returns: undefined }
     }
     Enums: {
