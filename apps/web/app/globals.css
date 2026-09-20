@@ -138,4 +138,12 @@
   html {
     @apply font-sans;
   }
+  /* Links take the theme's accent — no browser-default blue anywhere (#79).
+   * Chrome that draws its own link colour (nav, wordmark) overrides this. */
+  a {
+    color: var(--primary);
+  }
+  a:hover {
+    color: var(--rw-accent-2);
+  }
 }

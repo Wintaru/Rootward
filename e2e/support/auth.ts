@@ -38,8 +38,19 @@ export async function signInWithMagicLink(
   );
 }
 
-/** Sign out through the header control and confirm we land back on `/login`. */
+/** The header's account chip (#79): its menu holds "My record" and "Sign out". */
+export function accountMenuTrigger(page: Page) {
+  return page.getByRole("button", { name: /^Account menu for / });
+}
+
+/** Open the account chip's menu and return the "Sign out" item. */
+export async function openSignOut(page: Page) {
+  await accountMenuTrigger(page).click();
+  return page.getByRole("menuitem", { name: "Sign out" });
+}
+
+/** Sign out through the account menu and confirm we land back on `/login`. */
 export async function signOut(page: Page): Promise<void> {
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await (await openSignOut(page)).click();
   await page.waitForURL(/\/login$/);
 }

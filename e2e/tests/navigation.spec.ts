@@ -5,6 +5,7 @@ import {
   fixtureNames,
   FIXTURE_SURNAME,
 } from "../support/fixture-data";
+import { openSignOut } from "../support/auth";
 import { expect, test } from "../support/test";
 
 /**
@@ -164,20 +165,19 @@ test.describe("the person search box", () => {
 });
 
 test.describe("sign out", () => {
+  // Since #79 the sign-out lives in the account chip's menu; the chip is on
+  // every signed-in route and the item appears once the menu is open.
   test("is offered on every signed-in route", async ({ adminPage }) => {
     for (const path of ["/people", "/settings", "/moderation", "/import"]) {
       await adminPage.goto(path);
-      await expect(
-        adminPage.getByRole("button", { name: "Sign out" }),
-      ).toBeVisible();
+      await expect(await openSignOut(adminPage)).toBeVisible();
+      await adminPage.keyboard.press("Escape");
     }
   });
 
   test("is offered to a pending member too", async ({ pendingPage }) => {
     await pendingPage.goto("/onboarding");
-    await expect(
-      pendingPage.getByRole("button", { name: "Sign out" }),
-    ).toBeVisible();
+    await expect(await openSignOut(pendingPage)).toBeVisible();
   });
 });
 

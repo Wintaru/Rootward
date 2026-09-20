@@ -10,6 +10,9 @@ import type { AccountAccess } from "./access";
 export interface CurrentAccount {
   readonly userId: string;
   readonly email: string | null;
+  /** `account.display_name` — what the member signed up as; the header's
+   * account chip (#79) shows its first word and initials. */
+  readonly displayName: string | null;
   readonly account: AccountAccess | null;
   /** `account.person_id` — the linked person, for the header's "My record"
    * link (#50). Null when unlinked or when there is no `account` row yet. */
@@ -51,7 +54,7 @@ export const getCurrentAccount = cache(
 
     const { data: account, error: accountError } = await supabase
       .from("account")
-      .select("role, status, person_id")
+      .select("role, status, person_id, display_name")
       .eq("id", user.id)
       .maybeSingle();
 
@@ -64,6 +67,7 @@ export const getCurrentAccount = cache(
     return {
       userId: user.id,
       email: user.email ?? null,
+      displayName: account?.display_name ?? null,
       account:
         account === null
           ? null

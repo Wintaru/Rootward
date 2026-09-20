@@ -1,5 +1,9 @@
 import { mailboxMark, waitForAuthLink } from "../support/mailpit";
-import { signInWithMagicLink, signOut } from "../support/auth";
+import {
+  accountMenuTrigger,
+  signInWithMagicLink,
+  signOut,
+} from "../support/auth";
 import { deleteTestUser, ensureTestUser } from "../support/supabase-admin";
 import { expect, test } from "../support/test";
 
@@ -88,9 +92,7 @@ test.describe("the sign-in round trip", () => {
     await makeUser(email);
     await signInWithMagicLink(anonPage, email);
     await expect(anonPage).toHaveURL(/\/tree\//);
-    await expect(
-      anonPage.getByRole("button", { name: "Sign out" }),
-    ).toBeVisible();
+    await expect(accountMenuTrigger(anonPage)).toBeVisible();
 
     await signOut(anonPage);
     await expect(anonPage).toHaveURL(/\/login$/);

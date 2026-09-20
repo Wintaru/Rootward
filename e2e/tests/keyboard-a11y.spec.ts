@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
 
 import { unnamedControls } from "../support/a11y";
-import { signInWithMagicLink } from "../support/auth";
+import { accountMenuTrigger, signInWithMagicLink } from "../support/auth";
 import { fixtureIds, FIXTURE_SURNAME } from "../support/fixture-data";
 import { scratchPersons } from "../support/scratch";
 import { deleteTestUser, ensureTestUser } from "../support/supabase-admin";
@@ -228,7 +228,13 @@ test.describe("keyboard operation", () => {
     });
     await signInWithMagicLink(anonPage, email);
 
-    await anonPage.getByRole("button", { name: "Sign out" }).focus();
+    // Open the account chip's menu from the keyboard, arrow to "Sign out",
+    // and activate it — the item is a submit button in the sign-out form.
+    await accountMenuTrigger(anonPage).focus();
+    await anonPage.keyboard.press("Enter");
+    const signOutItem = anonPage.getByRole("menuitem", { name: "Sign out" });
+    await expect(signOutItem).toBeVisible();
+    await signOutItem.focus();
     await anonPage.keyboard.press("Enter");
     await anonPage.waitForURL(/\/login/, { timeout: 20_000 });
 

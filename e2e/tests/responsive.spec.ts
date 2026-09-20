@@ -1,6 +1,7 @@
 import type { Page } from "@playwright/test";
 
 import { fixtureIds, fixtureMediaId } from "../support/fixture-data";
+import { openSignOut } from "../support/auth";
 import { expect, test } from "../support/test";
 
 /**
@@ -107,9 +108,8 @@ test.describe("the phone header", () => {
 
   test("keeps sign-out reachable", async ({ viewerPage }) => {
     await viewerPage.goto("/people");
-    await expect(
-      viewerPage.getByRole("button", { name: "Sign out" }),
-    ).toBeVisible();
+    // The chip shows initials only at this width; its menu still opens.
+    await expect(await openSignOut(viewerPage)).toBeVisible();
   });
 });
 

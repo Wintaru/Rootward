@@ -277,3 +277,20 @@ export async function updateTreeSettings(
     throw new Error(`updateTreeSettings: ${error.message}`);
   }
 }
+
+/** The tree's display name (`tree_settings.tree_name`), or `null` when the
+ * admin has not set one. Shown as the wordmark subtitle on themes whose
+ * chassis asks for it (`data-mark="subtitle"`, #79). */
+export async function getTreeName(client: Db): Promise<string | null> {
+  const { data, error } = await client
+    .from("tree_settings")
+    .select("tree_name")
+    .eq("id", TREE_SETTINGS_ID)
+    .maybeSingle();
+
+  if (error !== null) {
+    throw new Error(`getTreeName: ${error.message}`);
+  }
+  const name = data?.tree_name?.trim() ?? "";
+  return name.length > 0 ? name : null;
+}

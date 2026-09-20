@@ -1,0 +1,252 @@
+/*
+ * Global chrome on the theme tokens (SPEC §8.1 "Themed chrome", #79): the
+ * header, the wordmark and its marks, the nav variants, and the account chip.
+ * The parts that change with the theme's *chassis* — which mark the wordmark
+ * wears, how the nav is drawn — are keyed on the `data-mark` / `data-nav`
+ * attributes `app/layout.tsx` sets on `<html>` from `lib/theme/registry`, so
+ * the markup renders every variant once and CSS picks. No per-theme JSX.
+ */
+
+.rw-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: 64px;
+  padding: 0 32px;
+  border-bottom: 1px solid var(--border);
+  background-color: var(--card);
+  color: var(--card-foreground);
+}
+
+/* Below `lg` the row wraps: menu button + wordmark, then the actions on a
+ * second line if they need it, and the desktop nav gives way to the mobile
+ * menu (`MobileNavMenu`, `lg:hidden` — keep the two breakpoints in step).
+ * An admin's six links plus the search box need ~1200px in one row, so the
+ * switch sits at 1024px, not `sm`. Set here, not with a Tailwind `hidden`,
+ * because an unlayered `.rw-nav { display }` rule would outrank the layered
+ * utility. */
+@media (max-width: 1023px) {
+  .rw-header {
+    flex-wrap: wrap;
+    gap: 8px 10px;
+    height: auto;
+    min-height: 56px;
+    padding: 8px 16px;
+  }
+  /* Two classes: `.rw-nav { display: flex }` below is the same specificity
+   * and later in the file. */
+  .rw-header .rw-header__nav {
+    display: none;
+  }
+}
+
+/* The nav takes the middle and centres its links between the wordmark and
+ * the actions. */
+.rw-header__nav {
+  flex: 1 1 auto;
+  justify-content: center;
+}
+
+.rw-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+
+/* Wordmark — "Rootward" in the display face, with a mark by `data-mark`. */
+.rw-wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--card-foreground);
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.01em;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+a.rw-wordmark:hover {
+  color: var(--card-foreground);
+}
+
+.rw-wordmark__mark,
+.rw-wordmark__subtitle {
+  display: none;
+}
+
+[data-mark="circle"] .rw-wordmark__mark--circle {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  background-color: var(--primary);
+  color: var(--primary-foreground);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+[data-mark="sprig"] .rw-wordmark__mark--sprig {
+  display: block;
+  width: 26px;
+  height: 26px;
+  color: var(--primary);
+}
+
+[data-mark="subtitle"] .rw-wordmark__subtitle {
+  display: block;
+  margin-left: 4px;
+  padding-left: 12px;
+  border-left: 1px solid var(--border);
+  color: var(--muted-foreground);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 14rem;
+}
+
+@media (max-width: 639px) {
+  .rw-wordmark {
+    font-size: 22px;
+  }
+  .rw-wordmark__subtitle {
+    display: none !important;
+  }
+}
+
+/* Nav — one markup, three looks by `data-nav`. */
+.rw-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.rw-nav a {
+  position: relative;
+  display: inline-block;
+  padding: 6px 10px;
+  border-radius: var(--rw-radius-control);
+  color: var(--card-foreground);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.rw-nav a:hover {
+  color: var(--primary);
+}
+
+/* `underline` (and `caps`): the active link is primary with a 2px rule. */
+.rw-nav a[aria-current="page"] {
+  color: var(--primary);
+}
+
+.rw-nav a[aria-current="page"]::after {
+  content: "";
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 0;
+  height: 2px;
+  border-radius: 1px;
+  background-color: var(--primary);
+}
+
+[data-nav="pill"] .rw-nav a {
+  font-weight: 500;
+  border-radius: var(--rw-radius-pill);
+}
+
+[data-nav="pill"] .rw-nav a[aria-current="page"] {
+  background-color: var(--secondary);
+  color: var(--secondary-foreground);
+}
+
+[data-nav="pill"] .rw-nav a[aria-current="page"]::after {
+  content: none;
+}
+
+[data-nav="caps"] .rw-nav a {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+/* The mobile menu's link list reuses the nav look, stacked. */
+.rw-nav--stacked {
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+/* Account chip — initials disc in the second accent, first name, pill. */
+.rw-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 12px 0 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--rw-radius-pill);
+  background-color: var(--card);
+  color: var(--card-foreground);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.rw-chip:hover,
+.rw-chip[aria-expanded="true"] {
+  background-color: var(--secondary);
+}
+
+.rw-chip:focus-visible {
+  outline: none;
+  border-color: var(--ring);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 50%, transparent);
+}
+
+.rw-chip__initials {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background-color: var(--rw-accent-2);
+  color: var(--card);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+@media (max-width: 639px) {
+  .rw-chip {
+    padding-right: 4px;
+  }
+  .rw-chip__name {
+    display: none;
+  }
+}
+
+/* Bell — the unread state is a dot in the accent; the count stays in the
+ * accessible name. */
+.rw-bell__dot {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--card);
+}

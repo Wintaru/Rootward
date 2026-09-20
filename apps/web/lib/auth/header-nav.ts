@@ -46,3 +46,18 @@ export function resolveHeaderNav({
   }
   return links;
 }
+
+/**
+ * Whether a header link points at the page being shown, for `aria-current`
+ * (#79). "Home" is the tree, so `/` also claims every `/tree/…` route; every
+ * other link claims itself and its sub-routes, never a sibling (`/person/new`
+ * is not under `/person/<id>` and vice versa).
+ */
+export function isActiveHref(pathname: string, href: string): boolean {
+  if (href === "/") {
+    return (
+      pathname === "/" || pathname === "/tree" || pathname.startsWith("/tree/")
+    );
+  }
+  return pathname === href || pathname.startsWith(`${href}/`);
+}

@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
+import { Section } from "@/components/layout/Section";
+import { Wordmark } from "@/components/layout/Wordmark";
 import { getCurrentAccount } from "@/lib/auth/current-account";
 
 import { LoginForm } from "./LoginForm";
@@ -21,14 +23,18 @@ export default async function LoginPage() {
   }
 
   return (
-    <main className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center gap-8 px-6 py-24">
-      <header className="flex flex-col gap-2">
-        <h1 className="text-3xl font-semibold tracking-tight">Rootward</h1>
+    <main className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center gap-8 px-4 py-24">
+      <header className="flex flex-col gap-3">
+        <h1>
+          <Wordmark treeName={null} />
+        </h1>
         <p className="text-muted-foreground text-sm">
           Sign in to browse the family tree.
         </p>
       </header>
-      <LoginForm />
+      <Section title="Sign in">
+        <LoginForm />
+      </Section>
     </main>
   );
 }

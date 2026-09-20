@@ -1,10 +1,13 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
 
+import { buttonVariants } from "@/components/ui/button";
 import type { HeaderNavLink } from "@/lib/auth/header-nav";
+import { cn } from "@/lib/utils";
+
+import { HeaderNav } from "./HeaderNav";
 
 /**
  * The header's nav links behind a `<details>` disclosure below the `sm`
@@ -30,24 +33,19 @@ export function MobileNavMenu({
   }, [pathname]);
 
   return (
-    <details ref={detailsRef} className="sm:hidden">
+    <details ref={detailsRef} className="relative lg:hidden">
       <summary
         aria-label="Menu"
-        className="border-border block w-fit cursor-pointer rounded-md border px-3 py-1.5 text-sm font-medium select-none"
+        className={cn(
+          buttonVariants({ variant: "outline", size: "sm" }),
+          "cursor-pointer list-none select-none [&::-webkit-details-marker]:hidden",
+        )}
       >
         Menu
       </summary>
-      <nav aria-label="Main" className="mt-2 flex flex-col items-start gap-2">
-        {links.map((link) => (
-          <Link
-            key={link.href}
-            href={link.href}
-            className="text-sm font-medium hover:underline"
-          >
-            {link.label}
-          </Link>
-        ))}
-      </nav>
+      <div className="bg-card border-border shadow-card absolute top-full left-0 z-20 mt-2 rounded-[calc(var(--radius)+4px)] border p-3">
+        <HeaderNav links={links} stacked />
+      </div>
     </details>
   );
 }

@@ -3,6 +3,7 @@ import {
   fixtureMediaId,
   fixtureNames,
 } from "../support/fixture-data";
+import { accountMenuTrigger, openSignOut } from "../support/auth";
 import { expect, test } from "../support/test";
 
 /**
@@ -55,9 +56,7 @@ test.describe("anonymous visitors", () => {
   test("get no header chrome at all", async ({ anonPage }) => {
     await anonPage.goto("/login");
     await expect(anonPage.getByRole("banner")).toHaveCount(0);
-    await expect(
-      anonPage.getByRole("button", { name: "Sign out" }),
-    ).toHaveCount(0);
+    await expect(accountMenuTrigger(anonPage)).toHaveCount(0);
   });
 
   test("can reach the sign-in error page", async ({ anonPage }) => {
@@ -96,9 +95,8 @@ test.describe("a pending member", () => {
 
   test("sees no navigation links, only sign-out", async ({ pendingPage }) => {
     await pendingPage.goto("/onboarding");
-    await expect(
-      pendingPage.getByRole("button", { name: "Sign out" }),
-    ).toBeVisible();
+    await expect(await openSignOut(pendingPage)).toBeVisible();
+    await pendingPage.keyboard.press("Escape");
     await expect(pendingPage.getByRole("link", { name: "Home" })).toHaveCount(
       0,
     );

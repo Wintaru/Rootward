@@ -17,6 +17,7 @@ import {
   notificationHref,
 } from "@/lib/notifications/format";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { Button } from "@/components/ui/button";
 
 const STATUS_TABS: readonly {
   value: NotificationStatusFilter;
@@ -185,7 +186,9 @@ export function NotificationBell({
 
   return (
     <div className="relative">
-      <button
+      <Button
+        variant="ghost"
+        size="icon"
         type="button"
         onClick={toggleOpen}
         aria-label={
@@ -194,15 +197,13 @@ export function NotificationBell({
             : "Notifications"
         }
         aria-expanded={open}
-        className="hover:bg-accent relative flex h-9 w-9 items-center justify-center rounded-full"
+        className="relative rounded-full"
       >
-        <Bell className="h-5 w-5" aria-hidden="true" />
+        <Bell className="h-5 w-5" strokeWidth={1.8} aria-hidden="true" />
         {unreadCount > 0 && (
-          <span className="bg-primary text-primary-foreground absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-medium">
-            {unreadCount > 99 ? "99+" : unreadCount}
-          </span>
+          <span className="rw-bell__dot" aria-hidden="true" />
         )}
-      </button>
+      </Button>
 
       {open && (
         <>
@@ -219,18 +220,18 @@ export function NotificationBell({
           >
             <div className="border-border flex gap-1 border-b p-2">
               {STATUS_TABS.map((tab) => (
-                <button
+                <Button
                   key={tab.value}
                   type="button"
+                  size="xs"
+                  variant={status === tab.value ? "secondary" : "ghost"}
+                  className={
+                    status === tab.value ? undefined : "text-muted-foreground"
+                  }
                   onClick={() => changeStatus(tab.value)}
-                  className={`rounded-md px-2 py-1 text-xs font-medium ${
-                    status === tab.value
-                      ? "bg-accent text-accent-foreground"
-                      : "text-muted-foreground hover:bg-accent/50"
-                  }`}
                 >
                   {tab.label}
-                </button>
+                </Button>
               ))}
             </div>
 
@@ -285,14 +286,10 @@ function NotificationItem({
       <div className="text-muted-foreground flex items-center justify-between gap-2 text-xs">
         <span>{formatTimestamp(notification.createdAt)}</span>
         {notification.resolvedAt === null ? (
-          <button
-            type="button"
-            onClick={onResolve}
-            className="hover:text-foreground inline-flex items-center gap-1"
-          >
+          <Button variant="ghost" size="xs" type="button" onClick={onResolve}>
             <Check className="h-3 w-3" aria-hidden="true" />
             Mark resolved
-          </button>
+          </Button>
         ) : (
           <span>Resolved</span>
         )}

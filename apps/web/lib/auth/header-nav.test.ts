@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { resolveHeaderNav } from "./header-nav";
+import { isActiveHref, resolveHeaderNav } from "./header-nav";
 
 const PERSON_ID = "d0000000-0000-4000-8000-000000000001";
 
@@ -68,5 +68,29 @@ describe("resolveHeaderNav", () => {
       "Moderation",
       "Settings",
     ]);
+  });
+});
+
+describe("isActiveHref", () => {
+  it("lets Home claim the tree routes and nothing else", () => {
+    expect(isActiveHref("/", "/")).toBe(true);
+    expect(isActiveHref("/tree", "/")).toBe(true);
+    expect(isActiveHref(`/tree/${PERSON_ID}`, "/")).toBe(true);
+    expect(isActiveHref("/people", "/")).toBe(false);
+    expect(isActiveHref("/treehouse", "/")).toBe(false);
+  });
+
+  it("matches a link on itself and its sub-routes only", () => {
+    expect(isActiveHref("/moderation", "/moderation")).toBe(true);
+    expect(isActiveHref("/moderation?invite=x", "/moderation")).toBe(false);
+    expect(isActiveHref("/import", "/import")).toBe(true);
+    expect(isActiveHref(`/person/${PERSON_ID}`, `/person/${PERSON_ID}`)).toBe(
+      true,
+    );
+    expect(
+      isActiveHref(`/person/${PERSON_ID}/edit`, `/person/${PERSON_ID}`),
+    ).toBe(true);
+    expect(isActiveHref("/person/new", `/person/${PERSON_ID}`)).toBe(false);
+    expect(isActiveHref(`/person/${PERSON_ID}`, "/person/new")).toBe(false);
   });
 });
