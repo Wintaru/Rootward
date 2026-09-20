@@ -5,6 +5,12 @@ Supabase stack. They cover every screen in SPEC §8.1 from every access level
 in SPEC §9.4 — viewer, moderator, admin, a member who is not approved yet, a
 suspended one, and a visitor with no session at all.
 
+Coverage is control by control, not screen by screen: each button, field,
+select, reorder arrow, file input and dialog is pressed and its effect read
+back, from the rendered page or from the row it wrote. Keyboard operation
+and accessible names are checked the same way, because a control nobody can
+reach or hear named does not work either.
+
 ## Running it
 
 Start the dev stack first; the suite attaches to it and never starts or stops
