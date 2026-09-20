@@ -184,6 +184,7 @@ test.describe("the request-access form", () => {
   test.describe.configure({ mode: "serial" });
 
   const email = "e2e-requester@rootward.test";
+  const REQUESTER_NAME = "Nobody Zzznotintree";
 
   test.beforeEach(async () => {
     await ensureTestUser({
@@ -195,6 +196,18 @@ test.describe("the request-access form", () => {
   });
 
   test.afterAll(async () => {
+    // Submitting the form fires a trigger that writes an `access_requested`
+    // notification naming this account. The account goes below, so the
+    // notification has to go first or it outlives everything that could
+    // identify it and sits in the developer's bell for good.
+    const { error } = await admin
+      .from("notification")
+      .delete()
+      .eq("type", "access_requested")
+      .contains("payload", { submitted_name: REQUESTER_NAME });
+    if (error !== null) {
+      throw new Error(`notification cleanup failed: ${error.message}`);
+    }
     await deleteTestUser(email);
   });
 

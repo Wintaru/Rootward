@@ -6,6 +6,7 @@
   "description": "Playwright end-to-end suite for the Rootward web app.",
   "scripts": {
     "test:e2e": "playwright test",
+    "test:e2e:settings": "playwright test --project=settings --no-deps",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:report": "playwright show-report",
     "typecheck": "tsc --noEmit",

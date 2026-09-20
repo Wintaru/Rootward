@@ -1,5 +1,5 @@
 import { alerts, expect, test } from "../support/test";
-import { fixtureNames, FIXTURE_SURNAME } from "../support/fixture-data";
+import { fixtureNames } from "../support/fixture-data";
 import {
   deleteTestUser,
   ensureTestUser,
@@ -98,12 +98,99 @@ test.describe("tree settings", () => {
 
   test("picks a default root person by name (#53)", async ({ adminPage }) => {
     await adminPage.goto("/settings");
-    // The picker is a labelled search input; its matches are buttons.
-    await adminPage
-      .getByLabel(/Choose a (different )?person/)
-      .fill(FIXTURE_SURNAME);
+    // The picker is a labelled search input; its matches are buttons. It
+    // returns 8 rows sorted by surname, so searching the shared surname
+    // leaves which 8 arbitrary — the given name is the stable handle.
+    await adminPage.getByLabel(/Choose a (different )?person/).fill("Gideon");
     await expect(
       adminPage.getByRole("button", { name: fixtureNames.grandfather }),
+    ).toBeVisible();
+  });
+
+  test("saves the tree description and reads it back", async ({
+    adminPage,
+  }) => {
+    await adminPage.goto("/settings");
+    const field = adminPage.getByLabel("Tree description");
+    await field.fill("A description typed by the end-to-end suite.");
+    await adminPage.getByRole("button", { name: "Save settings" }).click();
+    await expect(adminPage.getByText("Saved.")).toBeVisible();
+
+    await adminPage.reload();
+    await expect(adminPage.getByLabel("Tree description")).toHaveValue(
+      "A description typed by the end-to-end suite.",
+    );
+  });
+
+  test("saves the allowed media types list", async ({ adminPage }) => {
+    await adminPage.goto("/settings");
+    await adminPage
+      .getByLabel(/Allowed media types/)
+      .fill("image/png\nimage/jpeg");
+    await adminPage.getByRole("button", { name: "Save settings" }).click();
+    await expect(adminPage.getByText("Saved.")).toBeVisible();
+
+    await adminPage.reload();
+    await expect(adminPage.getByLabel(/Allowed media types/)).toHaveValue(
+      /image\/png/,
+    );
+  });
+
+  test("saves both generation depths", async ({ adminPage }) => {
+    await adminPage.goto("/settings");
+    await adminPage.getByLabel("Default generations up").fill("5");
+    await adminPage.getByLabel("Default generations down").fill("4");
+    await adminPage.getByRole("button", { name: "Save settings" }).click();
+    await expect(adminPage.getByText("Saved.")).toBeVisible();
+
+    await adminPage.reload();
+    await expect(adminPage.getByLabel("Default generations up")).toHaveValue(
+      "5",
+    );
+    await expect(adminPage.getByLabel("Default generations down")).toHaveValue(
+      "4",
+    );
+  });
+
+  test("toggles the EXIF GPS stripping box and reads it back", async ({
+    adminPage,
+  }) => {
+    await adminPage.goto("/settings");
+    const box = adminPage.getByLabel(/Strip GPS location/);
+    const before = await box.isChecked();
+
+    await box.setChecked(!before);
+    await adminPage.getByRole("button", { name: "Save settings" }).click();
+    await expect(adminPage.getByText("Saved.")).toBeVisible();
+
+    await adminPage.reload();
+    await expect(adminPage.getByLabel(/Strip GPS location/)).toBeChecked({
+      checked: !before,
+    });
+  });
+
+  test("sets a default root person and clears it again", async ({
+    adminPage,
+  }) => {
+    await adminPage.goto("/settings");
+    // The given name, for the reason given on the picker test above.
+    await adminPage.getByLabel(/Choose a (different )?person/).fill("Gideon");
+    await adminPage
+      .getByRole("button", { name: fixtureNames.grandfather })
+      .click();
+    // The chosen name and the Clear button share one paragraph, so the
+    // name is matched inside it rather than as the whole text node.
+    const chosen = adminPage
+      .locator("p")
+      .filter({ has: adminPage.getByRole("button", { name: "Clear" }) });
+    await expect(chosen).toContainText(fixtureNames.grandfather);
+    await expect(
+      adminPage.getByText("Not set — the tree opens on the earliest person"),
+    ).toHaveCount(0);
+
+    await adminPage.getByRole("button", { name: "Clear" }).click();
+    await expect(
+      adminPage.getByText("Not set — the tree opens on the earliest person"),
     ).toBeVisible();
   });
 
@@ -124,6 +211,69 @@ test.describe("tree settings", () => {
     await adminPage.getByLabel(/Allow self-signup/).setChecked(before);
     await adminPage.getByRole("button", { name: "Save settings" }).click();
     await expect(adminPage.getByText("Saved.")).toBeVisible();
+  });
+});
+
+/**
+ * The typed-phrase gate in front of "Wipe tree" (decision 33, issue #60).
+ *
+ * Nothing here clicks the button — the wipe itself belongs to the
+ * `destructive` project, which only runs behind `E2E_DESTRUCTIVE=1`. These
+ * assert the gate that stands between a misclick and every person in the
+ * tree, and the confirmation field is cleared again before the test ends.
+ */
+test.describe("the wipe-tree gate", () => {
+  test("keeps the button dead until the phrase is exact", async ({
+    adminPage,
+  }) => {
+    await adminPage.goto("/settings");
+    const wipe = adminPage.getByRole("button", { name: "Wipe tree" });
+    const confirm = adminPage.getByLabel('Type "WIPE" to confirm');
+    await expect(wipe).toBeDisabled();
+
+    for (const wrong of ["wipe", "WIP", "WIPE ", "DELETE"]) {
+      await confirm.fill(wrong);
+      await expect(wipe).toBeDisabled();
+    }
+
+    await confirm.fill("WIPE");
+    await expect(wipe).toBeEnabled();
+
+    // Left armed, a stray click would empty the tree for every other spec.
+    await confirm.fill("");
+    await expect(wipe).toBeDisabled();
+  });
+
+  test("offers to skip the automatic backup, and says what that means", async ({
+    adminPage,
+  }) => {
+    await adminPage.goto("/settings");
+    const skip = adminPage.getByLabel(/Skip the automatic backup/);
+    await expect(skip).not.toBeChecked();
+    await expect(
+      adminPage.getByText(/A backup GEDCOM export runs first/),
+    ).toBeVisible();
+
+    await skip.check();
+    await expect(
+      adminPage.getByText("No backup will be made — the tree wipes"),
+    ).toBeVisible();
+
+    await skip.uncheck();
+    await expect(
+      adminPage.getByText(/A backup GEDCOM export runs first/),
+    ).toBeVisible();
+  });
+
+  test("is not offered to a moderator at all", async ({ moderatorPage }) => {
+    await moderatorPage.goto("/settings");
+    // Anchored on the refusal the page actually renders: an expired session
+    // redirects to /login, where "no Wipe tree button" is true but tells us
+    // nothing.
+    await expect(moderatorPage).toHaveURL(/\/settings$/);
+    await expect(
+      moderatorPage.getByRole("button", { name: "Wipe tree" }),
+    ).toHaveCount(0);
   });
 });
 
@@ -176,7 +326,7 @@ test.describe("role management", () => {
     await deleteTestUser(STATUS_TARGET);
   });
 
-  test("changes a role and puts it back", async ({ adminPage }) => {
+  test("changes a role and reads it back", async ({ adminPage }) => {
     await ensureTestUser({
       email: ROLE_TARGET,
       role: "viewer",

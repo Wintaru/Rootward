@@ -12,7 +12,11 @@ import {
   seedFixtureFamily,
   seedFixtureMedia,
 } from "./fixture-data";
-import { ensureTestUser, type TestUser } from "./supabase-admin";
+import {
+  ensureTestUser,
+  saveSettingsSnapshot,
+  type TestUser,
+} from "./supabase-admin";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -24,7 +28,8 @@ export const directoryPath = resolve(here, "../.auth/accounts.json");
 /**
  * Runs once before the suite. Three jobs, in order:
  *
- * 1. build the fixture family every test asserts against;
+ * 1. record the `tree_settings` singleton and build the fixture family every
+ *    test asserts against;
  * 2. create one account per access level and put it in the right state;
  * 3. sign each one in through the real magic-link flow and save the browser
  *    session, so the tests themselves never pay for sign-in.
@@ -36,6 +41,7 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
   const baseURL = config.projects[0]?.use.baseURL ?? env.baseURL;
 
   await assertAppIsUp(baseURL);
+  await saveSettingsSnapshot();
   await seedFixtureFamily();
   await seedFixtureMedia();
   await mkdir(resolve(here, "../.auth"), { recursive: true });

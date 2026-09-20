@@ -3,6 +3,7 @@ import {
   fixtureIds,
   fixtureNames,
 } from "../support/fixture-data";
+import { scratchPersons } from "../support/scratch";
 import { admin } from "../support/supabase-admin";
 import { alerts, expect, test } from "../support/test";
 
@@ -113,28 +114,10 @@ test.describe("the Name & Gender section", () => {
    * `name_prefix` left by one changes the rendered full name the delete
    * confirmation in this file and in `access-control.spec.ts` match on.
    */
-  async function makeScratchPerson(slug: string): Promise<string> {
-    const id = crypto.randomUUID();
-    const { error } = await admin.from("person").insert({
-      id,
-      given_name: slug,
-      surname: FIXTURE_SURNAME,
-      sex: "unknown",
-      visibility: "everyone_approved",
-    });
-    if (error !== null) {
-      throw new Error(`scratch person insert failed: ${error.message}`);
-    }
-    scratch.push(id);
-    return id;
-  }
-
-  const scratch: string[] = [];
+  const scratch = scratchPersons();
 
   test.afterAll(async () => {
-    if (scratch.length > 0) {
-      await admin.from("person").delete().in("id", scratch);
-    }
+    await scratch.remove();
   });
 
   test("keeps Save disabled until something changes", async ({
@@ -155,7 +138,7 @@ test.describe("the Name & Gender section", () => {
   });
 
   test("saves a nickname and reads it back", async ({ moderatorPage }) => {
-    const id = await makeScratchPerson("Nicknamed");
+    const id = await scratch.create("Nicknamed");
     await moderatorPage.goto(`/person/${id}/edit`);
     await moderatorPage.getByLabel("Nickname").fill("E2E Nickname");
     await moderatorPage.getByRole("button", { name: "Save" }).click();
@@ -193,7 +176,7 @@ test.describe("the Name & Gender section", () => {
   });
 
   test("refuses a stale save (decision 26)", async ({ moderatorPage }) => {
-    const id = await makeScratchPerson("Stale");
+    const id = await scratch.create("Stale");
     await moderatorPage.goto(`/person/${id}/edit`);
     await moderatorPage.getByLabel("Nickname").fill("First edit");
 

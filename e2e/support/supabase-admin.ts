@@ -1,4 +1,14 @@
+import { existsSync, readFileSync } from "node:fs";
+import { mkdir, writeFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { createClient } from "@supabase/supabase-js";
+
+// Type-only, by relative path: the suite gets the same row and column types
+// the app has without taking a package dependency on `apps/web`, and
+// `verbatimModuleSyntax` erases the import, so nothing is loaded at runtime.
+import type { Database } from "../../apps/web/lib/db/database.types";
 
 import { env } from "./env";
 
@@ -11,9 +21,11 @@ import { env } from "./env";
  * that is exactly what the suite is checking, and it must be read through the
  * app under the member's own session.
  */
-export const admin = createClient(env.supabaseUrl, env.serviceRoleKey, {
-  auth: { autoRefreshToken: false, persistSession: false },
-});
+export const admin = createClient<Database>(
+  env.supabaseUrl,
+  env.serviceRoleKey,
+  { auth: { autoRefreshToken: false, persistSession: false } },
+);
 
 export type AccountRole = "viewer" | "moderator" | "admin";
 export type AccountStatus = "active" | "pending" | "suspended";
@@ -154,6 +166,49 @@ export async function setAccountState(
 }
 
 /**
+ * The ids of every auth user in the suite's reserved address range.
+ *
+ * The teardown needs them before {@link deleteUsersByPrefix} runs: rows that
+ * name an account rather than a person (an `access_requested` notification)
+ * have nothing left to match on once the account is gone.
+ */
+export async function e2eAccountIds(): Promise<readonly string[]> {
+  const ids: string[] = [];
+  // Paged, not just the first 200: a developer's stack can hold more auth
+  // users than one page, and a miss here leaves a notification in the bell
+  // with nothing left to identify it by.
+  for (let page = 1; page <= USER_PAGE_LIMIT; page += 1) {
+    const { data, error } = await admin.auth.admin.listUsers({
+      page,
+      perPage: USER_PAGE_SIZE,
+    });
+    if (error !== null) {
+      throw new Error(`listUsers failed: ${error.message}`);
+    }
+    for (const user of data.users) {
+      if (isSuiteAddress(user.email)) {
+        ids.push(user.id);
+      }
+    }
+    if (data.users.length < USER_PAGE_SIZE) {
+      return ids;
+    }
+  }
+  throw new Error(
+    `e2eAccountIds gave up after ${String(USER_PAGE_LIMIT)} pages.`,
+  );
+}
+
+const USER_PAGE_SIZE = 200;
+const USER_PAGE_LIMIT = 20;
+
+/** The suite's reserved `e2e-…@rootward.test` range. */
+function isSuiteAddress(email: string | undefined): boolean {
+  const lower = (email ?? "").toLowerCase();
+  return lower.startsWith("e2e-") && lower.endsWith("@rootward.test");
+}
+
+/**
  * Remove every auth user whose address starts with `prefix` — the suite's
  * reserved `e2e-…@rootward.test` range. Used by the teardown, which cannot
  * know every address a test caused GoTrue to create.
@@ -200,19 +255,26 @@ export async function deleteUsersByPrefix(prefix: string): Promise<void> {
   );
 }
 
-/** The `tree_settings` singleton's editable columns. */
-export type TreeSettingsSnapshot = {
-  readonly tree_name: string | null;
-  readonly tree_description: string | null;
-  readonly allow_self_signup: boolean;
-  readonly living_threshold_years: number;
-  readonly default_root_person_id: string | null;
-  readonly default_generations_up: number;
-  readonly default_generations_down: number;
-  readonly media_max_bytes: number;
-  readonly media_allowed_mime: readonly string[];
-  readonly strip_exif_gps: boolean;
-};
+/** A row as the database wants it written — the shape every fixture and
+ * seed helper builds. */
+export type TableInsert<T extends keyof Database["public"]["Tables"]> =
+  Database["public"]["Tables"][T]["Insert"];
+
+/** The `tree_settings` singleton's editable columns, taken from the table's
+ * own row type so the list cannot drift from the schema. */
+export type TreeSettingsSnapshot = Pick<
+  Database["public"]["Tables"]["tree_settings"]["Row"],
+  | "tree_name"
+  | "tree_description"
+  | "allow_self_signup"
+  | "living_threshold_years"
+  | "default_root_person_id"
+  | "default_generations_up"
+  | "default_generations_down"
+  | "media_max_bytes"
+  | "media_allowed_mime"
+  | "strip_exif_gps"
+>;
 
 /**
  * Read the settings singleton so a test that changes it can put the whole row
@@ -233,6 +295,41 @@ export async function readTreeSettings(): Promise<TreeSettingsSnapshot> {
     );
   }
   return data;
+}
+
+/**
+ * Where {@link saveSettingsSnapshot} puts the pre-run `tree_settings` row.
+ *
+ * On disk rather than in a module variable: `globalSetup` and
+ * `globalTeardown` are separate entry points, so nothing in memory is
+ * guaranteed to survive from one to the other. Same shape as the account
+ * directory beside it.
+ */
+const SETTINGS_SNAPSHOT_PATH = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "../.auth/tree-settings.json",
+);
+
+/** Records the settings row as it was before the run. */
+export async function saveSettingsSnapshot(): Promise<void> {
+  const snapshot = await readTreeSettings();
+  await mkdir(dirname(SETTINGS_SNAPSHOT_PATH), { recursive: true });
+  await writeFile(
+    SETTINGS_SNAPSHOT_PATH,
+    JSON.stringify(snapshot, null, 2),
+    "utf8",
+  );
+}
+
+/** The snapshot {@link saveSettingsSnapshot} wrote, or `null` when the run
+ * never got that far. */
+export function readSettingsSnapshot(): TreeSettingsSnapshot | null {
+  if (!existsSync(SETTINGS_SNAPSHOT_PATH)) {
+    return null;
+  }
+  return JSON.parse(
+    readFileSync(SETTINGS_SNAPSHOT_PATH, "utf8"),
+  ) as TreeSettingsSnapshot;
 }
 
 export async function restoreTreeSettings(

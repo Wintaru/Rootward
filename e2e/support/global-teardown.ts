@@ -1,4 +1,10 @@
-import { admin, deleteUsersByPrefix } from "./supabase-admin";
+import {
+  admin,
+  deleteUsersByPrefix,
+  e2eAccountIds,
+  readSettingsSnapshot,
+  restoreTreeSettings,
+} from "./supabase-admin";
 import {
   fixtureIds,
   removeFixtureFamily,
@@ -19,6 +25,11 @@ import {
  * (GoTrue makes one for any address a sign-in link is requested for), and a
  * fixed list would always drift behind them.
  *
+ * `tree_settings` gets the same treatment. Its tests restore it themselves
+ * after each case, but a worker that dies between a save and its restore
+ * would otherwise leave the whole deployment renamed or its default depth
+ * changed — the singleton has no owner to sweep it by.
+ *
  * `E2E_KEEP_FIXTURES=1` keeps everything, for poking at a failed run by hand.
  */
 export default async function globalTeardown(): Promise<void> {
@@ -28,6 +39,10 @@ export default async function globalTeardown(): Promise<void> {
 
   await removeFixtureMedia();
   await removeFixtureFamily();
+  const settings = readSettingsSnapshot();
+  if (settings !== null) {
+    await restoreTreeSettings(settings);
+  }
 
   // `notification` has no FK to `person` or `account`, so the hide requests
   // the profile and moderation specs raise would otherwise outlive the
@@ -43,6 +58,12 @@ export default async function globalTeardown(): Promise<void> {
     }
   }
 
+  // `access_requested` notifications name the account that asked, not a
+  // person, so they survive both sweeps above. Clear them before the
+  // accounts go, while the ids are still there to match on — an orphaned
+  // one sits in the developer's bell for good.
+  await removeAccessRequestNotifications();
+
   // Rows the moderation and onboarding flows leave behind, keyed to the same
   // reserved addresses.
   const invitations = await admin
@@ -54,4 +75,19 @@ export default async function globalTeardown(): Promise<void> {
   }
 
   await deleteUsersByPrefix("e2e-");
+}
+
+async function removeAccessRequestNotifications(): Promise<void> {
+  for (const accountId of await e2eAccountIds()) {
+    const { error } = await admin
+      .from("notification")
+      .delete()
+      .eq("type", "access_requested")
+      .contains("payload", { account_id: accountId });
+    if (error !== null) {
+      throw new Error(
+        `access-request notification teardown failed: ${error.message}`,
+      );
+    }
+  }
 }
