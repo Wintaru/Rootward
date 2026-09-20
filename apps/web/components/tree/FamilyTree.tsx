@@ -250,7 +250,10 @@ export function FamilyTree({
             return;
           }
           setNeighborhood((prev) =>
-            mergeNeighborhoodFragment(prev, fragment, generation),
+            mergeNeighborhoodFragment(prev, fragment, generation, {
+              anchorId: anchor,
+              relation,
+            }),
           );
           setPhotoUrls((prev) => ({ ...prev, ...fragmentPhotoUrls }));
         })

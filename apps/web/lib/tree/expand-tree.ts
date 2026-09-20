@@ -3,6 +3,7 @@ import type {
   Neighborhood,
   NeighborhoodFamily,
   NeighborhoodFragment,
+  NeighborhoodPerson,
 } from "@/lib/db";
 
 /**
@@ -25,14 +26,29 @@ export function expandedGeneration(
   }
 }
 
+/** The expansion a fragment came from: the person whose card carried the
+ * affordance, and which way it pointed. */
+export interface Expansion {
+  readonly anchorId: string;
+  readonly relation: ExpandRelation;
+}
+
 /**
  * Fold one `expand_relatives` fragment into the current neighborhood
  * (issue #24) — additive, never a re-fetch of the whole tree.
  *
- * A person already in `base` is left as-is (their real `generation` is not
- * overwritten by a placeholder from a second expansion path — pedigree
- * collapse can make the same person reachable from more than one branch). A
- * family already in `base` has its `child_ids` widened, not duplicated:
+ * A person already in `base` is left as-is: their real `generation` is not
+ * overwritten by a placeholder from a second expansion path (pedigree
+ * collapse can make the same person reachable from more than one branch).
+ * The one exception is the anchor's own `can_expand_up` / `can_expand_down`
+ * for the direction just expanded, which is cleared. The flag means
+ * "relatives this window did not draw"; the fragment has just drawn them,
+ * and a second press would be a no-op (#117). A resolved partner (`"self"`)
+ * has no flag — the badge is derived from the families by
+ * `findUnresolvedPartners`, and goes away on its own once the partner is in
+ * `persons`.
+ *
+ * A family already in `base` has its `child_ids` widened, not duplicated:
  * `expand_relatives("children")` returns every child of a family
  * `getNeighborhood` may already have returned with a window-truncated set.
  */
@@ -40,8 +56,13 @@ export function mergeNeighborhoodFragment(
   base: Neighborhood,
   fragment: NeighborhoodFragment,
   generation: number,
+  expansion: Expansion,
 ): Neighborhood {
-  const persons = [...base.persons];
+  const persons = base.persons.map((person) =>
+    person.id === expansion.anchorId
+      ? clearExpandFlag(person, expansion.relation)
+      : person,
+  );
   const personIds = new Set(persons.map((person) => person.id));
   for (const person of fragment.persons) {
     if (personIds.has(person.id)) {
@@ -63,6 +84,20 @@ export function mergeNeighborhoodFragment(
   }
 
   return { ...base, persons, families: [...familiesById.values()] };
+}
+
+function clearExpandFlag(
+  person: NeighborhoodPerson,
+  relation: ExpandRelation,
+): NeighborhoodPerson {
+  switch (relation) {
+    case "parents":
+      return { ...person, can_expand_up: false };
+    case "children":
+      return { ...person, can_expand_down: false };
+    case "self":
+      return person;
+  }
 }
 
 function mergeFamily(

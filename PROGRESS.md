@@ -8,9 +8,17 @@ the relevant `docs/SPEC.md` section.
 **E2E bug sweep — working through the ten bugs the end-to-end suite filed
 (#110–#119, plus #106), one branch each, each closed by its own failing
 Playwright test going green.** Order: #110, #113, #111 done (#112 fell out
-of #111), #114, #115, #116 done; next is #117 (stale expand arrow), then
-#118, #119, #106. The
+of #111), #114, #115, #116, #117 done; next is #118 (unnamed selects), then
+#119, #106. The
 inventory, each bug's test, and the fix direction are in `E2E-BUG-REPORT.md`.
+
+**Issue #117 — a tree card kept its expand arrow after the expansion: done,
+staged on branch `fix/tree-expand-affordance`, issue closed.**
+`mergeNeighborhoodFragment` now takes the expansion (`anchorId`,
+`relation`) and clears the anchor's `can_expand_up` / `can_expand_down` for
+the direction just drawn ("self" clears nothing — the partner badge is
+derived and goes away on its own). Three unit tests pin it. Both tree
+specs are fully green.
 
 **Issue #116 — the Media section reported unsaved changes on load: done,
 staged on branch `fix/media-link-sort-order`, issue closed.** `media-process`

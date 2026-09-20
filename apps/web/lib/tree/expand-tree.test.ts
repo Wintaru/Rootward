@@ -11,6 +11,7 @@ import {
   expandedGeneration,
   findUnresolvedPartners,
   mergeNeighborhoodFragment,
+  type Expansion,
 } from "./expand-tree";
 
 function person(
@@ -66,6 +67,10 @@ function fragment(
   return { persons, families };
 }
 
+/** An expansion from a person the fixtures never include, so the existing
+ * merge cases are unaffected by the flag-clearing. */
+const ELSEWHERE: Expansion = { anchorId: "elsewhere", relation: "parents" };
+
 describe("expandedGeneration", () => {
   it("is one level up for parents", () => {
     expect(expandedGeneration(1, "parents")).toBe(2);
@@ -85,6 +90,7 @@ describe("mergeNeighborhoodFragment", () => {
       base,
       fragment([person("dad", { generation: 0 })]),
       1,
+      ELSEWHERE,
     );
     const dad = merged.persons.find((p) => p.id === "dad");
     expect(dad?.generation).toBe(1);
@@ -100,6 +106,7 @@ describe("mergeNeighborhoodFragment", () => {
       base,
       fragment([person("dad", { generation: 0 })]),
       99,
+      ELSEWHERE,
     );
     expect(merged.persons.filter((p) => p.id === "dad")).toHaveLength(1);
     expect(merged.persons.find((p) => p.id === "dad")?.generation).toBe(1);
@@ -120,6 +127,7 @@ describe("mergeNeighborhoodFragment", () => {
         ],
       ),
       1,
+      ELSEWHERE,
     );
     expect(merged.families).toHaveLength(1);
     expect(merged.families[0]?.child_ids).toEqual(["focus"]);
@@ -150,15 +158,72 @@ describe("mergeNeighborhoodFragment", () => {
         ],
       ),
       -1,
+      ELSEWHERE,
     );
     expect(merged.families).toHaveLength(1);
     expect(merged.families[0]?.child_ids).toEqual(["kid", "kid2"]);
   });
 
+  it("clears the anchor's up flag once its parents are drawn (#117)", () => {
+    const base = neighborhood(
+      "focus",
+      [person("focus", { can_expand_up: true, can_expand_down: true })],
+      [],
+    );
+    const merged = mergeNeighborhoodFragment(
+      base,
+      fragment([person("dad")]),
+      1,
+      { anchorId: "focus", relation: "parents" },
+    );
+    const focus = merged.persons.find((p) => p.id === "focus");
+    expect(focus?.can_expand_up).toBe(false);
+    expect(focus?.can_expand_down).toBe(true);
+  });
+
+  it("clears the anchor's down flag once its children are drawn", () => {
+    const base = neighborhood(
+      "focus",
+      [person("focus", { can_expand_up: true, can_expand_down: true })],
+      [],
+    );
+    const merged = mergeNeighborhoodFragment(
+      base,
+      fragment([person("kid")]),
+      -1,
+      { anchorId: "focus", relation: "children" },
+    );
+    const focus = merged.persons.find((p) => p.id === "focus");
+    expect(focus?.can_expand_down).toBe(false);
+    expect(focus?.can_expand_up).toBe(true);
+  });
+
+  it("leaves both flags alone for a resolved partner", () => {
+    const base = neighborhood(
+      "focus",
+      [person("focus", { can_expand_up: true, can_expand_down: true })],
+      [],
+    );
+    const merged = mergeNeighborhoodFragment(
+      base,
+      fragment([person("spouse")]),
+      0,
+      { anchorId: "focus", relation: "self" },
+    );
+    const focus = merged.persons.find((p) => p.id === "focus");
+    expect(focus?.can_expand_up).toBe(true);
+    expect(focus?.can_expand_down).toBe(true);
+  });
+
   it("does not mutate the base neighborhood", () => {
-    const base = neighborhood("focus", [person("focus")], []);
-    mergeNeighborhoodFragment(base, fragment([person("dad")]), 1);
+    const focus = person("focus", { can_expand_up: true });
+    const base = neighborhood("focus", [focus], []);
+    mergeNeighborhoodFragment(base, fragment([person("dad")]), 1, {
+      anchorId: "focus",
+      relation: "parents",
+    });
     expect(base.persons).toHaveLength(1);
+    expect(focus.can_expand_up).toBe(true);
   });
 });
 
