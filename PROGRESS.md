@@ -5,6 +5,25 @@ the relevant `docs/SPEC.md` section.
 
 ## Current state
 
+**E2E bug sweep — working through the ten bugs the end-to-end suite filed
+(#110–#119, plus #106), one branch each, each closed by its own failing
+Playwright test going green.** Order: #110 done; next is #113 (full-name
+search), then #111, #114, #112, #115, #116, #117, #118, #119, #106. The
+inventory, each bug's test, and the fix direction are in `E2E-BUG-REPORT.md`.
+
+**Issue #110 — sign-in at 127.0.0.1 could never succeed: done, staged on
+branch `fix/auth-callback-origin`, issue closed.** `/auth/callback` built its
+redirects from `new URL(request.url).origin`, which under `next dev` is the
+host the server bound (`localhost`), not the one in the address bar — so a
+visitor at `127.0.0.1:3000` was sent to `localhost:3000` without their
+cookie. New pure helper `lib/auth/request-origin.ts` (`resolveRequestOrigin`:
+`X-Forwarded-Host`/`Host` + `X-Forwarded-Proto`, first entry of a proxy
+chain, validated through `URL`, unit-tested) now feeds the callback and the
+moderation invite action's fallback branch. Deliberately does _not_ prefer
+`NEXT_PUBLIC_SITE_URL` — see `DECISIONS.md` 2026-09-20 08:15. `e2e/tests/
+auth.spec.ts` "sign-in at the documented 127.0.0.1 address" is green; the
+session proxy already emits a relative `Location`, so it was never affected.
+
 **Issue #107 — Media viewer: rotate and crop without touching the original:
 done, staged on branch `feat/media-rotate-crop`, issue closed.** Josh asked
 for rotate (and crop) controls. Migration `20260914170500_media_transform`

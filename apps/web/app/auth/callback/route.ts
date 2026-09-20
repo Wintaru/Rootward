@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { maybeAcceptInvitation } from "@/lib/auth/accept-invitation";
 import { maybeBootstrapAdmin } from "@/lib/auth/bootstrap-admin";
+import { resolveRequestOrigin } from "@/lib/auth/request-origin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 /**
@@ -10,12 +11,24 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
  * a Google redirect both arrive here with `?code=`. Exchange it for a session,
  * run the `ADMIN_EMAIL` bootstrap and the invite-acceptance link (SPEC §9.2),
  * then send the visitor on.
+ *
+ * Every redirect is built from the origin the visitor used (#110). The
+ * session cookie the exchange just wrote is scoped to that host, so sending
+ * them to `request.url`'s origin — the one the server bound — would strand
+ * them on `/login` with a cookie that does not apply.
  */
 export async function GET(request: NextRequest): Promise<NextResponse> {
-  const { searchParams, origin } = new URL(request.url);
+  const requestUrl = new URL(request.url);
+  const { searchParams } = requestUrl;
+  const origin =
+    resolveRequestOrigin(request.headers, {
+      defaultProtocol: requestUrl.protocol === "https:" ? "https" : "http",
+    }) ?? requestUrl.origin;
   const code = searchParams.get("code");
 
-  // Only ever redirect within the app.
+  // Only ever redirect within the app. Keep the redirect below as string
+  // concatenation: `new URL(next, origin)` would resolve `//evil.example` to
+  // another host and reopen the redirect.
   const nextParam = searchParams.get("next");
   const next = nextParam && nextParam.startsWith("/") ? nextParam : "/";
 

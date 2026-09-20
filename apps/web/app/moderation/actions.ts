@@ -3,6 +3,7 @@
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 
+import { resolveRequestOrigin } from "@/lib/auth/request-origin";
 import { resolveModerationAccess } from "@/lib/auth/require-moderator";
 import {
   approveAccessRequest,
@@ -259,12 +260,9 @@ async function callbackUrl(): Promise<string> {
     return `${configured.replace(/\/$/, "")}/auth/callback`;
   }
 
-  const requestHeaders = await headers();
-  const host =
-    requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host");
-  if (!host) {
+  const origin = resolveRequestOrigin(await headers());
+  if (origin === null) {
     throw new Error("inviteToClaim: cannot determine the site origin");
   }
-  const proto = requestHeaders.get("x-forwarded-proto") ?? "http";
-  return `${proto}://${host}/auth/callback`;
+  return `${origin}/auth/callback`;
 }
