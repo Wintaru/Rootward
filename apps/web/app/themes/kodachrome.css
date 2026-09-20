@@ -1,0 +1,66 @@
+/*
+ * Kodachrome — the family album: midcentury prints, mustard and teal.
+ * Original Rootward palette, after 1960s colour prints. Values generated
+ * from the redesign token file (#77); do not retune by eye. Contract:
+ * `app/globals.css`, #75.
+ */
+[data-theme="kodachrome"] {
+  --font-display:
+    var(--font-josefin-sans), "Futura", "Helvetica Neue", sans-serif;
+  --font-body: var(--font-mulish), "Helvetica Neue", Arial, sans-serif;
+  --radius: 0.5rem;
+  --rw-radius-control: 6px;
+  --rw-radius-avatar: 4px;
+  --rw-radius-pill: 6px;
+  --background: #efe3cc;
+  --foreground: #2f2419;
+  --card: #fbf4e6;
+  --card-foreground: #2f2419;
+  --popover: #fbf4e6;
+  --popover-foreground: #2f2419;
+  --primary: #c8552d;
+  --primary-foreground: #fbf4e6;
+  --secondary: #e6d7bb;
+  --secondary-foreground: #2f2419;
+  --muted: #e6d7bb;
+  --muted-foreground: #7d6a55;
+  --accent: #e6d7bb;
+  --accent-foreground: #2f2419;
+  --border: #d6c4a4;
+  --input: #d6c4a4;
+  --ring: #c8552d;
+  --rw-accent-2: #d9a520;
+  --rw-male: #2f6f73;
+  --rw-female: #b8443f;
+  --rw-neutral: #8a7b6a;
+  --rw-band: rgba(47, 36, 25, 0.05);
+  --rw-link: rgba(47, 36, 25, 0.3);
+  --rw-shadow: 0 1px 3px rgba(47, 36, 25, 0.14);
+}
+
+[data-theme="kodachrome"].dark {
+  --background: #1e1913;
+  --foreground: #f0e4cf;
+  --card: #2a231b;
+  --card-foreground: #f0e4cf;
+  --popover: #2a231b;
+  --popover-foreground: #f0e4cf;
+  --primary: #e8743f;
+  --primary-foreground: #1e1913;
+  --secondary: #362d23;
+  --secondary-foreground: #f0e4cf;
+  --muted: #362d23;
+  --muted-foreground: #a8988a;
+  --accent: #362d23;
+  --accent-foreground: #f0e4cf;
+  --border: #463a2d;
+  --input: #463a2d;
+  --ring: #e8743f;
+  --rw-accent-2: #e6b53a;
+  --rw-male: #5fa3a6;
+  --rw-female: #e06a5e;
+  --rw-neutral: #9d8f80;
+  --rw-band: rgba(240, 228, 207, 0.04);
+  --rw-link: rgba(240, 228, 207, 0.3);
+  --rw-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+}

@@ -13,9 +13,29 @@ side. The build contract is `docs/SPEC.md` §10 "Phase 10" plus §8.1 "Themed
 chrome", and WAYFINDER decision **38** (the issues say 37 — that number was
 taken by hosted multi-tenancy the day after they were filed). Order is one
 session each: #74 (docs, done) → #75 (token contract, done) → #76 (themes
-A, done) → #77 → #78 → #79 → #80 → #81. **Next session: #77.**
+A, done) → #77 (themes B, done) → #78 → #79 → #80 → #81. **Next session:
+#78.** All eight themes exist; nothing on screen reads the `--rw-*` tokens
+or the chassis switches yet — #78 (tree) and #79 (chrome) do that.
 Bug issues #120 and #121 stay open and may be taken between phase items
 when Josh asks.
+
+**Issue #77 — Themes B (Heirloom, Hearth, Orchard, Kodachrome): done,
+staged on branch `feat/themes-b`, one commit (Josh: per-theme commits were
+too granular in #76), issue closed.** Same shape as #76:
+`app/themes/{heirloom,hearth,orchard,kodachrome}.css` verbatim from the
+issue, imported from `globals.css`; four registry entries (`THEME_IDS` is
+eight; `credit` is now `string | null` — the originals carry `null`,
+Kodachrome a note); eight more `next/font/google` loaders, all
+`preload: false` (Cormorant Garamond, Source Sans 3, Instrument Serif,
+Instrument Sans, DM Serif Display, Karla, Josefin Sans, Mulish — the
+single-weight faces name `weight: ["400"]`, the variable ones none);
+`README.md` says the four are original. The 44 registry guards cover all
+eight with no changes. Verified live: each of the four on `/login`, both
+modes, right tokens and faces; two font preloads regardless of theme.
+Note for #79: Heirloom's display face (Cormorant Garamond) loads as a
+variable font, so the mock's 500 weight floor must be set on the display
+text (`font-weight: 500` under `[data-theme="heirloom"]`), or headings come
+out one step lighter than the canvas.
 
 **Issue #76 — Themes A (Flexoki, Rosé Pine, Gruvbox, Everforest): done,
 staged on branch `feat/themes-a` (stacked on `feat/theme-contract`), issue

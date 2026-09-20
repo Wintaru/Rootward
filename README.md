@@ -113,6 +113,9 @@ Four of the themes use palettes published under the MIT license:
 - **Gruvbox** by Pavel Pertsev — <https://github.com/morhetz/gruvbox>
 - **Everforest** by Sainnhe Park — <https://github.com/sainnhe/everforest>
 
+The other four — Heirloom, Hearth, Orchard, and Kodachrome — are original
+Rootward palettes.
+
 ## License
 
 [MIT](LICENSE).

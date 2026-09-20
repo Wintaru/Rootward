@@ -5,6 +5,10 @@
 @import "./themes/rosepine.css";
 @import "./themes/gruvbox.css";
 @import "./themes/everforest.css";
+@import "./themes/heirloom.css";
+@import "./themes/hearth.css";
+@import "./themes/orchard.css";
+@import "./themes/kodachrome.css";
 
 @custom-variant dark (&:is(.dark *));
 

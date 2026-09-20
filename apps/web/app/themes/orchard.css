@@ -1,0 +1,65 @@
+/*
+ * Orchard — botanical and calm: linen, sage, amber, organic lines. Original
+ * Rootward palette. Values generated from the redesign token file (#77);
+ * do not retune by eye. Contract: `app/globals.css`, #75.
+ */
+[data-theme="orchard"] {
+  --font-display:
+    var(--font-dm-serif-display), Georgia, "Times New Roman", serif;
+  --font-body: var(--font-karla), "Helvetica Neue", Arial, sans-serif;
+  --radius: 0.625rem;
+  --rw-radius-control: 8px;
+  --rw-radius-avatar: 10px;
+  --rw-radius-pill: 6px;
+  --background: #f2efe4;
+  --foreground: #232a1f;
+  --card: #faf9f2;
+  --card-foreground: #232a1f;
+  --popover: #faf9f2;
+  --popover-foreground: #232a1f;
+  --primary: #5c7a52;
+  --primary-foreground: #faf9f2;
+  --secondary: #e8e5d6;
+  --secondary-foreground: #232a1f;
+  --muted: #e8e5d6;
+  --muted-foreground: #6c735f;
+  --accent: #e8e5d6;
+  --accent-foreground: #232a1f;
+  --border: #d7d3bf;
+  --input: #d7d3bf;
+  --ring: #5c7a52;
+  --rw-accent-2: #d29a3a;
+  --rw-male: #5f7f96;
+  --rw-female: #c8873a;
+  --rw-neutral: #8b8f7e;
+  --rw-band: rgba(35, 42, 31, 0.04);
+  --rw-link: rgba(92, 122, 82, 0.5);
+  --rw-shadow: 0 1px 3px rgba(35, 42, 31, 0.1);
+}
+
+[data-theme="orchard"].dark {
+  --background: #161914;
+  --foreground: #ebeadf;
+  --card: #20241c;
+  --card-foreground: #ebeadf;
+  --popover: #20241c;
+  --popover-foreground: #ebeadf;
+  --primary: #93b586;
+  --primary-foreground: #161914;
+  --secondary: #2a2f25;
+  --secondary-foreground: #ebeadf;
+  --muted: #2a2f25;
+  --muted-foreground: #9ea495;
+  --accent: #2a2f25;
+  --accent-foreground: #ebeadf;
+  --border: #343a2f;
+  --input: #343a2f;
+  --ring: #93b586;
+  --rw-accent-2: #e0ad55;
+  --rw-male: #8aaabf;
+  --rw-female: #e0a35c;
+  --rw-neutral: #a0a496;
+  --rw-band: rgba(235, 234, 223, 0.045);
+  --rw-link: rgba(147, 181, 134, 0.5);
+  --rw-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}

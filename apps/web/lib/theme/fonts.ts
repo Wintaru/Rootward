@@ -1,10 +1,18 @@
 import {
   Alegreya,
   Alegreya_Sans,
+  Cormorant_Garamond,
+  DM_Serif_Display,
   IBM_Plex_Sans,
+  Instrument_Sans,
+  Instrument_Serif,
+  Josefin_Sans,
+  Karla,
+  Mulish,
   Newsreader,
   Nunito_Sans,
   Public_Sans,
+  Source_Sans_3,
   Young_Serif,
   Zilla_Slab,
 } from "next/font/google";
@@ -89,6 +97,73 @@ const alegreyaSans = Alegreya_Sans({
   preload: false,
 });
 
+// Heirloom. Variable font, so no weight list — but the mock's floor is 500
+// (400 is thin on screen); #79 sets `font-weight: 500` on Heirloom display
+// text rather than shipping three static instances.
+const cormorantGaramond = Cormorant_Garamond({
+  subsets: ["latin"],
+  variable: "--font-cormorant-garamond",
+  display: "swap",
+  style: ["normal", "italic"],
+  preload: false,
+});
+
+const sourceSans3 = Source_Sans_3({
+  subsets: ["latin"],
+  variable: "--font-source-sans-3",
+  display: "swap",
+  preload: false,
+});
+
+// Hearth
+const instrumentSerif = Instrument_Serif({
+  subsets: ["latin"],
+  variable: "--font-instrument-serif",
+  display: "swap",
+  weight: ["400"],
+  style: ["normal", "italic"],
+  preload: false,
+});
+
+const instrumentSans = Instrument_Sans({
+  subsets: ["latin"],
+  variable: "--font-instrument-sans",
+  display: "swap",
+  preload: false,
+});
+
+// Orchard
+const dmSerifDisplay = DM_Serif_Display({
+  subsets: ["latin"],
+  variable: "--font-dm-serif-display",
+  display: "swap",
+  weight: ["400"],
+  style: ["normal", "italic"],
+  preload: false,
+});
+
+const karla = Karla({
+  subsets: ["latin"],
+  variable: "--font-karla",
+  display: "swap",
+  preload: false,
+});
+
+// Kodachrome
+const josefinSans = Josefin_Sans({
+  subsets: ["latin"],
+  variable: "--font-josefin-sans",
+  display: "swap",
+  preload: false,
+});
+
+const mulish = Mulish({
+  subsets: ["latin"],
+  variable: "--font-mulish",
+  display: "swap",
+  preload: false,
+});
+
 /** Every loader's `.variable` class, for `<html className>`. */
 export const FONT_VARIABLE_CLASSES: readonly string[] = [
   newsreader.variable,
@@ -99,4 +174,12 @@ export const FONT_VARIABLE_CLASSES: readonly string[] = [
   publicSans.variable,
   alegreya.variable,
   alegreyaSans.variable,
+  cormorantGaramond.variable,
+  sourceSans3.variable,
+  instrumentSerif.variable,
+  instrumentSans.variable,
+  dmSerifDisplay.variable,
+  karla.variable,
+  josefinSans.variable,
+  mulish.variable,
 ];

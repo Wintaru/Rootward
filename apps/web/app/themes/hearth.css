@@ -1,0 +1,66 @@
+/*
+ * Hearth — modern and tactile: soft stone, terracotta, rounded. Original
+ * Rootward palette. Values generated from the redesign token file (#77);
+ * do not retune by eye. Contract: `app/globals.css`, #75.
+ */
+[data-theme="hearth"] {
+  --font-display:
+    var(--font-instrument-serif), Georgia, "Times New Roman", serif;
+  --font-body: var(--font-instrument-sans), "Helvetica Neue", Arial, sans-serif;
+  --radius: 0.875rem;
+  --rw-radius-control: 10px;
+  --rw-radius-avatar: 9999px;
+  --rw-radius-pill: 9999px;
+  --background: #f6f1ea;
+  --foreground: #241c16;
+  --card: #ffffff;
+  --card-foreground: #241c16;
+  --popover: #ffffff;
+  --popover-foreground: #241c16;
+  --primary: #c4633f;
+  --primary-foreground: #ffffff;
+  --secondary: #efe7de;
+  --secondary-foreground: #241c16;
+  --muted: #efe7de;
+  --muted-foreground: #7d6f64;
+  --accent: #efe7de;
+  --accent-foreground: #241c16;
+  --border: #e6dbd0;
+  --input: #e6dbd0;
+  --ring: #c4633f;
+  --rw-accent-2: #e5b98a;
+  --rw-male: #3f7f79;
+  --rw-female: #c4633f;
+  --rw-neutral: #9a8c80;
+  --rw-band: rgba(36, 28, 22, 0.035);
+  --rw-link: rgba(36, 28, 22, 0.28);
+  --rw-shadow:
+    0 2px 6px rgba(36, 28, 22, 0.08), 0 1px 1px rgba(36, 28, 22, 0.06);
+}
+
+[data-theme="hearth"].dark {
+  --background: #191411;
+  --foreground: #f4ece4;
+  --card: #25201c;
+  --card-foreground: #f4ece4;
+  --popover: #25201c;
+  --popover-foreground: #f4ece4;
+  --primary: #e0805c;
+  --primary-foreground: #191411;
+  --secondary: #2f2925;
+  --secondary-foreground: #f4ece4;
+  --muted: #2f2925;
+  --muted-foreground: #a99b90;
+  --accent: #2f2925;
+  --accent-foreground: #f4ece4;
+  --border: #3a322c;
+  --input: #3a322c;
+  --ring: #e0805c;
+  --rw-accent-2: #c99a6b;
+  --rw-male: #6fb3ac;
+  --rw-female: #e0805c;
+  --rw-neutral: #9d908a;
+  --rw-band: rgba(244, 236, 228, 0.045);
+  --rw-link: rgba(244, 236, 228, 0.28);
+  --rw-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}

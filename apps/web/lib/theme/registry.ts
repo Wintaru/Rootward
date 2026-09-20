@@ -18,6 +18,10 @@ export const THEME_IDS = [
   "rosepine",
   "gruvbox",
   "everforest",
+  "heirloom",
+  "hearth",
+  "orchard",
+  "kodachrome",
 ] as const;
 export type ThemeId = (typeof THEME_IDS)[number];
 
@@ -52,7 +56,8 @@ export type ThemeDefinition = {
   readonly id: ThemeId;
   readonly label: string;
   readonly tagline: string;
-  readonly credit: string;
+  /** Attribution line for the picker; `null` when there is none to show. */
+  readonly credit: string | null;
   /** Display names of the type faces, for the picker card. */
   readonly fonts: { readonly display: string; readonly body: string };
   readonly chassis: ThemeChassis;
@@ -189,6 +194,134 @@ export const THEMES: readonly ThemeDefinition[] = [
         accent: "#a7c080",
         male: "#7fbbb3",
         female: "#e69875",
+      },
+    },
+  },
+  {
+    id: "heirloom",
+    label: "Heirloom",
+    tagline: "Archival & editorial — paper, ink, and hairlines",
+    credit: null,
+    fonts: { display: "Cormorant Garamond", body: "Source Sans 3" },
+    chassis: {
+      nav: "caps",
+      avatar: "tab",
+      nameFont: "display",
+      mark: "subtitle",
+      ground: "flat",
+    },
+    preview: {
+      light: {
+        bg: "#f3ecdd",
+        surface: "#fbf7ee",
+        ink: "#2b241a",
+        accent: "#8a3a2f",
+        male: "#4f6c88",
+        female: "#a5563a",
+      },
+      dark: {
+        bg: "#1a1611",
+        surface: "#262019",
+        ink: "#efe5d3",
+        accent: "#d0715f",
+        male: "#86a6c6",
+        female: "#d98c6e",
+      },
+    },
+  },
+  {
+    id: "hearth",
+    label: "Hearth",
+    tagline: "Modern & tactile — soft stone, terracotta, rounded",
+    credit: null,
+    fonts: { display: "Instrument Serif", body: "Instrument Sans" },
+    chassis: {
+      nav: "pill",
+      avatar: "ring",
+      nameFont: "body",
+      mark: "circle",
+      ground: "flat",
+    },
+    preview: {
+      light: {
+        bg: "#f6f1ea",
+        surface: "#ffffff",
+        ink: "#241c16",
+        accent: "#c4633f",
+        male: "#3f7f79",
+        female: "#c4633f",
+      },
+      dark: {
+        bg: "#191411",
+        surface: "#25201c",
+        ink: "#f4ece4",
+        accent: "#e0805c",
+        male: "#6fb3ac",
+        female: "#e0805c",
+      },
+    },
+  },
+  {
+    id: "orchard",
+    label: "Orchard",
+    tagline: "Botanical & calm — linen, sage, amber, organic lines",
+    credit: null,
+    fonts: { display: "DM Serif Display", body: "Karla" },
+    chassis: {
+      nav: "underline",
+      avatar: "fill",
+      nameFont: "body",
+      mark: "sprig",
+      ground: "dots",
+    },
+    preview: {
+      light: {
+        bg: "#f2efe4",
+        surface: "#faf9f2",
+        ink: "#232a1f",
+        accent: "#5c7a52",
+        male: "#5f7f96",
+        female: "#c8873a",
+      },
+      dark: {
+        bg: "#161914",
+        surface: "#20241c",
+        ink: "#ebeadf",
+        accent: "#93b586",
+        male: "#8aaabf",
+        female: "#e0a35c",
+      },
+    },
+  },
+  {
+    id: "kodachrome",
+    label: "Kodachrome",
+    tagline: "The family album — midcentury prints, mustard and teal",
+    credit: "Original palette, after 1960s colour prints",
+    fonts: { display: "Josefin Sans", body: "Mulish" },
+    chassis: {
+      nav: "underline",
+      avatar: "print",
+      nameFont: "body",
+      mark: "subtitle",
+      ground: "flat",
+    },
+    preview: {
+      light: {
+        bg: "#efe3cc",
+        surface: "#fbf4e6",
+        ink: "#2f2419",
+        accent: "#c8552d",
+        male: "#2f6f73",
+        female: "#b8443f",
+      },
+      dark: {
+        bg: "#1e1913",
+        surface: "#2a231b",
+        ink: "#f0e4cf",
+        accent: "#e8743f",
+        male: "#5fa3a6",
+        female: "#e06a5e",
       },
     },
   },

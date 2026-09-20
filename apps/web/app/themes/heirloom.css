@@ -1,0 +1,65 @@
+/*
+ * Heirloom — archival and editorial: paper, ink, and hairlines. Original
+ * Rootward palette. Values generated from the redesign token file (#77);
+ * do not retune by eye. Contract: `app/globals.css`, #75.
+ */
+[data-theme="heirloom"] {
+  --font-display:
+    var(--font-cormorant-garamond), Georgia, "Times New Roman", serif;
+  --font-body: var(--font-source-sans-3), "Helvetica Neue", Arial, sans-serif;
+  --radius: 0.25rem;
+  --rw-radius-control: 3px;
+  --rw-radius-avatar: 3px;
+  --rw-radius-pill: 2px;
+  --background: #f3ecdd;
+  --foreground: #2b241a;
+  --card: #fbf7ee;
+  --card-foreground: #2b241a;
+  --popover: #fbf7ee;
+  --popover-foreground: #2b241a;
+  --primary: #8a3a2f;
+  --primary-foreground: #fbf7ee;
+  --secondary: #eae1cd;
+  --secondary-foreground: #2b241a;
+  --muted: #eae1cd;
+  --muted-foreground: #7b7060;
+  --accent: #eae1cd;
+  --accent-foreground: #2b241a;
+  --border: #d9ccb2;
+  --input: #d9ccb2;
+  --ring: #8a3a2f;
+  --rw-accent-2: #a67c2e;
+  --rw-male: #4f6c88;
+  --rw-female: #a5563a;
+  --rw-neutral: #7d766a;
+  --rw-band: rgba(43, 36, 26, 0.04);
+  --rw-link: rgba(43, 36, 26, 0.35);
+  --rw-shadow: 0 1px 2px rgba(43, 36, 26, 0.12);
+}
+
+[data-theme="heirloom"].dark {
+  --background: #1a1611;
+  --foreground: #efe5d3;
+  --card: #262019;
+  --card-foreground: #efe5d3;
+  --popover: #262019;
+  --popover-foreground: #efe5d3;
+  --primary: #d0715f;
+  --primary-foreground: #1a1611;
+  --secondary: #312a20;
+  --secondary-foreground: #efe5d3;
+  --muted: #312a20;
+  --muted-foreground: #a3968a;
+  --accent: #312a20;
+  --accent-foreground: #efe5d3;
+  --border: #3f362a;
+  --input: #3f362a;
+  --ring: #d0715f;
+  --rw-accent-2: #d1a94f;
+  --rw-male: #86a6c6;
+  --rw-female: #d98c6e;
+  --rw-neutral: #a1988b;
+  --rw-band: rgba(239, 229, 211, 0.045);
+  --rw-link: rgba(239, 229, 211, 0.3);
+  --rw-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
