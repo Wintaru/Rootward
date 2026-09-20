@@ -1,14 +1,19 @@
 /*
- * Tree-view styling (SPEC §8.2, screenshot 2). Scoped under `.rw-tree`, which is
- * also the `.f3` element `family-chart` renders into. The library's own
- * stylesheet (`family-chart/styles/family-chart.css`) is imported alongside this
- * one and owns the canvas, zoom layer, and link paths; this file owns the dark
- * ground and the custom card.
+ * Tree-view styling (SPEC §8.2, #78). Scoped under `.rw-tree`, which is also
+ * the `.f3` element `family-chart` renders into. The library's own stylesheet
+ * (`family-chart/styles/family-chart.css`) is imported alongside this one and
+ * owns the canvas, zoom layer, and link geometry; this file owns the ground,
+ * the card, the bands, the connectors' paint, and the Generations panel.
+ *
+ * Everything reads the theme contract (`app/globals.css`, #75): no colour
+ * literal lives here. The chassis switches on `<html>` — `data-avatar`,
+ * `data-name-font`, `data-ground` — select variants below; the card markup
+ * itself (`lib/tree/person-card.ts`) never branches on a theme.
  */
 
 /*
  * The viewport wraps the `family-chart` container (which the library owns
- * outright) plus the depth control overlay. React owns this element, so the
+ * outright) plus the Generations panel. React owns this element, so the
  * navigating state and the controls survive a chart rebuild.
  */
 .rw-tree-viewport {
@@ -29,21 +34,18 @@
 }
 
 .rw-tree {
-  --rw-tree-bg: #1f2430;
-  --rw-card-male: #3f6fb0;
-  --rw-card-female: #d5843f;
-  --rw-card-neutral: #6b7280;
-
   position: relative;
   flex: 1 1 auto;
   width: 100%;
   min-height: 32rem;
   overflow: hidden;
-  background-color: var(--rw-tree-bg);
-  color: #fff;
+  background-color: var(--background);
+  color: var(--foreground);
+  /* The library's sheet sets Roboto on `.f3`. */
+  font-family: var(--font-body);
   /* `family-chart` sets internal elements (e.g. `#htmlSvg`, the card layer)
    * to positive `z-index` values via inline styles. Without this, those
-   * values escape into the shared stacking context with `.rw-tree-depth`
+   * values escape into the shared stacking context with `.rw-gen-panel`
    * below and can outrank it — physically covering the stepper and
    * swallowing every click even though the buttons still render on top
    * visually. `isolation: isolate` traps the whole library-owned subtree in
@@ -52,79 +54,30 @@
   isolation: isolate;
 }
 
+/* Dotted ground — a chassis switch, not a theme token, because CSS cannot
+ * branch on a keyword variable without style container queries. */
+[data-ground="dots"] .rw-tree {
+  background-image: radial-gradient(var(--border) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
 /*
- * Depth control (SPEC §8.2) — a small overlay, top-left of the viewport. Steps
- * the `?up` / `?down` override; disabled while a navigation is in flight.
+ * Connectors. `family-chart` writes `stroke="#fff"` as a presentation
+ * attribute on each link path, which any stylesheet rule outranks. The
+ * library's hover "path to main" highlight is not enabled here
+ * (`setOnHoverPathToMain` is never called), so nothing else styles links.
  */
-.rw-tree-depth {
-  position: absolute;
-  top: 12px;
-  left: 12px;
-  z-index: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  background-color: rgb(0 0 0 / 45%);
-  color: #fff;
-  font-size: 12px;
-}
-
-.rw-tree-depth__stepper {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.rw-tree-depth__label {
-  flex: 1 1 auto;
-  opacity: 0.85;
-}
-
-.rw-tree-depth__value {
-  min-width: 1ch;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-}
-
-.rw-tree-depth button {
-  border: 1px solid rgb(255 255 255 / 30%);
-  border-radius: 6px;
-  background-color: rgb(255 255 255 / 10%);
-  color: inherit;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.rw-tree-depth button:hover:not(:disabled) {
-  background-color: rgb(255 255 255 / 20%);
-}
-
-.rw-tree-depth button:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-
-.rw-tree-depth__stepper button {
-  display: grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  font-size: 14px;
-}
-
-.rw-tree-depth__reset {
-  padding: 2px 8px;
-  font-size: 11px;
+.rw-tree .link {
+  stroke: var(--rw-link);
+  stroke-width: 1.5px;
+  stroke-linejoin: miter;
+  stroke-linecap: butt;
 }
 
 /* An ended union (issue #122): the spouse link between a divorced or annulled
  * couple is dashed and faded. `ended-union-links.ts` tags the path after each
  * layout. `stroke-opacity`, not `opacity` — the library animates the path's
- * inline `opacity` on enter, and an inline style would win over this rule.
- * `f3-path-to-main` (the highlighted route to the focus card) still thickens
- * it — the two compose. */
+ * inline `opacity` on enter, and an inline style would win over this rule. */
 .rw-tree .link.rw-link--ended {
   stroke-dasharray: 7 5;
   stroke-opacity: 0.55;
@@ -136,55 +89,75 @@
 }
 
 /*
- * Generation bands (SPEC §8.2, issue #22). An SVG overlay inside `family-chart`'s
- * zoom layer — one `<g class="rw-gen-band">` per generation row, translated to
- * the band's top edge. The `transform` / `height` transitions are set inline by
- * the overlay code so the duration can match the card animation; this file only
- * owns the fill and label appearance.
+ * Generation bands (SPEC §8.2, issue #22). Two layers: the fills are an SVG
+ * group inside `family-chart`'s zoom layer (`svg .view`), so they pan and
+ * scale with the cards; the labels are a second group directly under the
+ * `<svg>`, pinned to the viewport's left edge and re-synced to each fill's
+ * on-screen top by `generation-bands-overlay.ts`. Transitions are set inline
+ * there so the duration matches the card animation; this file only owns
+ * paint and type. The library's `.f3 svg.main_svg text { fill: currentColor }`
+ * outranks a `fill` here, so the labels set `color` and let it through.
  */
-.rw-gen-bands {
+.rw-gen-bands,
+.rw-gen-labels {
   pointer-events: none;
 }
 
 .rw-gen-band__fill {
-  fill: #fff;
-  opacity: 0.03;
+  fill: transparent;
 }
 
 .rw-gen-band--alt .rw-gen-band__fill {
-  opacity: 0.07;
+  fill: var(--rw-band);
 }
 
-.rw-gen-band__label,
-.rw-gen-band__range {
-  fill: #fff;
-  text-anchor: end;
-  font-family: inherit;
+.rw-gen-label__title,
+.rw-gen-label__range {
+  text-anchor: start;
+  font-family: var(--font-body);
 }
 
-.rw-gen-band__label {
+.rw-gen-label__title {
+  color: var(--foreground);
+  fill-opacity: 0.85;
   font-size: 13px;
-  font-weight: 700;
-  opacity: 0.7;
+  font-weight: 600;
 }
 
-.rw-gen-band__range {
-  font-size: 11px;
-  opacity: 0.45;
+[data-name-font="display"] .rw-gen-label__title {
+  font-family: var(--font-display);
+  font-size: 17px;
 }
 
+.rw-gen-label__range {
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+/*
+ * Card anatomy (#78): 212×84, border-box. `CARD_WIDTH` / `CARD_HEIGHT` in
+ * `FamilyTree.tsx` must match — `setCardDim` and the band geometry read them.
+ * `--rw-sex` is set per card by the `rw-card--<sex>` modifier so the avatar
+ * variants and the dot share one lookup.
+ */
 .rw-card {
+  --rw-sex: var(--rw-neutral);
+
   position: relative;
+  box-sizing: border-box;
   display: flex;
   align-items: center;
-  gap: 8px;
-  width: 190px;
-  min-height: 64px;
-  padding: 8px;
-  border-radius: 10px;
-  background-color: var(--rw-card-neutral);
-  box-shadow: 0 1px 3px rgb(0 0 0 / 45%);
-  font-size: 12px;
+  gap: 10px;
+  width: 212px;
+  height: 84px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background-color: var(--card);
+  color: var(--card-foreground);
+  box-shadow: var(--rw-shadow);
+  font-size: 14px;
   line-height: 1.25;
   /* A double-click opens the profile (issue #52); `preventDefault` on
    * `dblclick` cannot stop the word selection that starts on `mousedown`. */
@@ -192,22 +165,46 @@
 }
 
 .rw-card--male {
-  background-color: var(--rw-card-male);
+  --rw-sex: var(--rw-male);
 }
 
 .rw-card--female {
-  background-color: var(--rw-card-female);
+  --rw-sex: var(--rw-female);
 }
 
+/* Focus card — keyed on the class `family-chart` puts on the centred card.
+ * The border grows inside the box (border-box), so the card keeps its size. */
+.rw-tree .card-main .rw-card {
+  border: 2px solid var(--primary);
+  box-shadow:
+    0 0 0 5px color-mix(in oklab, var(--primary) 15%, transparent),
+    var(--rw-shadow);
+}
+
+/*
+ * Avatar. One box for the photo or the silhouette; the `data-avatar` chassis
+ * switch picks how the sex colour is worn. Ring and print paint through a
+ * `::after` overlay so they sit above a photo, not under it.
+ */
 .rw-card__photo {
+  position: relative;
   flex: 0 0 auto;
   display: grid;
   place-items: center;
-  width: 44px;
-  height: 44px;
-  border-radius: 8px;
+  width: 52px;
+  height: 52px;
+  border-radius: var(--rw-radius-avatar);
   overflow: hidden;
-  background-color: rgb(255 255 255 / 18%);
+  background-color: var(--secondary);
+  color: var(--rw-sex);
+}
+
+.rw-card__photo::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
 }
 
 .rw-card__photo img,
@@ -220,7 +217,28 @@
 .rw-card__photo--silhouette svg {
   width: 72%;
   height: 72%;
-  opacity: 0.85;
+}
+
+[data-avatar="ring"] .rw-card__photo::after {
+  box-shadow: inset 0 0 0 2.5px var(--rw-sex);
+}
+
+[data-avatar="fill"] .rw-card__photo,
+[data-avatar="print"] .rw-card__photo {
+  background-color: var(--rw-sex);
+  color: var(--card);
+}
+
+[data-avatar="tab"] .rw-card__photo {
+  border-bottom: 3px solid var(--rw-sex);
+}
+
+[data-avatar="print"] .rw-card__photo {
+  box-shadow: 0 0 0 1px var(--border);
+}
+
+[data-avatar="print"] .rw-card__photo::after {
+  box-shadow: inset 0 0 0 3px var(--card);
 }
 
 .rw-card__body {
@@ -230,7 +248,10 @@
 }
 
 .rw-card__name {
+  font-family: var(--font-body);
+  font-size: 14px;
   font-weight: 600;
+  color: var(--card-foreground);
   overflow: hidden;
   display: -webkit-box;
   -webkit-box-orient: vertical;
@@ -238,10 +259,29 @@
   line-clamp: 2;
 }
 
-.rw-card__years {
-  margin-top: 2px;
-  font-size: 11px;
-  opacity: 0.8;
+[data-name-font="display"] .rw-card__name {
+  font-family: var(--font-display);
+  font-size: 17px;
+  line-height: 1.15;
+}
+
+/* Years line: a 7px sex dot, then the birth–death years in lining numerals. */
+.rw-card__meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--muted-foreground);
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.rw-card__dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background-color: var(--rw-sex);
 }
 
 /* A repeated ancestor (pedigree collapse) — `family-chart` draws each path and
@@ -250,11 +290,14 @@
   position: absolute;
   top: 4px;
   right: 4px;
-  padding: 0 5px;
-  border-radius: 999px;
-  background-color: rgb(0 0 0 / 30%);
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--rw-radius-pill);
+  background-color: var(--secondary);
+  color: var(--secondary-foreground);
   font-size: 10px;
   font-weight: 700;
+  line-height: 16px;
 }
 
 /*
@@ -274,31 +317,36 @@
   z-index: 1;
   display: grid;
   place-items: center;
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   padding: 0;
-  border: 1px solid rgb(255 255 255 / 40%);
+  border: 1px solid var(--border);
   border-radius: 999px;
-  background-color: rgb(0 0 0 / 45%);
-  color: #fff;
-  font-size: 10px;
-  line-height: 1;
+  background-color: var(--card);
+  color: var(--primary);
+  box-shadow: var(--rw-shadow);
   cursor: pointer;
 }
 
 .rw-card__expand:hover,
 .rw-card__profile:hover {
-  background-color: rgb(0 0 0 / 65%);
+  background-color: var(--secondary);
+}
+
+.rw-card__expand svg,
+.rw-card__profile svg {
+  width: 12px;
+  height: 12px;
 }
 
 .rw-card__expand--up {
-  top: -10px;
+  top: -11px;
   left: 50%;
   transform: translateX(-50%);
 }
 
 .rw-card__expand--down {
-  bottom: -10px;
+  bottom: -11px;
   left: 50%;
   transform: translateX(-50%);
 }
@@ -310,20 +358,101 @@
 
 .rw-card__profile {
   top: 50%;
-  right: -10px;
+  right: -11px;
   transform: translateY(-50%);
 }
 
-.rw-card__profile svg {
-  width: 11px;
-  height: 11px;
+/*
+ * Generations panel (#78) — bottom-right of the viewport, on card tokens.
+ * Steps the `?up` / `?down` override; disabled while a navigation is in flight.
+ */
+.rw-gen-panel {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 1;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 236px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) + 4px);
+  background-color: var(--card);
+  color: var(--card-foreground);
+  box-shadow: var(--rw-shadow);
+  font-size: 13px;
 }
 
-/* Focus ring — keyed on the class `family-chart` puts on the centred card. */
-.rw-tree .card-main .rw-card {
-  outline: 3px solid #fff;
-  outline-offset: 2px;
-  box-shadow:
-    0 0 0 6px rgb(255 255 255 / 15%),
-    0 1px 3px rgb(0 0 0 / 45%);
+.rw-gen-panel__heading {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
+.rw-gen-panel__stepper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rw-gen-panel__label {
+  flex: 1 1 auto;
+  color: var(--card-foreground);
+}
+
+.rw-gen-panel__value {
+  min-width: 2ch;
+  text-align: center;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.rw-gen-panel__step {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--rw-radius-control);
+  background-color: var(--secondary);
+  color: var(--card-foreground);
+  cursor: pointer;
+}
+
+.rw-gen-panel__step svg {
+  width: 12px;
+  height: 12px;
+}
+
+.rw-gen-panel__step:hover:not(:disabled) {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.rw-gen-panel__step:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.rw-gen-panel__reset {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--primary);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.rw-gen-panel__reset:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
+.rw-gen-panel__reset:disabled {
+  opacity: 0.4;
+  cursor: default;
 }

@@ -2,7 +2,14 @@
 
 import { createChart, type Datum } from "family-chart";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 
 import type { ExpandRelation, Neighborhood } from "@/lib/db";
 import { expandRelatives } from "@/lib/db";
@@ -33,6 +40,7 @@ import {
 import { endedUnionKeys } from "@/lib/tree/ended-unions";
 import { markEndedUnionLinks } from "./ended-union-links";
 import {
+  observeZoom,
   removeGenerationBands,
   renderGenerationBands,
 } from "./generation-bands-overlay";
@@ -57,15 +65,13 @@ const DOUBLE_CLICK_GRACE_MS = 250;
 
 /**
  * Card box, shared between `setCardDim` and the generation-band geometry
- * (SPEC §8.2). `CARD_WIDTH` / `CARD_HEIGHT` must match `.rw-card` in
+ * (SPEC §8.2, #78). `CARD_WIDTH` / `CARD_HEIGHT` must match `.rw-card` in
  * `family-tree.css`.
  */
-const CARD_WIDTH = 190;
-const CARD_HEIGHT = 80;
-const CARD_X_SPACING = 260;
-const CARD_Y_SPACING = 150;
-/** Layout gap between a band's left label and the leftmost card on its row. */
-const LABEL_GUTTER = 24;
+const CARD_WIDTH = 212;
+const CARD_HEIGHT = 84;
+const CARD_X_SPACING = 280;
+const CARD_Y_SPACING = 156;
 
 type Chart = ReturnType<typeof createChart>;
 
@@ -450,6 +456,10 @@ export function FamilyTree({
       transition_time: 0,
     });
     chartRef.current = chart;
+    // The band labels are pinned to the viewport (#78) and follow the
+    // library's pan/zoom by observation; the chart's first draw above has
+    // already created `svg .view`.
+    const stopObservingZoom = observeZoom(container);
 
     // `family-chart` has no teardown API. Clearing the container drops the SVG
     // and its d3 zoom behaviour; the library attaches no window-level listeners
@@ -458,6 +468,7 @@ export function FamilyTree({
       cancelPendingRecentre();
       cancelPendingRecentreRef.current = () => {};
       cardActionController.abort();
+      stopObservingZoom();
       container.innerHTML = "";
       chartRef.current = null;
     };
@@ -521,9 +532,10 @@ interface TreeDepthControlsProps {
 }
 
 /**
- * In-session depth override (SPEC §8.2). A `router.replace` per step — the
- * override lives in `?up` / `?down` but does not clutter the focus-person back
- * history (decision 28: the back button walks *focus* history).
+ * Generations panel (SPEC §8.2, #78) — the in-session depth override. A
+ * `router.replace` per step — the override lives in `?up` / `?down` but does
+ * not clutter the focus-person back history (decision 28: the back button
+ * walks *focus* history).
  */
 function TreeDepthControls({
   depth,
@@ -531,8 +543,14 @@ function TreeDepthControls({
   disabled,
   onChange,
 }: TreeDepthControlsProps) {
+  // The visible heading is the group's accessible name (one source; the e2e
+  // specs select the group by it).
+  const headingId = useId();
   return (
-    <div className="rw-tree-depth" role="group" aria-label="Generations shown">
+    <div className="rw-gen-panel" role="group" aria-labelledby={headingId}>
+      <span id={headingId} className="rw-gen-panel__heading">
+        Generations shown
+      </span>
       <DepthStepper
         label="Ancestors"
         value={depth.up}
@@ -548,11 +566,11 @@ function TreeDepthControls({
       {(depth.up !== depthDefaults.up || depth.down !== depthDefaults.down) && (
         <button
           type="button"
-          className="rw-tree-depth__reset"
+          className="rw-gen-panel__reset"
           disabled={disabled}
           onClick={() => onChange(depthDefaults)}
         >
-          Reset
+          Reset to defaults
         </button>
       )}
     </div>
@@ -568,26 +586,44 @@ interface DepthStepperProps {
 
 function DepthStepper({ label, value, disabled, onStep }: DepthStepperProps) {
   return (
-    <div className="rw-tree-depth__stepper">
-      <span className="rw-tree-depth__label">{label}</span>
+    <div className="rw-gen-panel__stepper">
+      <span className="rw-gen-panel__label">{label}</span>
       <button
         type="button"
+        className="rw-gen-panel__step"
         aria-label={`Fewer ${label.toLowerCase()}`}
         disabled={disabled || value <= MIN_GENERATIONS}
         onClick={() => onStep(-1)}
       >
-        −
+        <StepIcon kind="minus" />
       </button>
-      <span className="rw-tree-depth__value">{value}</span>
+      <span className="rw-gen-panel__value">{value}</span>
       <button
         type="button"
+        className="rw-gen-panel__step"
         aria-label={`More ${label.toLowerCase()}`}
         disabled={disabled || value >= MAX_GENERATIONS}
         onClick={() => onStep(1)}
       >
-        +
+        <StepIcon kind="plus" />
       </button>
     </div>
+  );
+}
+
+/** Stroke-SVG minus / plus for the steppers; takes the button's `color`. */
+function StepIcon({ kind }: { readonly kind: "minus" | "plus" }) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <path d={kind === "plus" ? "M8 3v10M3 8h10" : "M3 8h10"} />
+    </svg>
   );
 }
 
@@ -615,7 +651,7 @@ function drawGenerationBands(
     return;
   }
 
-  const { nodes, focusY, leftmostX } = readLaidOutTree(
+  const { nodes, focusY } = readLaidOutTree(
     chart.store.getTree()?.data,
     chart.store.getMainId(),
   );
@@ -631,10 +667,9 @@ function drawGenerationBands(
     rowSpacing: CARD_Y_SPACING,
   });
 
-  renderGenerationBands(view, bands, {
+  renderGenerationBands(container, view, bands, {
     transitionMs:
       props?.initial === true ? 0 : (props?.transition_time ?? TRANSITION_MS),
-    labelX: (leftmostX ?? 0) - CARD_WIDTH / 2 - LABEL_GUTTER,
   });
 }
 

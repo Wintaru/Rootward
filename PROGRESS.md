@@ -13,11 +13,46 @@ side. The build contract is `docs/SPEC.md` §10 "Phase 10" plus §8.1 "Themed
 chrome", and WAYFINDER decision **38** (the issues say 37 — that number was
 taken by hosted multi-tenancy the day after they were filed). Order is one
 session each: #74 (docs, done) → #75 (token contract, done) → #76 (themes
-A, done) → #77 (themes B, done) → #78 → #79 → #80 → #81. **Next session:
-#78.** All eight themes exist; nothing on screen reads the `--rw-*` tokens
-or the chassis switches yet — #78 (tree) and #79 (chrome) do that.
+A, done) → #77 (themes B, done) → #78 (tree on tokens, done) → #79 → #80 →
+#81. **Next session: #79.** The tree reads the tokens and chassis switches;
+the header, sections, and controls still do not — #79 does that.
 Bug issues #120 and #121 stay open and may be taken between phase items
 when Josh asks.
+
+**Issue #78 — Tree view on tokens (card anatomy, bands, connectors,
+Generations panel): done, staged on branch `feat/tree-on-tokens`, issue
+closed.** `family-tree.css` rewritten on the contract — no colour literal
+left (`grep` finds them only in comments). Card 212×84 (`CARD_WIDTH` /
+`CARD_HEIGHT` in `FamilyTree.tsx` updated with it, spacing 280×156), the
+`rw-card--<sex>` modifier sets `--rw-sex` once for the avatar variants and
+the dot; the four `data-avatar` variants (ring, fill, tab, print — ring and
+print paint through `::after` so they sit over a photo), `data-name-font`,
+and `data-ground="dots"` verified live across Flexoki, Gruvbox, Rosé Pine,
+Orchard, Kodachrome in both modes. `person-card.ts`: the photo is always a
+`.rw-card__photo` box (an `<img>` inside), a `.rw-card__meta` line carries
+the 7px dot then the years, expand buttons draw a stroke-SVG plus (the edge
+says which way). Connectors override the library's `stroke="#fff"`
+attribute. Bands split into two layers (`generation-bands-overlay.ts`): the
+fills stay in `family-chart`'s zoom layer; the labels move to a group under
+the `<svg>` pinned at x=36 and re-synced from each fill's
+`getBoundingClientRect` — a `MutationObserver` on `svg .view`'s `style`
+(the library's pan/zoom write) plus a bounded rAF loop after each re-layout
+— and clamped so a band running past the top edge keeps its label pinned
+there. `observeZoom` is disposed in the chart teardown. Generations panel
+(`.rw-gen-panel`) bottom-right with stroke-SVG steppers and "Reset to
+defaults" (the e2e `getByRole("button", { name: "Reset" })` still matches).
+Verified live: stepper, reset, expand-in-place (a "Generation 3" band
+appears with no navigation), re-centre, and wheel zoom all keep labels on
+their fills; no console warnings. Gate green (839 unit tests). Not run: the
+e2e suite (tree specs select by role and name, which are unchanged).
+Review (no blocking findings) added: the SVG labels set `color`, not `fill`
+(the library's `.f3 svg.main_svg text { fill: currentColor }` outranks a
+`fill`), the panel heading is the group's name through `aria-labelledby`,
+the label sync reads all positions before writing, `readLaidOutTree` lost
+its now-unused `leftmostX`, and `family-tree.test.ts` guards the chassis
+values ↔ CSS selectors and `CARD_WIDTH` / `CARD_HEIGHT` ↔ `.rw-card`. Known
+limit: the labels live in the `<svg>` under the HTML card layer, so a card
+dragged across the left rail covers them.
 
 **Issue #77 — Themes B (Heirloom, Hearth, Orchard, Kodachrome): done,
 staged on branch `feat/themes-b`, one commit (Josh: per-theme commits were

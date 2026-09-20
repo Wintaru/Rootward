@@ -63,8 +63,6 @@ export interface LaidOutTree {
   readonly nodes: readonly LaidOutNode[];
   /** `y` of the focus card, or `0` when the main node is not in the tree. */
   readonly focusY: number;
-  /** Smallest card-centre `x` across the tree, or `null` when none has one. */
-  readonly leftmostX: number | null;
 }
 
 /**
@@ -78,15 +76,13 @@ export function readLaidOutTree(
 ): LaidOutTree {
   const nodes: LaidOutNode[] = [];
   let focusY = 0;
-  let leftmostX: number | null = null;
 
   if (!Array.isArray(treeData)) {
-    return { nodes, focusY, leftmostX };
+    return { nodes, focusY };
   }
 
   for (const entry of treeData as readonly unknown[]) {
     const node = entry as {
-      x?: unknown;
       y?: unknown;
       exiting?: unknown;
       data?: { id?: unknown; data?: { birthYear?: unknown } };
@@ -99,18 +95,12 @@ export function readLaidOutTree(
       y: node.y,
       birthYear: typeof birthYear === "number" ? birthYear : null,
     });
-    if (
-      typeof node.x === "number" &&
-      (leftmostX === null || node.x < leftmostX)
-    ) {
-      leftmostX = node.x;
-    }
     if (node.data?.id === mainId) {
       focusY = node.y;
     }
   }
 
-  return { nodes, focusY, leftmostX };
+  return { nodes, focusY };
 }
 
 /** U+2212, the real minus sign — not the hyphen-minus. */

@@ -101,6 +101,8 @@ describe("personCardHtml", () => {
       card({ birthYear: null, deathYear: null }),
     );
     expect(html).not.toContain("rw-card__years");
+    // The sex dot stays even with no years to show.
+    expect(html).toContain("rw-card__dot");
   });
 
   it("escapes a name that contains markup", () => {

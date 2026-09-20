@@ -144,7 +144,6 @@ describe("readLaidOutTree", () => {
     expect(readLaidOutTree(undefined, "p")).toEqual({
       nodes: [],
       focusY: 0,
-      leftmostX: null,
     });
     expect(readLaidOutTree({ data: "oops" }, "p").nodes).toEqual([]);
   });
@@ -185,16 +184,5 @@ describe("readLaidOutTree", () => {
 
     expect(readLaidOutTree(rows, "b").focusY).toBe(90);
     expect(readLaidOutTree(rows, "missing").focusY).toBe(0);
-  });
-
-  it("reports the smallest card-centre x, or null when no node has one", () => {
-    expect(
-      readLaidOutTree(
-        [treeNode({ x: 40 }), treeNode({ x: -260 }), treeNode({ x: 10 })],
-        "p",
-      ).leftmostX,
-    ).toBe(-260);
-
-    expect(readLaidOutTree([treeNode({ x: "n/a" })], "p").leftmostX).toBeNull();
   });
 });

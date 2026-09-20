@@ -3,17 +3,18 @@ import type { ExpandRelation } from "@/lib/db";
 import type { FamilyChartPersonData } from "./to-family-chart";
 
 /**
- * The inner HTML of one tree card (SPEC §8.2, screenshot 2). `family-chart`
+ * The inner HTML of one tree card (SPEC §8.2, #78). `family-chart`
  * renders cards by injecting a string, not by mounting components, so this is a
  * builder, not a React component. Every interpolated value is escaped — names
  * come straight from the database.
  *
  * Visual state that depends on the node's place in the tree — the focus ring —
  * is CSS keyed on the `card-main` class `family-chart` puts on the outer card
- * element, so it is not a parameter here. The gender tint is keyed on
- * {@link FamilyChartPersonData.sex} via the `rw-card--*` modifier below, not on
- * the library's own `card-male` / `card-female` classes, so an unknown-sex
- * person gets a neutral card rather than a wrong one.
+ * element, so it is not a parameter here. The sex colour is keyed on
+ * {@link FamilyChartPersonData.sex} via the `rw-card--*` modifier below (which
+ * sets the card's `--rw-sex` for the avatar and the dot), not on the library's
+ * own `card-male` / `card-female` classes, so an unknown-sex person gets the
+ * neutral colour rather than a wrong one.
  *
  * @param personId the person's id — carried on every expand-affordance button
  *   ({@link expandButtonHtml}) as `data-expand-anchor`, the person already on
@@ -33,8 +34,11 @@ export function personCardHtml(
 ): string {
   const name = escapeHtml(displayName(person));
   const lifespan = escapeHtml(formatLifespan(person));
+  // One `.rw-card__photo` box either way, so the `data-avatar` chassis
+  // variants (ring, fill, tab, print — `family-tree.css`) style photo and
+  // silhouette alike.
   const photo = person.avatarUrl
-    ? `<img class="rw-card__photo" src="${escapeHtml(person.avatarUrl)}" alt="" />`
+    ? `<span class="rw-card__photo"><img src="${escapeHtml(person.avatarUrl)}" alt="" /></span>`
     : `<span class="rw-card__photo rw-card__photo--silhouette">${SILHOUETTE_SVG}</span>`;
   const dupBadge =
     duplicateCount > 1
@@ -70,7 +74,10 @@ export function personCardHtml(
     photo,
     `<span class="rw-card__body">`,
     `<span class="rw-card__name">${name}</span>`,
+    // The sex dot is always drawn; the years follow when known.
+    `<span class="rw-card__meta"><i class="rw-card__dot" aria-hidden="true"></i>`,
     lifespan ? `<span class="rw-card__years">${lifespan}</span>` : "",
+    `</span>`,
     `</span>`,
     dupBadge,
     partnerBadge,
@@ -89,7 +96,7 @@ export function personCardHtml(
 }
 
 interface ExpandButtonSpec {
-  /** `rw-card__expand--<modifier>`, and the glyph the button shows. */
+  /** `rw-card__expand--<modifier>` — the edge the button sits on. */
   readonly modifier: "up" | "down" | "partner";
   readonly label: string;
   /** The person `expandRelatives` should fetch — see {@link personCardHtml}. */
@@ -99,12 +106,6 @@ interface ExpandButtonSpec {
   readonly anchor: string;
   readonly relation: ExpandRelation;
 }
-
-const EXPAND_GLYPH: Readonly<Record<ExpandButtonSpec["modifier"], string>> = {
-  up: "▲",
-  down: "▼",
-  partner: "+",
-};
 
 /**
  * One expand-in-place affordance (issue #24). `family-chart` binds its own
@@ -118,7 +119,7 @@ function expandButtonHtml(spec: ExpandButtonSpec): string {
     `aria-label="${escapeHtml(spec.label)}" ` +
     `data-expand-target="${escapeHtml(spec.target)}" ` +
     `data-expand-anchor="${escapeHtml(spec.anchor)}" ` +
-    `data-expand-relation="${spec.relation}">${EXPAND_GLYPH[spec.modifier]}</button>`
+    `data-expand-relation="${spec.relation}">${PLUS_SVG}</button>`
   );
 }
 
@@ -182,11 +183,17 @@ export function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (char) => HTML_ESCAPES[char] ?? char);
 }
 
-/** Head-and-shoulders silhouette; tinted by the card background via CSS. */
+/** Head-and-shoulders silhouette; takes the avatar box's `color`. */
 const SILHOUETTE_SVG =
   '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">' +
   '<path d="M12 12c2.7 0 4.9-2.2 4.9-4.9S14.7 2.2 12 2.2 7.1 4.4 7.1 7.1 9.3 12 12 12Zm0 2.4c-3.3 0-9.8 1.6-9.8 4.9v2.5h19.6v-2.5c0-3.3-6.5-4.9-9.8-4.9Z"/>' +
   "</svg>";
+
+/** Plus — the one expand glyph; the edge the button sits on says which way
+ * (#78). Stroke SVG so it takes the button's `color`. */
+const PLUS_SVG =
+  '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" ' +
+  'stroke-linecap="round" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg>';
 
 /** "Open in" arrow — a box with an arrow leaving its top-right corner. */
 const OPEN_PROFILE_SVG =

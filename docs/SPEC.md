@@ -759,17 +759,32 @@ inputs use the shadcn `button` / `input` components pointed at
 
 ### 8.2 Tree view — decisions 23, 28
 
-- `family-chart` v2 with **custom HTML cards**. Card shows photo (or gender-tint
-  silhouette), name, birth–death years; ring on the focus person; blue/orange
-  gender tint per screenshot 2.
-- **Generation bands:** an overlay layer behind the chart, one band per depth
-  index relative to focus. Label = relative name (`Root Generation`,
-  `Generation 1` up, `Generation −1` down) + birth-year range of that band's
-  people.
+- `family-chart` v2 with **custom HTML cards**, drawn on the theme tokens
+  (#78, decision 38): 212×84 on `--card` / `--border` / `--radius` /
+  `--rw-shadow`; a 52px avatar (photo or silhouette) whose sex colour
+  (`--rw-male|female|neutral`) is worn per the `data-avatar` chassis switch
+  (`ring`, `fill`, `tab`, `print`); name 14px/600 in the body face
+  (`data-name-font="display"` → 17px display face); a 7px sex dot then the
+  birth–death years in muted lining numerals. The focus card has a 2px
+  `--primary` border and a 15% halo. Expand / open-profile affordances are
+  22px card-coloured circles with a stroke-SVG plus or arrow. Connectors are
+  `--rw-link`, 1.5px. `[data-ground="dots"]` adds a dotted ground.
+- **Generation bands:** two layers. Alternate rows are filled `--rw-band`
+  inside the chart's zoom layer, so they pan and scale with the cards. The
+  labels — relative name (`Root Generation`, `Generation 1` up,
+  `Generation −1` down) + birth-year range of that band's people — sit
+  outside the zoom layer, pinned 36px from the viewport's left edge and
+  re-synced to each band's on-screen top on every pan, zoom, and re-layout;
+  a band that runs past the top edge keeps its label pinned there.
 - **Data:** `getNeighborhood(personId, up, down)` — one query returning the
   focus, ancestors to `up`, descendants to `down`, focus's siblings, focus's
   partners (decision 28). `up`/`down` from `tree_settings` defaults, overridable
   in-session.
+- **Generations panel** (#78): bottom-right of the viewport, 236px on card
+  tokens — "GENERATIONS SHOWN", an Ancestors and a Descendants stepper (26px
+  buttons on `--rw-radius-control`), and a "Reset to defaults" link in
+  `--primary` shown only when off the defaults. Replaces the black stepper
+  overlay top-left.
 - **Ended unions** (#122): a divorced or annulled couple's spouse link is
   drawn dashed and faded (`ended_by` on the family payload — §8.3).
 - **Click** a card → `router.push('/tree/<id>')`; `family-chart` animates the
