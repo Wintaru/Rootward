@@ -541,6 +541,76 @@ self-host story.
       provisioning work — this decision only commits to a tracked plan, per
       Josh's instruction to plan and ticket the phase without doing it.
 
+## Decisions so far — theme system
+
+Settled 2026-09-12 in a redesign session that mocked eight looks on one
+shared page chassis (canvas:
+<https://claude.ai/code/artifact/0551bb59-efd3-4a36-889f-4f0d88a437ff>,
+pages 2–3). Recorded here 2026-09-20 by issue #74. Numbered 38, not 37 as
+that issue says — 37 was taken by hosted multi-tenancy the day after #74
+was filed.
+
+38. **Theme system — a per-member theme picker on one chassis, not one house
+    look.** Extends decision 34 (shadcn/ui + Tailwind stay the component
+    base) and decision 20 (settings gain a per-member Appearance page).
+    - **A theme is a token set on one chassis, never a per-theme component
+      fork.** Every theme is one CSS file of custom properties — the shadcn
+      set `globals.css` already maps (`--background`, `--card`, `--primary`,
+      `--radius`, …) plus a Rootward set (`--font-display`, `--font-body`,
+      `--rw-radius-control|avatar|pill`, `--rw-accent-2`,
+      `--rw-male|female|neutral`, `--rw-band`, `--rw-link`, `--rw-shadow`).
+      Components read tokens and nothing else. The few switches CSS cannot
+      express as a variable (nav style, avatar shape, name face, wordmark
+      mark, ground pattern) are data attributes on `<html>` set from a
+      registry — no per-theme JSX branches. Selector contract:
+      `<html data-theme="<id>">` for the theme and the existing `.dark` class
+      for the mode, so one theme file carries a `[data-theme="x"]` block and
+      a `[data-theme="x"].dark` block.
+    - **Theme and light/dark mode are a per-member preference.** Two columns
+      on `accounts` (`theme`, `color_mode` in `system | light | dark`),
+      editable only on the member's own row. One member's pick never changes
+      the tree for anyone else. The choice is mirrored to a cookie on sign-in
+      and on every save, so `/login` and the first paint on that device match
+      the last signed-in member — no flash of the wrong theme. Server reads
+      cookie → account wins when signed in.
+    - **The shortlist is eight themes, each with a native light and dark
+      side.** Four MIT-licensed palettes people already know from their
+      editors — Flexoki (Steph Ango), Rosé Pine (Dawn / Moon), Gruvbox
+      (morhetz), Everforest (sainnhe) — and four originals — Heirloom,
+      Hearth, Orchard, Kodachrome. Palette credits go in each file header and
+      in `README.md`.
+    - **The stock shadcn neutral becomes no theme at all.** One of the eight
+      is the default (Flexoki, the proof theme in #75 — `DEFAULT_THEME` in the
+      registry is where it is set), and `:root` carries that theme's values
+      as the fallback for an unknown id. The current neutral values are
+      deleted once the default theme's file exists.
+    - **The shared chassis** every mock draws: a 64px header with a
+      "Rootward" wordmark in the display face, nav links, a bell, and an
+      **account chip** (initials disc, first name) whose menu holds My
+      record, Appearance, and Sign out. On the tree, a **Generations panel**
+      bottom-right (card tokens, two steppers, "Reset to defaults") replaces
+      the black stepper overlay top-left. Section cards, buttons, and inputs
+      move onto the shadcn `button` / `input` components pointed at the
+      radius tokens.
+    - **Contrast is measured, not assumed.** Every theme × mode passes WCAG
+      AA (4.5:1 text, 3:1 non-text) before it is offered — a script reads the
+      theme files and fails the test run under the bar; a failing token is
+      lightened or darkened alone so the accent hues stay recognisable.
+    - **Rejected.** One designed house look — it forces one taste on every
+      family and the mocks made the case that the same chassis carries eight
+      well. A per-tree theme set by the admin — the thing being personalised
+      is one person's screen, and a per-member column costs the same as a
+      per-tree one. A runtime theme library (next-themes and the like) for
+      the switch — a cookie plus one inline pre-hydration script is the whole
+      mechanism, and the account column, not `localStorage`, is the source
+      of truth. Style container queries for the chassis switches — Firefox
+      does not ship them, data attributes do the same job today.
+    - **Tracking.** Milestone "Phase 10 — Theme system", label `phase:10`,
+      issues #74–#81 in `docs/SPEC.md` §10, one session each: docs (#74),
+      the token contract and registry (#75), the eight theme files (#76,
+      #77), the tree on tokens (#78), the chrome on tokens (#79), the
+      Appearance page (#80), and the contrast audit last (#81).
+
 ## Journeys
 
 Added 2026-09-12 by decision 36. One line per thing a role must be able to do
@@ -573,6 +643,8 @@ The spec (`docs/SPEC.md`) is derived from this list plus the decisions.
 - Asks a moderator to hide their record or their child's (#61).
 - Signs out (#50).
 - Does all of the above on a phone (#65).
+- Picks a theme and a light / dark mode for their own screen; the login page
+  on that device keeps it (#80, Phase 10).
 - Suggests a correction to a moderator (#70, post-MVP).
 - Sees a person's change history (#71, post-MVP).
 
@@ -630,6 +702,8 @@ the missing journeys. No open frontier items block the current build.
 multi-tenancy (issues #89–#96, milestone "Hosted Multi-Tenancy (Post-MVP)") —
 deliberately not started, tracked so it isn't lost and so ongoing work stays
 aware of it.
+**2026-09-20:** decision 38 recorded the theme system settled on 2026-09-12 —
+Phase 10 (`docs/SPEC.md` §10, issues #74–#81) builds it after Phase 9.
 
 Next step per the wayfinder pattern: turn this map into a spec, then break the
 spec into GitHub issues on `Wintaru/Rootward`, then build. Decisions 1–28 cover

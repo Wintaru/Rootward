@@ -5,6 +5,31 @@ the relevant `docs/SPEC.md` section.
 
 ## Current state
 
+**Phase 10 — Theme system is the current phase.** Phase 9 closed with the
+E2E bug sweep below. Phase 10 (milestone `Phase 10 — Theme system`, label
+`phase:10`, issues #74–#81) gives Rootward a per-member theme picker: eight
+themes as token sets on one shared chassis, each with a light and a dark
+side. The build contract is `docs/SPEC.md` §10 "Phase 10" plus §8.1 "Themed
+chrome", and WAYFINDER decision **38** (the issues say 37 — that number was
+taken by hosted multi-tenancy the day after they were filed). Order is one
+session each: #74 (docs, done) → #75 (token contract, registry, Flexoki as
+the proof theme) → #76 → #77 → #78 → #79 → #80 → #81. **Next session: #75.**
+Bug issues #120 and #121 stay open and may be taken between phase items
+when Josh asks.
+
+**Issue #74 — Docs: record Phase 10 in SPEC §10 and WAYFINDER decision 38:
+done, staged on branch `docs/phase-10-theme-system`, issue closed.** Docs
+only. WAYFINDER gains decision 38 (token set on one chassis, per-member
+theme + mode on `accounts` mirrored to a cookie, the eight-theme shortlist,
+the stock neutral retired, the shared chassis, measured contrast, the
+rejected alternatives), a viewer journey line, and a Status note. SPEC gains
+a "Themed chrome" paragraph in §8.1 (wordmark, nav variants, account chip
+and menu, Generations panel, shadcn controls), a `/settings` row that
+reflects the tabbed page with a per-tab gate, and the "Phase 10 — Theme
+system" section in §10 listing #74–#81 in order with their dependencies.
+The canvas mocks stay the visual reference:
+<https://claude.ai/code/artifact/0551bb59-efd3-4a36-889f-4f0d88a437ff>.
+
 **Issue #122 — ended unions (divorce shown everywhere, "Record a divorce"
 on the union card): done, staged on branch `feat/ended-unions`, issue
 closed.** A divorce was recordable (#57) but nothing read it back. Now
@@ -3037,6 +3062,9 @@ every table and policy this needs already exists (#8, #9, #19).
   `lib/db/moderation.ts`.
 
 ## Next action
+
+_(Historical — written during Phase 7. The live pointer is the top of
+"Current state".)_
 
 **Phase 7 is under way.** #36 is done — see above. **#37** (`/settings` —
 tree settings + role management) is `ready` and independent of #36. Take #37

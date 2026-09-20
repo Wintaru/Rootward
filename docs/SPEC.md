@@ -728,7 +728,7 @@ rejected file (size, MIME) stays reference-only and is reported in
 | `/person/new` (or a header action) | Create a person: given name, surname, sex — all optional — then redirect to the edit view (#55) | moderator+ |
 | `/moderation` | Notification queue, access requests, claims. `?invite=<personId>` preselects the invite form (#63) | moderator+ |
 | `/import` | **Import / Export.** Upload GEDCOM, job status. Blocked with a clear message when the tree is not empty (#60). Export: start a `manual_gedcom` `export_job`, poll it, download through the signed URL; list past export jobs (#54) | moderator+ |
-| `/settings` | Tree settings + role management. Root person picked by name (#53). **Wipe tree** with a backup export first (#60) | admin |
+| `/settings` | Tabbed in Phase 10 (#80): **Appearance** (theme + mode, every approved member) \| Tree \| Roles \| Privacy. Tree settings + role management. Root person picked by name (#53). **Wipe tree** with a backup export first (#60). The admin gate applies per tab, not per route | approved (Appearance) · admin (the rest) |
 
 **Global chrome (#50):** the header renders on every authed route. It carries
 **Home**, a person search box (#62), **My record** (when `account.person_id` is
@@ -736,6 +736,26 @@ set), role-gated links — **Import** and **Moderation** for `moderator+`,
 **Settings** for `admin` — the notification bell (`moderator+`), and **Sign
 out** (server action → `auth.signOut()` → `/login`). Links are convenience; the
 pages enforce access server-side. Every route is usable at 390 px wide (#65).
+
+**Themed chrome (Phase 10, decision 38 — #78, #79):** every mock on the
+redesign canvas shares one chassis that the header and the tree grow into.
+Header 64px on `var(--card)` with a bottom border. Left: the **wordmark** —
+"Rootward" 26px/600 in `var(--font-display)`, with an optional mark chosen by
+`data-mark` (`none`, a `circle` disc with an "R", a `sprig` stroke-SVG, or a
+`subtitle` — the tree name as a small-caps label). Centre: the
+`resolveHeaderNav` links, styled by `data-nav` (`underline`, `pill`, `caps`).
+Right: the bell, then an **account chip** — an initials disc in
+`var(--rw-accent-2)` and the first name, `rounded-pill`, bordered — whose menu
+holds **My record** (when linked), **Appearance** (`/settings`), and **Sign
+out** (the sign-out form moves into the menu). The nav stays role-gated as
+above. On the tree, the black depth-stepper overlay top-left is replaced by a
+**Generations panel** bottom-right: 236px, card tokens, label "GENERATIONS
+SHOWN", two steppers (26px, `var(--rw-radius-control)`), and a "Reset to
+defaults" link shown only when off the defaults. Section cards, buttons, and
+inputs use the shadcn `button` / `input` components pointed at
+`var(--rw-radius-control)`; links are `var(--primary)`, hover
+`var(--rw-accent-2)`. Which theme draws all of this is a per-member choice
+(§10 Phase 10).
 
 ### 8.2 Tree view — decisions 23, 28
 
@@ -1058,6 +1078,64 @@ the build contract for #55–#57.
   §9.2).
 - **#65** Mobile layout pass: every route usable at 390 px, screenshots on the
   PR (§8.1). *Last in the MVP set.*
+
+### Phase 10 — Theme system (decision 38)
+
+Added 2026-09-20 from the 2026-09-12 redesign session (canvas:
+<https://claude.ai/code/artifact/0551bb59-efd3-4a36-889f-4f0d88a437ff>).
+Rootward gets a **per-member theme picker** — eight themes, each a token set
+on one shared chassis, each with a native light and dark side — instead of
+the stock shadcn neutral. Milestone `Phase 10 — Theme system`, label
+`phase:10`, all `post-mvp`. Issue numbers are GitHub numbers. Order is one
+session each, top to bottom; #74 goes first because it is the build
+contract, #81 goes last because it measures what the others drew.
+
+- **#74** Docs: this section, §8.1 themed chrome, WAYFINDER decision 38 +
+  a Journeys line, `PROGRESS.md` pointer. *(Docs only.)*
+- **#75** Theme contract: `<html data-theme="<id>">` + the existing `.dark`
+  class; the shadcn tokens plus the Rootward set (`--font-display`,
+  `--font-body`, `--rw-radius-control|avatar|pill`, `--rw-accent-2`,
+  `--rw-male|female|neutral`, `--rw-band`, `--rw-link`, `--rw-shadow`)
+  mapped in `@theme inline` as Tailwind utilities; chassis switches as
+  `data-nav|avatar|name-font|mark|ground` attributes; `lib/theme/registry.ts`
+  (`ThemeId`, `THEMES`, `DEFAULT_THEME`, `isThemeId`, per-theme `preview`
+  hexes for the picker); `app/layout.tsx` reads a cookie, sets the
+  attributes and font `.variable` classes, and an inline pre-hydration
+  script applies `system` mode with no flash. A unit test asserts every
+  `ThemeId` has a file under `app/themes/`. Flexoki ships here as the proof
+  theme and the default.
+- **#76** Themes A — Flexoki, Rosé Pine, Gruvbox, Everforest (MIT-licensed
+  palettes, CSS in the issue). One file per theme under `app/themes/`, one
+  registry entry, one `next/font/google` loader per family in
+  `lib/theme/fonts.ts`, credits in the header comment and `README.md`.
+  **One commit per theme.** No component changes. *Depends on #75.*
+- **#77** Themes B — Heirloom, Hearth, Orchard, Kodachrome (original
+  palettes, CSS in the issue). Same shape as #76. *Depends on #75.*
+- **#78** Tree view on tokens (§8.1 themed chrome, §8.2): ground, card
+  anatomy (212×84, avatar variants by `data-avatar`, sex dot, focus halo),
+  expand affordances, generation bands on `--rw-band`, connectors on
+  `--rw-link`, and the **Generations panel** replacing `.rw-tree-depth`.
+  `family-tree.css` ends with no colour literal. No change to
+  `FamilyTree.tsx` behaviour. *Depends on #75.*
+- **#79** Global chrome on tokens (§8.1 themed chrome): header, wordmark
+  and marks, nav variants, account chip + menu, Section cards, shadcn
+  `button` / `input` replacing the hand-rolled classes, login page,
+  global link colour. *Depends on #75; lands after #78 so the two do not
+  fight over `layout.tsx`.*
+- **#80** Settings › Appearance (§8.1 `/settings`): migration adds
+  `accounts.theme` (CHECK = the registry's `ThemeId` list, sync test) and
+  `accounts.color_mode` (`system | light | dark`); own-row RLS update
+  limited to those two columns, allow/deny test; `rw-theme` / `rw-mode`
+  cookies set on sign-in and on save; tabbed `/settings` with Appearance
+  first and open to every approved member; theme cards drawn from
+  `registry.preview` (radio semantics), a System | Light | Dark segmented
+  control, optimistic apply with revert on failure; "Appearance" in the
+  account-chip menu. *Depends on #75, #76, #77, #79.*
+- **#81** Contrast audit: `scripts/contrast-audit.mjs` reads the theme
+  files and checks the pairs the UI draws (text 4.5:1, non-text 3:1, focus
+  ring 3:1 on `card` and `background`) for every theme × mode; wired into
+  `pnpm test`; failures fixed by adjusting the failing token alone, noted in
+  the file header. *Last in Phase 10.*
 
 ### Post-MVP (separate milestone)
 - Scheduled backup (`scheduled_full` + `pg_cron` + retention) — decision 29.
