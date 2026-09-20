@@ -1,4 +1,7 @@
-import { admin } from "./supabase-admin";
+import { ONE_PIXEL_PNG } from "./png";
+import { admin, type TableInsert } from "./supabase-admin";
+
+type EventInsert = TableInsert<"event">;
 
 /**
  * A small, self-contained family the suite owns end to end.
@@ -17,6 +20,19 @@ import { admin } from "./supabase-admin";
 const id = (suffix: string): string => `e0000000-0000-4000-8000-0000${suffix}`;
 
 export const FIXTURE_SURNAME = "Qatestsson";
+
+/**
+ * The surname every throwaway person gets (`support/scratch.ts`), kept apart
+ * from {@link FIXTURE_SURNAME} on purpose.
+ *
+ * The app's searches are capped — 8 rows for a person picker, 20 for the
+ * header box, 50 per page on `/people` — and sorted by surname first. Sharing
+ * one surname put dozens of scratch rows in front of the fixture family in
+ * every one of those lists, so a spec asserting "Gideon is in the results"
+ * became a coin flip. The teardown sweeps this surname too, so a row leaked
+ * by a failed test is still cleaned up.
+ */
+export const SCRATCH_SURNAME = "Scratchtestsson";
 
 /**
  * A second, deliberately large family. `/people` and the header search
@@ -262,17 +278,20 @@ export async function seedFixtureFamily(): Promise<void> {
   await seedEvents();
 }
 
-type EventRow = {
-  owner_type: "person" | "family";
-  person_id?: string;
-  family_id?: string;
-  type: string;
-  date_value_raw: string;
-  date_kind: string;
-  date_year1: number;
-  date_month1?: number;
-  date_day1?: number;
-};
+/** Derived from the table's own Insert type rather than restated, so a
+ * schema change fails here instead of at run time. */
+type EventRow = Pick<
+  EventInsert,
+  | "owner_type"
+  | "person_id"
+  | "family_id"
+  | "type"
+  | "date_value_raw"
+  | "date_kind"
+  | "date_year1"
+  | "date_month1"
+  | "date_day1"
+>;
 
 const MONTHS = [
   "JAN",
@@ -304,7 +323,7 @@ const events: EventRow[] = [
 
 function personEvent(
   personId: string,
-  type: string,
+  type: EventRow["type"],
   year: number,
   month: number,
   day: number,
@@ -414,7 +433,7 @@ export async function removeFixtureFamily(): Promise<void> {
   const strays = await admin
     .from("person")
     .delete()
-    .in("surname", [FIXTURE_SURNAME, `O'${FIXTURE_SURNAME}`]);
+    .in("surname", [FIXTURE_SURNAME, `O'${FIXTURE_SURNAME}`, SCRATCH_SURNAME]);
   if (strays.error !== null) {
     fail("stray cleanup", strays.error.message);
   }
@@ -431,15 +450,6 @@ export async function removeFixtureFamily(): Promise<void> {
  */
 export const fixtureMediaId = "e0000000-0000-4000-8000-0000000000c1";
 export const FIXTURE_MEDIA_TITLE = "Qatestsson family portrait";
-
-/** A 1×1 transparent PNG. */
-const ONE_PIXEL_PNG = Uint8Array.from(
-  atob(
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk" +
-      "YPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
-  ),
-  (character) => character.charCodeAt(0),
-);
 
 const MEDIA_BUCKET = "media";
 
