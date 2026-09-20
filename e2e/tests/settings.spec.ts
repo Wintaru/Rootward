@@ -1,5 +1,5 @@
 import { alerts, expect, test } from "../support/test";
-import { fixtureNames, FIXTURE_SURNAME } from "../support/fixture-data";
+import { fixtureNames } from "../support/fixture-data";
 import {
   deleteTestUser,
   ensureTestUser,
@@ -98,10 +98,10 @@ test.describe("tree settings", () => {
 
   test("picks a default root person by name (#53)", async ({ adminPage }) => {
     await adminPage.goto("/settings");
-    // The picker is a labelled search input; its matches are buttons.
-    await adminPage
-      .getByLabel(/Choose a (different )?person/)
-      .fill(FIXTURE_SURNAME);
+    // The picker is a labelled search input; its matches are buttons. It
+    // returns 8 rows sorted by surname, so searching the shared surname
+    // leaves which 8 arbitrary — the given name is the stable handle.
+    await adminPage.getByLabel(/Choose a (different )?person/).fill("Gideon");
     await expect(
       adminPage.getByRole("button", { name: fixtureNames.grandfather }),
     ).toBeVisible();
@@ -176,7 +176,7 @@ test.describe("role management", () => {
     await deleteTestUser(STATUS_TARGET);
   });
 
-  test("changes a role and puts it back", async ({ adminPage }) => {
+  test("changes a role and reads it back", async ({ adminPage }) => {
     await ensureTestUser({
       email: ROLE_TARGET,
       role: "viewer",

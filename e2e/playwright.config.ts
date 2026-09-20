@@ -14,6 +14,20 @@ const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
  *
  * - `app` — everything a member can do without destroying the tree.
  * - `mobile` — the same app at phone width (SPEC §8.1, issue #65).
+ * - `settings` — the `/settings` screen, which edits the singleton
+ *   `tree_settings` row. Every other screen reads that row, so a test that
+ *   saves a different default generation depth changes what the tree draws
+ *   for whoever is mid-assertion. One worker only serialises this project
+ *   against itself — Playwright still schedules projects concurrently — so
+ *   `dependencies` is what actually holds it until `app` and `mobile` have
+ *   finished.
+ *
+ *   Playwright skips a project whose dependency *failed*, and this suite
+ *   fails on every filed bug until it is fixed, so these tests sit out an
+ *   ordinary run while the tree is red. Run them directly for the settings
+ *   screen itself:
+ *
+ *       pnpm test:e2e:settings
  * - `destructive` — wipe-tree and GEDCOM import, which empty the database by
  *   design (SPEC §7, decision 33: only the first import is a plain load).
  *
@@ -58,13 +72,25 @@ export default defineConfig({
   projects: [
     {
       name: "app",
-      testIgnore: ["**/destructive/**", "**/responsive.spec.ts"],
+      testIgnore: [
+        "**/destructive/**",
+        "**/responsive.spec.ts",
+        "**/settings.spec.ts",
+      ],
       use: { ...devices["Desktop Chrome"] },
     },
     {
       name: "mobile",
       testMatch: ["**/responsive.spec.ts"],
       use: { ...devices["Pixel 7"] },
+    },
+    {
+      name: "settings",
+      testMatch: ["**/settings.spec.ts"],
+      dependencies: ["app", "mobile"],
+      fullyParallel: false,
+      workers: 1,
+      use: { ...devices["Desktop Chrome"] },
     },
     ...(destructiveEnabled
       ? [

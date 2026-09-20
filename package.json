@@ -23,6 +23,7 @@
     "lint": "pnpm -r --if-present lint",
     "test": "vitest run",
     "test:e2e": "pnpm --filter @rootward/e2e test:e2e",
+    "test:e2e:settings": "pnpm --filter @rootward/e2e test:e2e:settings",
     "test:e2e:report": "pnpm --filter @rootward/e2e test:e2e:report",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
