@@ -2,7 +2,15 @@
  * Flexoki — ink on paper. Palette: Flexoki (stephango.com/flexoki), MIT,
  * by Steph Ango. Values generated from the redesign token file (#76);
  * do not retune by eye. Contract: `app/globals.css` and #75.
+ *
+ * Flexoki is `DEFAULT_THEME`, so this file is also the fallback for an
+ * unknown id: `:where()` gives the `:root` / `.dark` selectors zero
+ * specificity, so any other theme's `[data-theme]` rule beats them whatever
+ * the import order. When the default changes, move the `:where()` pair to
+ * the new default's file and the `preload` flag in `lib/theme/fonts.ts` to
+ * its faces — `registry.test.ts` checks both.
  */
+:where(:root),
 [data-theme="flexoki"] {
   --font-display: var(--font-newsreader), Georgia, "Times New Roman", serif;
   --font-body: var(--font-ibm-plex-sans), "Helvetica Neue", Arial, sans-serif;
@@ -36,6 +44,7 @@
   --rw-shadow: 0 1px 2px rgba(16, 15, 15, 0.1);
 }
 
+:where(.dark),
 [data-theme="flexoki"].dark {
   --background: #100f0f;
   --foreground: #cecdc3;

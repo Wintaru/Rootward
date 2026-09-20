@@ -21,11 +21,12 @@ const THEMES_DIR = fileURLToPath(new URL("../../app/themes/", import.meta.url));
  * compiler), and Next requires its `variable` option to be a literal, so
  * the names are read from the source text instead.
  */
+const FONTS_SOURCE = readFileSync(
+  fileURLToPath(new URL("./fonts.ts", import.meta.url)),
+  "utf8",
+);
 const LOADED_FONT_VARIABLES: readonly string[] = [
-  ...readFileSync(
-    fileURLToPath(new URL("./fonts.ts", import.meta.url)),
-    "utf8",
-  ).matchAll(/variable: "(--font-[a-z0-9-]+)"/g),
+  ...FONTS_SOURCE.matchAll(/variable: "(--font-[a-z0-9-]+)"/g),
 ].flatMap((match) => (match[1] === undefined ? [] : [match[1]]));
 
 const GLOBALS_CSS = readFileSync(
@@ -108,6 +109,59 @@ describe("theme registry ↔ app/themes/", () => {
       }
     },
   );
+
+  it("the DEFAULT_THEME file, and only it, carries the :root fallback", () => {
+    for (const id of THEME_IDS) {
+      const css = themeCss(id);
+      const isDefault = id === DEFAULT_THEME;
+      expect(
+        css.includes(`:where(:root),\n[data-theme="${id}"] {`),
+        `${id} light fallback`,
+      ).toBe(isDefault);
+      expect(
+        css.includes(`:where(.dark),\n[data-theme="${id}"].dark {`),
+        `${id} dark fallback`,
+      ).toBe(isDefault);
+    }
+  });
+
+  it.each([...THEME_IDS])(
+    "%s.css sets the same token names as the default theme, per block",
+    (id) => {
+      const declared = (css: string, selector: string) =>
+        [...cssBlock(css, selector).matchAll(/^\s*(--[a-z0-9-]+):/gm)]
+          .flatMap((match) => (match[1] === undefined ? [] : [match[1]]))
+          .sort();
+      const reference = themeCss(DEFAULT_THEME);
+      const css = themeCss(id);
+      // A token missing here would silently take the default theme's value
+      // through the `:where()` fallback — a Flexoki border inside Rosé Pine.
+      expect(declared(css, `[data-theme="${id}"]`)).toEqual(
+        declared(reference, `[data-theme="${DEFAULT_THEME}"]`),
+      );
+      expect(declared(css, `[data-theme="${id}"].dark`)).toEqual(
+        declared(reference, `[data-theme="${DEFAULT_THEME}"].dark`),
+      );
+    },
+  );
+
+  it("preloads exactly the default theme's faces", () => {
+    // `preload` defaults to true; a preloaded loader ships a <link> on every
+    // route, so only the faces the default theme renders may leave it on.
+    const preloaded = [
+      ...FONTS_SOURCE.matchAll(/variable: "(--font-[a-z0-9-]+)",([^}]*)}/g),
+    ]
+      .filter((match) => !match[2]?.includes("preload: false"))
+      .flatMap((match) => (match[1] === undefined ? [] : [match[1]]))
+      .sort();
+    const defaultFaces = [
+      ...themeCss(DEFAULT_THEME).matchAll(/var\((--font-[a-z0-9-]+)\)/g),
+    ]
+      .flatMap((match) => (match[1] === undefined ? [] : [match[1]]))
+      .filter((name) => name !== "--font-display" && name !== "--font-body")
+      .sort();
+    expect(preloaded).toEqual(defaultFaces);
+  });
 
   it.each([...THEME_IDS])(
     "%s.css declares a light block and a dark block on the contract",
