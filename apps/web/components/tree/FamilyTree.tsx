@@ -30,6 +30,8 @@ import {
   treeHref,
   type TreeDepth,
 } from "@/lib/tree/tree-view-params";
+import { endedUnionKeys } from "@/lib/tree/ended-unions";
+import { markEndedUnionLinks } from "./ended-union-links";
 import {
   removeGenerationBands,
   renderGenerationBands,
@@ -267,6 +269,15 @@ export function FamilyTree({
     };
   });
 
+  // Which couples' spouse links to draw as ended (issue #122). Same "bound
+  // once, kept fresh via a ref" shape as navigateRef: the `afterUpdate`
+  // callback is registered once in the build effect but must see the current
+  // neighbourhood on every later layout.
+  const endedUnionKeysRef = useRef<ReadonlySet<string>>(new Set());
+  useEffect(() => {
+    endedUnionKeysRef.current = endedUnionKeys(neighborhood.families);
+  }, [neighborhood.families]);
+
   // Mount value only — the build effect below reads it once, then every data
   // change flows through the sync effect.
   const initialTreeRef = useRef(tree);
@@ -419,9 +430,11 @@ export function FamilyTree({
     );
 
     // Redraw the generation bands after every layout — the initial render and
-    // each re-centre — so they stay aligned with the animated rows.
+    // each re-centre — so they stay aligned with the animated rows, and tag
+    // the spouse links of ended unions (issue #122) while the paths are fresh.
     chart.setAfterUpdate((props?: AfterUpdateProps) => {
       drawGenerationBands(container, chart, props);
+      markEndedUnionLinks(container, endedUnionKeysRef.current);
     });
 
     chart.updateMainId(initial.mainId);

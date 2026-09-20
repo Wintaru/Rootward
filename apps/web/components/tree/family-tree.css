@@ -119,6 +119,17 @@
   font-size: 11px;
 }
 
+/* An ended union (issue #122): the spouse link between a divorced or annulled
+ * couple is dashed and faded. `ended-union-links.ts` tags the path after each
+ * layout. `stroke-opacity`, not `opacity` — the library animates the path's
+ * inline `opacity` on enter, and an inline style would win over this rule.
+ * `f3-path-to-main` (the highlighted route to the focus card) still thickens
+ * it — the two compose. */
+.rw-tree .link.rw-link--ended {
+  stroke-dasharray: 7 5;
+  stroke-opacity: 0.55;
+}
+
 /* The card `family-chart` positions; our markup lives inside it. */
 .rw-tree .card {
   cursor: pointer;
