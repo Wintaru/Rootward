@@ -1407,6 +1407,10 @@ export type Database = {
       }
       citation_is_visible: { Args: { p_citation_id: string }; Returns: boolean }
       delete_person: { Args: { p_person_id: string }; Returns: boolean }
+      ended_by: {
+        Args: { f: Database["public"]["Tables"]["family"]["Row"] }
+        Returns: string
+      }
       event_is_visible: { Args: { p_event_id: string }; Returns: boolean }
       event_type_sort_ordinal: {
         Args: { p_type: Database["public"]["Enums"]["event_type"] }
