@@ -5,6 +5,7 @@ import { isApproved } from "@/lib/auth/access";
 import { getCurrentAccount } from "@/lib/auth/current-account";
 import { getDefaultGenerations, getNeighborhood, isUuid } from "@/lib/db";
 import { getPrimaryPhotoUrls } from "@/lib/db/media-urls";
+import { personSearchLabel } from "@/lib/db/person-search";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { FamilyTree } from "@/components/tree/FamilyTree";
 import { resolveTreeDepth } from "@/lib/tree/tree-view-params";
@@ -78,8 +79,21 @@ export default async function TreePage({
     return {};
   });
 
+  // The chart is a canvas of cards with no page heading of its own, and this
+  // is where `/` lands — so the first screen most visits announce would be
+  // untitled (#119). Name the page for a screen reader or reader mode;
+  // visually the focus card already says it. The bare fallback is the
+  // hidden-focus-with-visible-relatives case (#121), not dead code.
+  const focus = neighborhood.persons.find(
+    (person) => person.id === neighborhood.focus_id,
+  );
+  const heading = focus
+    ? `Family tree of ${personSearchLabel(focus)}`
+    : "Family tree";
+
   return (
     <main className="flex flex-1 flex-col">
+      <h1 className="sr-only">{heading}</h1>
       <FamilyTree
         neighborhood={neighborhood}
         photoUrls={photoUrls}

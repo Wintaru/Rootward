@@ -8,9 +8,17 @@ the relevant `docs/SPEC.md` section.
 **E2E bug sweep — working through the ten bugs the end-to-end suite filed
 (#110–#119, plus #106), one branch each, each closed by its own failing
 Playwright test going green.** Order: #110, #113, #111 done (#112 fell out
-of #111), #114, #115, #116, #117, #118 done; next is #119 (tree has no h1),
-then #106. The
+of #111), #114, #115, #116, #117, #118, #119 done; last is #106 ("Show
+partner" draws no card). The
 inventory, each bug's test, and the fix direction are in `E2E-BUG-REPORT.md`.
+
+**Issue #119 — the tree view had no level-1 heading: done, staged on
+branch `fix/tree-page-heading`, issue closed.** `/tree/[personId]` now
+renders a visually hidden `<h1>` "Family tree of <focus name>"
+(`personSearchLabel` on the focus row), so the landing screen is announced.
+`keyboard-a11y.spec.ts` is fully green. Follow-up filed from the review:
+#121 (a focus person hidden by RLS whose relatives are visible slips past
+the 404 guard and renders a chart with no main card — pre-existing).
 
 **Issue #118 — six Relationships selects had no accessible name: done,
 staged on branch `fix/relationships-select-names`, issue closed.**
