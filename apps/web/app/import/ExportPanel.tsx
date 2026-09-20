@@ -6,15 +6,11 @@ import { type ReactNode, useCallback } from "react";
 import { exportDownloadFilename } from "@/lib/db";
 import type { ExportFlowState } from "@/lib/export/orchestrator";
 import { useGedcomExport } from "@/lib/export/useGedcomExport";
+import { Button } from "@/components/ui/button";
 
 import { DownloadButton } from "./DownloadButton";
 import { formatByteSize } from "./format";
 import { IndeterminateBar, StatusCard } from "./StatusCard";
-
-const PRIMARY_BUTTON =
-  "bg-primary text-primary-foreground w-fit rounded-md px-4 py-2 text-sm font-medium disabled:opacity-50";
-const SECONDARY_BUTTON =
-  "border-border w-fit rounded-md border px-4 py-2 text-sm font-medium";
 
 /**
  * The export half of `/import` (SPEC §8.1, #54): one button that runs a
@@ -66,9 +62,9 @@ function ExportStage({
             The file is built from the current tree, so it always reflects the
             latest edits.
           </p>
-          <button type="button" onClick={onStart} className={PRIMARY_BUTTON}>
+          <Button className="w-fit" type="button" onClick={onStart}>
             Export GEDCOM
-          </button>
+          </Button>
         </div>
       );
     case "starting":
@@ -97,13 +93,14 @@ function ExportStage({
           </p>
           <div className="flex flex-wrap gap-3">
             <DownloadButton job={state.job} variant="primary" />
-            <button
+            <Button
+              className="w-fit"
+              variant="outline"
               type="button"
               onClick={onReset}
-              className={SECONDARY_BUTTON}
             >
               Export again
-            </button>
+            </Button>
           </div>
         </StatusCard>
       );
@@ -113,9 +110,14 @@ function ExportStage({
           <p className="text-destructive text-sm" role="alert">
             {state.message}
           </p>
-          <button type="button" onClick={onReset} className={SECONDARY_BUTTON}>
+          <Button
+            className="w-fit"
+            variant="outline"
+            type="button"
+            onClick={onReset}
+          >
             Try again
-          </button>
+          </Button>
         </StatusCard>
       );
     default:

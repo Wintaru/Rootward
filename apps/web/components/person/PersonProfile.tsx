@@ -7,6 +7,7 @@ import type {
   TimelineEntry,
 } from "@/lib/person/view-model";
 import { HideRequestButton } from "./HideRequestButton";
+import { buttonVariants } from "@/components/ui/button";
 
 /**
  * Presentational read-only profile (SPEC §8.1 `/person/[personId]`, §10 item
@@ -58,7 +59,7 @@ export function PersonProfile({
               {canInviteToClaim && (
                 <Link
                   href={`/moderation?personId=${view.id}`}
-                  className="border-border hover:bg-accent rounded-md border px-3 py-1.5 text-sm font-medium"
+                  className={buttonVariants({ variant: "outline", size: "sm" })}
                 >
                   Invite to claim
                 </Link>
@@ -66,7 +67,7 @@ export function PersonProfile({
               {canEdit && (
                 <Link
                   href={`/person/${view.id}/edit`}
-                  className="border-border hover:bg-accent rounded-md border px-3 py-1.5 text-sm font-medium"
+                  className={buttonVariants({ variant: "outline", size: "sm" })}
                 >
                   Edit
                 </Link>

@@ -24,6 +24,8 @@ import {
   type EventsDiff,
 } from "@/lib/edit/events";
 import { enumTokenLabel } from "@/lib/person/labels";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 import { ConflictDialog } from "./ConflictDialog";
 import { DateInput } from "./DateInput";
@@ -297,14 +299,16 @@ function EventsEditor({
         )}
       </ul>
 
-      <button
+      <Button
+        className="w-fit"
+        variant="outline"
+        size="sm"
         type="button"
         onClick={addRow}
         disabled={saving}
-        className="border-border hover:bg-accent w-fit rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50"
       >
         Add an event
-      </button>
+      </Button>
 
       <SaveBar
         dirty={dirty}
@@ -367,12 +371,11 @@ function EventRow({
 
         {row.type === "other" && (
           <Field label="Event name" htmlFor={typeOtherId}>
-            <input
+            <Input
               id={typeOtherId}
               value={row.typeOther}
               disabled={disabled}
               onChange={(e) => onField("typeOther", e.target.value)}
-              className={inputClass}
             />
           </Field>
         )}
@@ -394,34 +397,34 @@ function EventRow({
         />
 
         <Field label="Value" htmlFor={valueId}>
-          <input
+          <Input
             id={valueId}
             value={row.value}
             disabled={disabled}
             onChange={(e) => onField("value", e.target.value)}
-            className={inputClass}
           />
         </Field>
 
         <Field label="Age" htmlFor={ageId}>
-          <input
+          <Input
             id={ageId}
             value={row.ageText}
             disabled={disabled}
             onChange={(e) => onField("ageText", e.target.value)}
-            className={inputClass}
           />
         </Field>
       </div>
 
-      <button
+      <Button
+        variant="ghost-destructive"
+        size="xs"
         type="button"
         onClick={onRemove}
         disabled={disabled}
-        className="text-destructive w-fit rounded-md px-2 py-1 text-xs font-medium disabled:opacity-40"
+        className="w-fit"
       >
         Remove
-      </button>
+      </Button>
     </li>
   );
 }

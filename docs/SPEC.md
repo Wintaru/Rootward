@@ -746,14 +746,17 @@ Header 64px on `var(--card)` with a bottom border. Left: the **wordmark** —
 `resolveHeaderNav` links, styled by `data-nav` (`underline`, `pill`, `caps`).
 Right: the bell, then an **account chip** — an initials disc in
 `var(--rw-accent-2)` and the first name, `rounded-pill`, bordered — whose menu
-holds **My record** (when linked), **Appearance** (`/settings`), and **Sign
-out** (the sign-out form moves into the menu). The nav stays role-gated as
-above. On the tree, the black depth-stepper overlay top-left is replaced by a
+holds **My record** (when linked), **Appearance** (`/settings` — arrives
+with the Appearance tab in #80), and **Sign out** (the sign-out form moved
+into the menu in #79; the item is a `menuitem`, and the e2e `signOut`
+helper opens the chip first). The nav stays role-gated as above; below
+`sm` the header wraps and the nav collapses into the **Menu** button. On the tree, the black depth-stepper overlay top-left is replaced by a
 **Generations panel** bottom-right: 236px, card tokens, label "GENERATIONS
 SHOWN", two steppers (26px, `var(--rw-radius-control)`), and a "Reset to
 defaults" link shown only when off the defaults. Section cards, buttons, and
 inputs use the shadcn `button` / `input` components pointed at
-`var(--rw-radius-control)`; links are `var(--primary)`, hover
+`var(--rw-radius-control)` (`<select>` / `<textarea>` share `inputClass`,
+the `Input`'s twin); links are `var(--primary)`, hover
 `var(--rw-accent-2)`. Which theme draws all of this is a per-member choice
 (§10 Phase 10).
 

@@ -11,6 +11,8 @@ import {
   type PersonSearchResult,
 } from "@/lib/db/person-search";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 const SEARCH_DEBOUNCE_MS = 250;
 
@@ -71,12 +73,12 @@ export function PersonSearchBox() {
       <label htmlFor={id} className="sr-only">
         Search for a person
       </label>
-      <input
+      <Input
         id={id}
         type="search"
         value={query}
         placeholder="Search people…"
-        className="border-border bg-background w-40 rounded-md border px-2 py-1 text-sm sm:w-56"
+        className="w-40 sm:w-56"
         onChange={(event) => setQuery(event.target.value)}
         onFocus={() => shownResults.length > 0 && setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
@@ -114,14 +116,15 @@ export function PersonSearchBox() {
               ))}
             </ul>
           )}
-          <button
+          <Button
+            variant="ghost"
             type="button"
-            className="border-border text-muted-foreground hover:text-foreground w-full border-t px-3 py-2 text-left text-sm"
+            className="text-muted-foreground border-border h-auto w-full justify-start rounded-none border-0 border-t px-3 py-2 font-normal"
             onMouseDown={(event) => event.preventDefault()}
             onClick={goToPeople}
           >
             See all results
-          </button>
+          </Button>
         </div>
       )}
     </div>

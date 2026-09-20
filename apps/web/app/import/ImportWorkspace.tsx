@@ -7,6 +7,9 @@ import { type FormEvent, useEffect, useId, useState } from "react";
 import type { ImportJob, ImportStats } from "@/lib/db";
 import { progressOf, type ImportFlowState } from "@/lib/import/orchestrator";
 import { useGedcomImport } from "@/lib/import/useGedcomImport";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { buttonVariants } from "@/components/ui/button";
 
 import { DeterminateBar, IndeterminateBar, StatusCard } from "./StatusCard";
 
@@ -84,7 +87,7 @@ function NonEmptyTreeNotice({
       {isAdmin && (
         <Link
           href="/settings"
-          className="border-border w-fit rounded-md border px-4 py-2 text-sm font-medium"
+          className={buttonVariants({ variant: "outline", className: "w-fit" })}
         >
           Go to Settings to wipe the tree
         </Link>
@@ -157,11 +160,10 @@ function FilePicker({ onStart }: { onStart: (file: File) => void }) {
         <label htmlFor={inputId} className="text-sm font-medium">
           GEDCOM file
         </label>
-        <input
+        <Input
           id={inputId}
           type="file"
           accept=".ged,.gedcom,.zip,.gdz,text/plain,application/zip"
-          className="text-sm"
           onChange={(event) => {
             setFile(event.target.files?.[0] ?? null);
             setError(null);
@@ -179,13 +181,9 @@ function FilePicker({ onStart }: { onStart: (file: File) => void }) {
           {error}
         </p>
       )}
-      <button
-        type="submit"
-        disabled={file === null}
-        className="bg-primary text-primary-foreground w-fit rounded-md px-4 py-2 text-sm font-medium disabled:opacity-50"
-      >
+      <Button className="w-fit" type="submit" disabled={file === null}>
         Start import
-      </button>
+      </Button>
     </form>
   );
 }
@@ -221,13 +219,14 @@ function CompletedCard({
     <StatusCard title="Import complete">
       <StatsGrid stats={job.stats} />
       <WarningList warnings={job.stats.warnings} />
-      <button
+      <Button
+        className="w-fit"
+        variant="outline"
         type="button"
         onClick={onReset}
-        className="border-border w-fit rounded-md border px-4 py-2 text-sm font-medium"
       >
         Import another file
-      </button>
+      </Button>
     </StatusCard>
   );
 }
@@ -246,13 +245,14 @@ function FailedCard({
       <p className="text-destructive text-sm" role="alert">
         {filename === null ? message : `${filename}: ${message}`}
       </p>
-      <button
+      <Button
+        className="w-fit"
+        variant="outline"
         type="button"
         onClick={onReset}
-        className="border-border w-fit rounded-md border px-4 py-2 text-sm font-medium"
       >
         Try again
-      </button>
+      </Button>
     </StatusCard>
   );
 }

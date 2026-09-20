@@ -19,6 +19,8 @@ import {
 } from "@/lib/edit/additional-names";
 import type { ConflictResolution } from "@/lib/edit/conflict";
 import { nameTypeLabel } from "@/lib/person/labels";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 import { ConflictDialog } from "./ConflictDialog";
 import { inputClass, SaveBar } from "./form";
@@ -239,14 +241,16 @@ export function AdditionalNamesSection({
         )}
       </ul>
 
-      <button
+      <Button
+        className="w-fit"
+        variant="outline"
+        size="sm"
         type="button"
         onClick={addRow}
         disabled={saving}
-        className="border-border hover:bg-accent w-fit rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50"
       >
         Add a name
-      </button>
+      </Button>
 
       <SaveBar
         dirty={dirty}
@@ -352,32 +356,36 @@ function NameRow({
         />
       </div>
       <div className="flex gap-2">
-        <button
+        <Button
+          variant="outline"
+          size="xs"
           type="button"
           onClick={() => onMove("up")}
           disabled={disabled || index === 0}
           aria-label="Move up"
-          className="border-border rounded-md border px-2 py-1 text-xs disabled:opacity-40"
         >
           ▲
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="outline"
+          size="xs"
           type="button"
           onClick={() => onMove("down")}
           disabled={disabled || index === count - 1}
           aria-label="Move down"
-          className="border-border rounded-md border px-2 py-1 text-xs disabled:opacity-40"
         >
           ▼
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="ghost-destructive"
+          size="xs"
           type="button"
           onClick={onRemove}
           disabled={disabled}
-          className="text-destructive ml-auto rounded-md px-2 py-1 text-xs font-medium disabled:opacity-40"
+          className="ml-auto"
         >
           Remove
-        </button>
+        </Button>
       </div>
     </li>
   );
@@ -416,12 +424,11 @@ function LabeledInput({
           {children}
         </select>
       ) : (
-        <input
+        <Input
           id={id}
           value={value}
           disabled={disabled}
           onChange={(e) => onChange(e.target.value)}
-          className={inputClass}
         />
       )}
     </div>

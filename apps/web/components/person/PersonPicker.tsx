@@ -3,6 +3,8 @@
 import { useEffect, useId, useRef, useState } from "react";
 
 import type { PersonSearchOption } from "@/lib/db";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 const SEARCH_DEBOUNCE_MS = 250;
 
@@ -81,27 +83,27 @@ export function PersonPicker({
       <label htmlFor={id} className="text-muted-foreground text-xs font-medium">
         {label}
       </label>
-      <input
+      <Input
         id={id}
         value={query}
         disabled={disabled}
         onChange={(e) => setQuery(e.target.value)}
         placeholder="Search by name…"
         autoComplete="off"
-        className="border-border rounded-md border px-3 py-2 text-sm"
       />
       {shownOptions.length > 0 && (
         <ul className="border-border divide-border max-h-48 divide-y overflow-y-auto rounded-md border">
           {shownOptions.map((option) => (
             <li key={option.id}>
-              <button
+              <Button
+                variant="ghost"
                 type="button"
                 disabled={disabled}
                 onClick={() => select(option)}
-                className="hover:bg-accent w-full px-3 py-2 text-left text-sm disabled:opacity-50"
+                className="h-auto w-full justify-start rounded-none px-3 py-2 font-normal"
               >
                 {option.name}
-              </button>
+              </Button>
             </li>
           ))}
         </ul>

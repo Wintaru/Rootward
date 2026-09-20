@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 
 import { Constants } from "@/lib/db";
 import { sexLabel } from "@/lib/person/labels";
+import { Button } from "@/components/ui/button";
+import { Input, inputClass } from "@/components/ui/input";
 
 import { createPersonAction } from "./actions";
 
@@ -13,8 +15,6 @@ type SubmitState =
   | { readonly status: "idle" }
   | { readonly status: "submitting" }
   | { readonly status: "error"; readonly message: string };
-
-const inputClass = "border-border rounded-md border px-3 py-2 text-sm";
 
 /**
  * "New person" (SPEC §8.1, §8.3, issue #55): given name, surname, and sex —
@@ -67,13 +67,12 @@ export function NewPersonForm() {
         <label htmlFor={givenId} className="text-sm font-medium">
           Given name
         </label>
-        <input
+        <Input
           id={givenId}
           value={givenName}
           onChange={(e) => setGivenName(e.target.value)}
           placeholder="Unknown"
           disabled={busy}
-          className={inputClass}
         />
       </div>
 
@@ -81,13 +80,12 @@ export function NewPersonForm() {
         <label htmlFor={surnameId} className="text-sm font-medium">
           Surname
         </label>
-        <input
+        <Input
           id={surnameId}
           value={surname}
           onChange={(e) => setSurname(e.target.value)}
           placeholder="Unknown"
           disabled={busy}
-          className={inputClass}
         />
       </div>
 
@@ -116,13 +114,9 @@ export function NewPersonForm() {
         </p>
       )}
 
-      <button
-        type="submit"
-        disabled={busy}
-        className="bg-primary text-primary-foreground w-fit rounded-md px-4 py-2 text-sm font-medium disabled:opacity-50"
-      >
+      <Button className="w-fit" type="submit" disabled={busy}>
         {busy ? "Creating…" : "Create person"}
-      </button>
+      </Button>
     </form>
   );
 }

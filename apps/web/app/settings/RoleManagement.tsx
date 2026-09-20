@@ -6,6 +6,7 @@ import { useId, useState } from "react";
 import { Section } from "@/components/layout/Section";
 import { ACCOUNT_ROLES, type AccountRole, type AccountSummary } from "@/lib/db";
 import { enumTokenLabel } from "@/lib/person/labels";
+import { Button } from "@/components/ui/button";
 
 import { changeAccountRoleAction, setAccountStatusAction } from "./actions";
 
@@ -136,14 +137,16 @@ function AccountRow({
           ))}
         </select>
 
-        <button
+        <Button
+          variant="outline"
+          size="xs"
           type="button"
           onClick={() => void toggleStatus()}
           disabled={locked}
-          className="border-border text-destructive rounded-md border px-3 py-1.5 text-xs font-medium disabled:opacity-50"
+          className="text-destructive"
         >
           {status === "suspended" ? "Reactivate" : "Suspend"}
-        </button>
+        </Button>
       </div>
     </li>
   );

@@ -13,6 +13,7 @@ import {
   searchModerationPersons,
   unlinkAccountAction,
 } from "./actions";
+import { Button } from "@/components/ui/button";
 
 type RowState =
   | { readonly status: "idle" }
@@ -171,32 +172,36 @@ function LinkedAccountRow({
       {canManage && (
         <div className="flex gap-2">
           {reassigning ? (
-            <button
+            <Button
+              variant="outline"
+              size="xs"
               type="button"
               onClick={() => setReassigning(false)}
               disabled={busy}
-              className="border-border rounded-md border px-3 py-1.5 text-xs font-medium disabled:opacity-50"
             >
               Cancel
-            </button>
+            </Button>
           ) : (
-            <button
+            <Button
+              variant="outline"
+              size="xs"
               type="button"
               onClick={() => setReassigning(true)}
               disabled={busy}
-              className="border-border rounded-md border px-3 py-1.5 text-xs font-medium disabled:opacity-50"
             >
               Reassign
-            </button>
+            </Button>
           )}
-          <button
+          <Button
+            variant="outline"
+            size="xs"
             type="button"
             onClick={() => void unlink()}
             disabled={busy}
-            className="border-border text-destructive rounded-md border px-3 py-1.5 text-xs font-medium disabled:opacity-50"
+            className="text-destructive"
           >
             {busy ? "Unlinking…" : "Unlink"}
-          </button>
+          </Button>
         </div>
       )}
     </li>

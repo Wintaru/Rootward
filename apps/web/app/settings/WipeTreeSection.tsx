@@ -20,9 +20,11 @@ import {
   type PollingState,
 } from "@/lib/export/orchestrator";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 import { wipeTreeAction } from "./actions";
-import { Field, inputClass } from "./TreeSettingsForm";
+import { Field } from "./TreeSettingsForm";
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -229,13 +231,12 @@ export function WipeTreeSection({
             label={`Type "${CONFIRM_PHRASE}" to confirm`}
             htmlFor={inputId}
           >
-            <input
+            <Input
               id={inputId}
               value={confirmText}
               onChange={(e) => setConfirmText(e.target.value)}
               autoComplete="off"
               disabled={busy}
-              className={inputClass}
             />
           </Field>
           {stage.status === "error" && (
@@ -243,18 +244,19 @@ export function WipeTreeSection({
               {stage.message}
             </p>
           )}
-          <button
+          <Button
+            className="w-fit"
+            variant="destructive"
             type="button"
             onClick={() => void handleWipe()}
             disabled={!confirmed || busy}
-            className="border-destructive text-destructive hover:bg-destructive/10 w-fit rounded-md border px-4 py-2 text-sm font-medium disabled:opacity-50"
           >
             {stage.status === "backing-up"
               ? "Backing up…"
               : stage.status === "wiping"
                 ? "Wiping…"
                 : "Wipe tree"}
-          </button>
+          </Button>
         </div>
       )}
     </Section>

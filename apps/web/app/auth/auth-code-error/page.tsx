@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { buttonVariants } from "@/components/ui/button";
 
 export const metadata: Metadata = {
   title: "Sign-in problem · Rootward",
@@ -20,10 +21,7 @@ export default function AuthCodeErrorPage() {
         It may have expired or already been used. Request a new one and try
         again.
       </p>
-      <Link
-        href="/login"
-        className="bg-primary text-primary-foreground w-fit rounded-md px-4 py-2 text-sm font-medium"
-      >
+      <Link href="/login" className={buttonVariants({ className: "w-fit" })}>
         Back to sign in
       </Link>
     </main>

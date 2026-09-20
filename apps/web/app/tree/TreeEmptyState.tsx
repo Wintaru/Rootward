@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { buttonVariants } from "@/components/ui/button";
 
 interface TreeEmptyStateProps {
   /** `true` for an active moderator or admin — the only roles that may import. */
@@ -31,13 +32,16 @@ export function TreeEmptyState({ canImport }: TreeEmptyStateProps) {
           <div className="flex gap-3">
             <Link
               href="/import"
-              className="bg-primary text-primary-foreground w-fit rounded-md px-4 py-2 text-sm font-medium"
+              className={buttonVariants({ className: "w-fit" })}
             >
               Import a GEDCOM
             </Link>
             <Link
               href="/person/new"
-              className="border-border w-fit rounded-md border px-4 py-2 text-sm font-medium"
+              className={buttonVariants({
+                variant: "outline",
+                className: "w-fit",
+              })}
             >
               Add the first person
             </Link>

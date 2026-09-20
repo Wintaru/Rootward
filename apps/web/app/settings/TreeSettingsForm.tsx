@@ -5,6 +5,8 @@ import { type FormEvent, useId, useState } from "react";
 import { Section } from "@/components/layout/Section";
 import { PersonPicker } from "@/components/person/PersonPicker";
 import type { PersonSearchOption, TreeSettings } from "@/lib/db";
+import { Button } from "@/components/ui/button";
+import { Input, inputClass } from "@/components/ui/input";
 
 import { saveTreeSettingsAction, searchSettingsPersons } from "./actions";
 
@@ -103,12 +105,11 @@ export function TreeSettingsForm({
     >
       <form onSubmit={submit} className="flex flex-col gap-4">
         <Field label="Tree name" htmlFor={treeNameId}>
-          <input
+          <Input
             id={treeNameId}
             value={form.treeName}
             onChange={(e) => set("treeName", e.target.value)}
             disabled={busy}
-            className={inputClass}
           />
         </Field>
 
@@ -141,13 +142,13 @@ export function TreeSettingsForm({
           label="Living-person threshold (years)"
           htmlFor={livingThresholdYearsId}
         >
-          <input
+          <Input
             id={livingThresholdYearsId}
             inputMode="numeric"
             value={form.livingThresholdYears}
             onChange={(e) => set("livingThresholdYears", e.target.value)}
             disabled={busy}
-            className={`${inputClass} w-32`}
+            className="w-32"
           />
         </Field>
 
@@ -163,17 +164,19 @@ export function TreeSettingsForm({
                 {defaultRootPerson?.name ?? (
                   <span className="font-mono">{form.defaultRootPersonId}</span>
                 )}
-                <button
+                <Button
+                  variant="link"
+                  size="xs"
                   type="button"
                   disabled={busy}
                   onClick={() => {
                     set("defaultRootPersonId", "");
                     setDefaultRootPerson(null);
                   }}
-                  className="text-muted-foreground ml-3 text-xs underline disabled:opacity-50"
+                  className="text-muted-foreground ml-3 underline h-auto p-0"
                 >
                   Clear
-                </button>
+                </Button>
               </>
             )}
           </p>
@@ -197,38 +200,38 @@ export function TreeSettingsForm({
             label="Default generations up"
             htmlFor={defaultGenerationsUpId}
           >
-            <input
+            <Input
               id={defaultGenerationsUpId}
               inputMode="numeric"
               value={form.defaultGenerationsUp}
               onChange={(e) => set("defaultGenerationsUp", e.target.value)}
               disabled={busy}
-              className={`${inputClass} w-20`}
+              className="w-20"
             />
           </Field>
           <Field
             label="Default generations down"
             htmlFor={defaultGenerationsDownId}
           >
-            <input
+            <Input
               id={defaultGenerationsDownId}
               inputMode="numeric"
               value={form.defaultGenerationsDown}
               onChange={(e) => set("defaultGenerationsDown", e.target.value)}
               disabled={busy}
-              className={`${inputClass} w-20`}
+              className="w-20"
             />
           </Field>
         </div>
 
         <Field label="Maximum upload size (bytes)" htmlFor={mediaMaxBytesId}>
-          <input
+          <Input
             id={mediaMaxBytesId}
             inputMode="numeric"
             value={form.mediaMaxBytes}
             onChange={(e) => set("mediaMaxBytes", e.target.value)}
             disabled={busy}
-            className={`${inputClass} w-40`}
+            className="w-40"
           />
           {mediaMaxMb !== null && (
             <span className="text-muted-foreground text-xs">
@@ -276,13 +279,9 @@ export function TreeSettingsForm({
           </p>
         )}
 
-        <button
-          type="submit"
-          disabled={busy}
-          className="bg-primary text-primary-foreground w-fit rounded-md px-4 py-2 text-sm font-medium disabled:opacity-50"
-        >
+        <Button className="w-fit" type="submit" disabled={busy}>
           {busy ? "Saving…" : "Save settings"}
-        </button>
+        </Button>
       </form>
     </Section>
   );
@@ -299,10 +298,8 @@ function megabytes(bytes: string): string | null {
   return (parsed / (1024 * 1024)).toFixed(1);
 }
 
-/** Shared with `WipeTreeSection.tsx` — the same field/input shape every
+/** Shared with `WipeTreeSection.tsx` — the same field shape every
  * `/settings` form uses. */
-export const inputClass = "border-border rounded-md border px-3 py-2 text-sm";
-
 export function Field({
   label,
   htmlFor,

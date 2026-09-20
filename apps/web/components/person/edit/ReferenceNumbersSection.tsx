@@ -16,9 +16,10 @@ import {
   referenceNumbersDraft,
   referenceNumbersPatch,
 } from "@/lib/edit/person-fields";
+import { Input } from "@/components/ui/input";
 
 import { ConflictDialog } from "./ConflictDialog";
-import { Field, inputClass, SaveBar } from "./form";
+import { Field, SaveBar } from "./form";
 
 /**
  * Reference Numbers (SPEC §8.3, §4.2, §10 item 27) — `familysearch_id`,
@@ -142,28 +143,25 @@ export function ReferenceNumbersSection({
         onResolve={resolveConflict}
       />
       <Field label="FamilySearch ID" htmlFor={familysearchId}>
-        <input
+        <Input
           id={familysearchId}
           value={draft.familysearchId}
           onChange={(e) => field("familysearchId", e.target.value)}
-          className={inputClass}
         />
       </Field>
       <Field label="Ancestral File Number" htmlFor={ancestralFileId}>
-        <input
+        <Input
           id={ancestralFileId}
           value={draft.ancestralFileNumber}
           onChange={(e) => field("ancestralFileNumber", e.target.value)}
-          className={inputClass}
         />
       </Field>
       <Field label="User Reference Number" htmlFor={userReferenceId}>
-        <input
+        <Input
           id={userReferenceId}
           value={draft.userReferenceNumber}
           onChange={(e) => field("userReferenceNumber", e.target.value)}
           placeholder="GEDCOM REFN"
-          className={inputClass}
         />
       </Field>
 

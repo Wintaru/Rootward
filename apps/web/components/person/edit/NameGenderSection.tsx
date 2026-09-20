@@ -19,6 +19,7 @@ import {
   nameGenderPatch,
 } from "@/lib/edit/person-fields";
 import { enumTokenLabel, sexLabel } from "@/lib/person/labels";
+import { Input } from "@/components/ui/input";
 
 import { ConflictDialog } from "./ConflictDialog";
 import { DeletePersonSection } from "./DeletePersonSection";
@@ -198,45 +199,40 @@ export function NameGenderSection({
       />
       <div className="grid grid-cols-2 gap-4">
         <Field label="Given name" htmlFor={givenId}>
-          <input
+          <Input
             id={givenId}
             value={draft.givenName}
             onChange={(e) => field("givenName", e.target.value)}
-            className={inputClass}
           />
         </Field>
         <Field label="Surname" htmlFor={surnameId}>
-          <input
+          <Input
             id={surnameId}
             value={draft.surname}
             onChange={(e) => field("surname", e.target.value)}
-            className={inputClass}
           />
         </Field>
         <Field label="Prefix" htmlFor={prefixId}>
-          <input
+          <Input
             id={prefixId}
             value={draft.namePrefix}
             onChange={(e) => field("namePrefix", e.target.value)}
             placeholder="Dr., Rev., …"
-            className={inputClass}
           />
         </Field>
         <Field label="Suffix" htmlFor={suffixId}>
-          <input
+          <Input
             id={suffixId}
             value={draft.nameSuffix}
             onChange={(e) => field("nameSuffix", e.target.value)}
             placeholder="Jr., III, …"
-            className={inputClass}
           />
         </Field>
         <Field label="Nickname" htmlFor={nicknameId}>
-          <input
+          <Input
             id={nicknameId}
             value={draft.nickname}
             onChange={(e) => field("nickname", e.target.value)}
-            className={inputClass}
           />
         </Field>
         <Field label="Sex" htmlFor={sexId}>

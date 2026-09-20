@@ -12,6 +12,7 @@ import {
   rejectAccessRequestAction,
   searchModerationPersons,
 } from "./actions";
+import { Button } from "@/components/ui/button";
 
 type RowState =
   | { readonly status: "idle" }
@@ -161,14 +162,16 @@ function AccessRequestRow({
         ) : (
           <p className="text-sm">
             Linking to <span className="font-medium">{person.name}</span> —{" "}
-            <button
+            <Button
+              variant="link"
+              size="sm"
               type="button"
               onClick={() => setPerson(null)}
               disabled={busy}
-              className="text-muted-foreground hover:text-foreground underline disabled:opacity-50"
+              className="text-muted-foreground underline h-auto p-0"
             >
               change
-            </button>
+            </Button>
           </p>
         )
       ) : (
@@ -179,23 +182,24 @@ function AccessRequestRow({
 
       <div className="flex gap-2">
         {canApprove && (
-          <button
+          <Button
+            size="xs"
             type="button"
             onClick={() => void approve()}
             disabled={busy || person === null}
-            className="bg-primary text-primary-foreground rounded-md px-3 py-1.5 text-xs font-medium disabled:opacity-50"
           >
             {busy ? "Approving…" : "Approve"}
-          </button>
+          </Button>
         )}
-        <button
+        <Button
+          variant="outline"
+          size="xs"
           type="button"
           onClick={() => void reject()}
           disabled={busy}
-          className="border-border rounded-md border px-3 py-1.5 text-xs font-medium disabled:opacity-50"
         >
           {busy ? "Rejecting…" : "Reject"}
-        </button>
+        </Button>
       </div>
     </li>
   );

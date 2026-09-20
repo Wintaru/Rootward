@@ -8,6 +8,8 @@ import type { Sex } from "@/lib/db/types";
 import { isSex } from "@/lib/edit/person-fields";
 import type { PersonRefInput } from "@/lib/edit/relationships";
 import { sexLabel } from "@/lib/person/labels";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 import { PersonPicker } from "../PersonPicker";
 import { inputClass } from "./form";
@@ -55,14 +57,16 @@ export function PersonPickerOrCreate({
             onResolved({ kind: "existing", personId: option.id }, option.sex)
           }
         />
-        <button
+        <Button
+          variant="link"
+          size="xs"
           type="button"
           disabled={disabled}
           onClick={() => setCreating(true)}
-          className="text-muted-foreground w-fit text-xs underline disabled:opacity-50"
+          className="text-muted-foreground underline w-fit h-auto p-0"
         >
           Or create a new person
-        </button>
+        </Button>
       </div>
     );
   }
@@ -83,12 +87,12 @@ export function PersonPickerOrCreate({
           className="text-muted-foreground text-xs font-medium"
         >
           Given name
-          <input
+          <Input
             id={givenId}
             value={givenName}
             disabled={disabled}
             onChange={(e) => setGivenName(e.target.value)}
-            className={`${inputClass} mt-1`}
+            className="mt-1"
           />
         </label>
         <label
@@ -96,12 +100,12 @@ export function PersonPickerOrCreate({
           className="text-muted-foreground text-xs font-medium"
         >
           Surname
-          <input
+          <Input
             id={surnameId}
             value={surname}
             disabled={disabled}
             onChange={(e) => setSurname(e.target.value)}
-            className={`${inputClass} mt-1`}
+            className="mt-1"
           />
         </label>
       </div>
@@ -129,22 +133,25 @@ export function PersonPickerOrCreate({
         </select>
       </label>
       <div className="flex gap-2">
-        <button
+        <Button
+          className="w-fit"
+          size="sm"
           type="button"
           disabled={disabled}
           onClick={submitNewPerson}
-          className="bg-primary text-primary-foreground w-fit rounded-md px-3 py-1.5 text-xs font-medium disabled:opacity-50"
         >
           {label}
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="link"
+          size="xs"
           type="button"
           disabled={disabled}
           onClick={() => setCreating(false)}
-          className="text-muted-foreground w-fit text-xs underline disabled:opacity-50"
+          className="text-muted-foreground underline w-fit h-auto p-0"
         >
           Cancel
-        </button>
+        </Button>
       </div>
     </div>
   );

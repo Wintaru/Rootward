@@ -4,20 +4,12 @@ import { useMemo, useState } from "react";
 
 import { type ExportJob, signExportDownload } from "@/lib/db";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { Button } from "@/components/ui/button";
 
 type DownloadState =
   | { readonly status: "idle" }
   | { readonly status: "signing" }
   | { readonly status: "error"; readonly message: string };
-
-const BUTTON_CLASS = {
-  /** The call to action on a just-finished export. */
-  primary:
-    "bg-primary text-primary-foreground rounded-md px-4 py-2 text-sm font-medium disabled:opacity-50",
-  /** One row of the past-jobs list. */
-  compact:
-    "border-border rounded-md border px-3 py-1.5 text-xs font-medium disabled:opacity-50",
-} as const;
 
 /**
  * Mints a fresh signed URL on click, then hands it to the browser. The URL
@@ -31,7 +23,9 @@ export function DownloadButton({
   variant = "compact",
 }: {
   job: ExportJob;
-  variant?: keyof typeof BUTTON_CLASS;
+  /** `primary` — the call to action on a just-finished export; `compact` —
+   * one row of the past-jobs list. */
+  variant?: "primary" | "compact";
 }) {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [state, setState] = useState<DownloadState>({ status: "idle" });
@@ -57,14 +51,17 @@ export function DownloadButton({
           {state.message}
         </span>
       )}
-      <button
+      <Button
         type="button"
         onClick={() => void download()}
         disabled={state.status === "signing"}
-        className={BUTTON_CLASS[variant]}
+        // `primary` is the call to action on a just-finished export;
+        // `compact` is one row of the past-jobs list.
+        variant={variant === "primary" ? "default" : "outline"}
+        size={variant === "primary" ? "default" : "xs"}
       >
         {state.status === "signing" ? "Preparing…" : "Download"}
-      </button>
+      </Button>
     </span>
   );
 }

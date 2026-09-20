@@ -9,6 +9,8 @@ import {
   type UseOnboarding,
   useOnboarding,
 } from "@/lib/onboarding/useOnboarding";
+import { Button } from "@/components/ui/button";
+import { Input, inputClass } from "@/components/ui/input";
 
 /** Rough genealogy range — also keeps the value inside Postgres `smallint`. */
 const MIN_BIRTH_YEAR = 1;
@@ -160,32 +162,29 @@ function IdentityForm({
       description="Use the name and birth date recorded in the tree — a maiden name or a nickname is fine."
     >
       <Field label="First name" htmlFor={givenId}>
-        <input
+        <Input
           id={givenId}
           value={givenName}
           onChange={(e) => setGivenName(e.target.value)}
           autoComplete="given-name"
-          className={inputClass}
         />
       </Field>
       <Field label="Last name" htmlFor={surnameId}>
-        <input
+        <Input
           id={surnameId}
           value={surname}
           onChange={(e) => setSurname(e.target.value)}
           autoComplete="family-name"
-          className={inputClass}
         />
       </Field>
       <div className="flex gap-3">
         <Field label="Birth year" htmlFor={yearId} className="flex-1">
-          <input
+          <Input
             id={yearId}
             value={year}
             onChange={(e) => setYear(e.target.value)}
             inputMode="numeric"
             placeholder="1950"
-            className={inputClass}
           />
         </Field>
         <Field
@@ -261,7 +260,7 @@ function ChallengeForm({
           label={challengeLabel(key)}
           htmlFor={`${fieldId}-${key}`}
         >
-          <input
+          <Input
             id={`${fieldId}-${key}`}
             value={answers[key] ?? ""}
             onChange={(e) =>
@@ -269,7 +268,6 @@ function ChallengeForm({
             }
             inputMode={key === "birth_day" ? "numeric" : undefined}
             disabled={busy}
-            className={inputClass}
           />
         </Field>
       ))}
@@ -371,24 +369,22 @@ function RequestAccessForm({
       description="An administrator will review your request and link you to the right person."
     >
       <Field label="Your name" htmlFor={nameId}>
-        <input
+        <Input
           id={nameId}
           value={name}
           onChange={(e) => setName(e.target.value)}
           autoComplete="name"
           disabled={busy}
-          className={inputClass}
         />
       </Field>
       <Field label="Birth year (optional)" htmlFor={yearId}>
-        <input
+        <Input
           id={yearId}
           value={year}
           onChange={(e) => setYear(e.target.value)}
           inputMode="numeric"
           placeholder="1950"
           disabled={busy}
-          className={inputClass}
         />
       </Field>
       <Field label="Message (optional)" htmlFor={messageId}>
@@ -432,8 +428,6 @@ function RequestedCard({ reason }: { reason: "self" | "rate_limited" }) {
 }
 
 // --- shared pieces --------------------------------------------------
-
-const inputClass = "border-border rounded-md border px-3 py-2 text-sm";
 
 function Waiting({ label }: { label: string }) {
   return (
@@ -523,14 +517,9 @@ function PrimaryButton({
   children: ReactNode;
 }) {
   return (
-    <button
-      type={type}
-      onClick={onClick}
-      disabled={disabled}
-      className="bg-primary text-primary-foreground w-fit rounded-md px-4 py-2 text-sm font-medium disabled:opacity-50"
-    >
+    <Button className="w-fit" type={type} onClick={onClick} disabled={disabled}>
       {children}
-    </button>
+    </Button>
   );
 }
 
@@ -546,14 +535,15 @@ function SecondaryButton({
   children: ReactNode;
 }) {
   return (
-    <button
+    <Button
+      className="w-fit"
+      variant="outline"
       type={type}
       onClick={onClick}
       disabled={disabled}
-      className="border-border w-fit rounded-md border px-4 py-2 text-sm font-medium disabled:opacity-50"
     >
       {children}
-    </button>
+    </Button>
   );
 }
 

@@ -27,9 +27,11 @@ import {
   type MediaDraft,
 } from "@/lib/edit/media";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 import { ConflictDialog } from "./ConflictDialog";
-import { inputClass, SaveBar } from "./form";
+import { SaveBar } from "./form";
 
 /** Client-side hint only — `media-process` re-validates against
  * `tree_settings.media_allowed_mime` server-side regardless (SPEC §7). */
@@ -299,7 +301,7 @@ export function MediaSection({
         <label htmlFor={inputId} className="text-sm font-medium">
           Upload a photo or document
         </label>
-        <input
+        <Input
           id={inputId}
           type="file"
           accept={ACCEPTED_MIME}
@@ -311,7 +313,6 @@ export function MediaSection({
               void handleFileChosen(file);
             }
           }}
-          className="text-sm"
         />
         {uploading && (
           <p className="text-muted-foreground text-sm" role="status">
@@ -412,49 +413,53 @@ function MediaCard({
       >
         Caption
       </label>
-      <input
+      <Input
         id={captionId}
         value={row.caption}
         disabled={disabled}
         onChange={(e) => onField(e.target.value)}
-        className={inputClass}
       />
 
       <div className="flex flex-wrap items-center gap-2">
-        <button
+        <Button
+          variant="outline"
+          size="xs"
           type="button"
           onClick={onSetPrimary}
           disabled={disabled || row.isPrimary}
-          className="border-border hover:bg-accent rounded-md border px-2 py-1 text-xs font-medium disabled:opacity-50"
         >
           {row.isPrimary ? "Primary" : "Set as primary"}
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="outline"
+          size="xs"
           type="button"
           onClick={() => onMove("up")}
           disabled={disabled || index === 0}
           aria-label="Move up"
-          className="border-border rounded-md border px-2 py-1 text-xs disabled:opacity-40"
         >
           ▲
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="outline"
+          size="xs"
           type="button"
           onClick={() => onMove("down")}
           disabled={disabled || index === count - 1}
           aria-label="Move down"
-          className="border-border rounded-md border px-2 py-1 text-xs disabled:opacity-40"
         >
           ▼
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="ghost-destructive"
+          size="xs"
           type="button"
           onClick={onRemove}
           disabled={disabled}
-          className="text-destructive ml-auto rounded-md px-2 py-1 text-xs font-medium disabled:opacity-40"
+          className="ml-auto"
         >
           Remove
-        </button>
+        </Button>
       </div>
     </li>
   );

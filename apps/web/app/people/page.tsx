@@ -10,6 +10,8 @@ import {
   PEOPLE_PAGE_SIZE,
 } from "@/lib/db/person-search";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 export const metadata: Metadata = {
   title: "People · Rootward",
@@ -60,20 +62,17 @@ export default async function PeopleIndexPage({
         <label htmlFor="name-filter" className="sr-only">
           Filter by name
         </label>
-        <input
+        <Input
           id="name-filter"
           type="search"
           name="q"
           defaultValue={query}
           placeholder="Filter by name…"
-          className="border-border bg-background flex-1 rounded-md border px-3 py-1.5 text-sm"
+          className="flex-1"
         />
-        <button
-          type="submit"
-          className="border-border rounded-md border px-3 py-1.5 text-sm font-medium"
-        >
+        <Button variant="outline" type="submit">
           Filter
-        </button>
+        </Button>
       </form>
 
       <p className="text-muted-foreground text-sm">

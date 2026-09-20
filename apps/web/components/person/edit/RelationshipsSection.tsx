@@ -41,6 +41,8 @@ import {
   enumTokenLabel,
   partnerRoleLabel,
 } from "@/lib/person/labels";
+import { Button } from "@/components/ui/button";
+import { inputClass } from "@/components/ui/input";
 
 import { DateInput } from "./DateInput";
 import { PersonPickerOrCreate } from "./PersonPickerOrCreate";
@@ -136,11 +138,7 @@ function ActionError({ message }: { readonly message: string | null }) {
   );
 }
 
-const smallButton =
-  "border-border hover:bg-accent w-fit rounded-md border px-2.5 py-1 text-xs font-medium disabled:opacity-50";
-const removeButton =
-  "text-destructive w-fit rounded-md px-2 py-1 text-xs font-medium disabled:opacity-40";
-const selectClass = "border-border rounded-md border px-2 py-1 text-xs";
+const selectClass = `${inputClass} w-auto px-2 py-1 text-xs`;
 
 /** Both selects below sit beside their description as plain text ("Relation
  * to child:", "to Vera:") with nothing that associates it, so each takes an
@@ -290,13 +288,15 @@ function ParentsPanel({
             }}
           />
         ) : (
-          <button
+          <Button
+            className="w-fit"
+            variant="outline"
+            size="xs"
             type="button"
             onClick={() => setAddingNew(true)}
-            className={smallButton}
           >
             Add a parent
-          </button>
+          </Button>
         ))}
 
       {parentFamilies.length > 0 && !hasEmptySlot && (
@@ -346,14 +346,16 @@ function ParentFamilyCard({
           }}
         />
       ) : (
-        <button
+        <Button
+          className="w-fit"
+          variant="outline"
+          size="xs"
           type="button"
           disabled={busy}
           onClick={() => setFillingSlot(slot)}
-          className={smallButton}
         >
           Add parent
-        </button>
+        </Button>
       );
     }
 
@@ -387,7 +389,9 @@ function ParentFamilyCard({
     <div className="border-border flex flex-col gap-2 rounded-lg border p-4">
       {slotContent("partner1", family.partner1, family.relationToPartner1)}
       {slotContent("partner2", family.partner2, family.relationToPartner2)}
-      <button
+      <Button
+        variant="ghost-destructive"
+        size="xs"
         type="button"
         disabled={busy}
         onClick={() =>
@@ -399,10 +403,10 @@ function ParentFamilyCard({
             }),
           )
         }
-        className={removeButton}
+        className="w-fit"
       >
         Remove from this family
-      </button>
+      </Button>
       <ActionError message={error} />
     </div>
   );
@@ -457,13 +461,15 @@ function UnionsPanel({
           }}
         />
       ) : (
-        <button
+        <Button
+          className="w-fit"
+          variant="outline"
+          size="xs"
           type="button"
           onClick={() => setAddingNew(true)}
-          className={smallButton}
         >
           Start a new union
-        </button>
+        </Button>
       )}
 
       <ActionError message={error} />
@@ -510,14 +516,16 @@ function UnionFamilyCard({
           }}
         />
       ) : (
-        <button
+        <Button
+          className="w-fit"
+          variant="outline"
+          size="xs"
           type="button"
           disabled={busy}
           onClick={() => setFillingSlot(slot)}
-          className={smallButton}
         >
           Add partner
-        </button>
+        </Button>
       );
     }
 
@@ -540,7 +548,9 @@ function UnionFamilyCard({
             )
           }
         />
-        <button
+        <Button
+          variant="ghost-destructive"
+          size="xs"
           type="button"
           disabled={busy}
           onClick={() =>
@@ -553,10 +563,10 @@ function UnionFamilyCard({
               }),
             )
           }
-          className={removeButton}
+          className="w-fit"
         >
           Remove
-        </button>
+        </Button>
       </div>
     );
   }
@@ -624,14 +634,16 @@ function UnionFamilyCard({
           }}
         />
       ) : (
-        <button
+        <Button
+          className="w-fit"
+          variant="outline"
+          size="xs"
           type="button"
           disabled={busy}
           onClick={() => setAddingChild(true)}
-          className={smallButton}
         >
           Add a child
-        </button>
+        </Button>
       )}
 
       <ActionError message={error} />
@@ -715,31 +727,41 @@ function UnionStatusPanel({
               onChange={setDateRaw}
             />
             <div className="flex gap-2">
-              <button type="submit" disabled={busy} className={smallButton}>
+              <Button
+                className="w-fit"
+                variant="outline"
+                size="xs"
+                type="submit"
+                disabled={busy}
+              >
                 Record divorce
-              </button>
-              <button
+              </Button>
+              <Button
+                className="w-fit"
+                variant="outline"
+                size="xs"
                 type="button"
                 disabled={busy}
                 onClick={() => {
                   setRecording(false);
                   setDateRaw("");
                 }}
-                className={smallButton}
               >
                 Cancel
-              </button>
+              </Button>
             </div>
           </form>
         ) : (
-          <button
+          <Button
+            className="w-fit"
+            variant="outline"
+            size="xs"
             type="button"
             disabled={busy}
             onClick={() => setRecording(true)}
-            className={smallButton}
           >
             Record a divorce
-          </button>
+          </Button>
         ))}
     </div>
   );
@@ -833,25 +855,31 @@ function ChildrenList({
                 )
               }
             />
-            <button
+            <Button
+              className="w-fit"
+              variant="outline"
+              size="xs"
               type="button"
               disabled={busy || index === 0}
               onClick={() => move(child, "up")}
-              className={smallButton}
               aria-label={`Move ${child.personName} up`}
             >
               ↑
-            </button>
-            <button
+            </Button>
+            <Button
+              className="w-fit"
+              variant="outline"
+              size="xs"
               type="button"
               disabled={busy || index === family.children.length - 1}
               onClick={() => move(child, "down")}
-              className={smallButton}
               aria-label={`Move ${child.personName} down`}
             >
               ↓
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="ghost-destructive"
+              size="xs"
               type="button"
               disabled={busy}
               onClick={() =>
@@ -863,10 +891,10 @@ function ChildrenList({
                   }),
                 )
               }
-              className={removeButton}
+              className="w-fit"
             >
               Remove
-            </button>
+            </Button>
           </li>
         ))}
       </ul>

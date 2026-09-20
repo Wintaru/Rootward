@@ -3,6 +3,7 @@
 import { Fragment } from "react";
 
 import type { ConflictItem, ConflictResolution } from "@/lib/edit/conflict";
+import { Button } from "@/components/ui/button";
 
 /**
  * The shared conflict UI every edit section renders the same way (SPEC §8.3,
@@ -63,14 +64,16 @@ export function ConflictDialog({
                       : ""}{" "}
                     while you had it open.
                   </p>
-                  <button
+                  <Button
+                    variant="outline"
+                    size="sm"
                     type="button"
                     onClick={() => onResolve(item.id, "take-theirs")}
                     disabled={disabled}
-                    className="border-border hover:bg-accent mt-3 w-fit rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50"
+                    className="mt-3 w-fit"
                   >
                     Discard my change
-                  </button>
+                  </Button>
                 </>
               ) : (
                 <>
@@ -100,22 +103,25 @@ export function ConflictDialog({
                     ))}
                   </div>
                   <div className="mt-3 flex gap-2">
-                    <button
+                    <Button
+                      className="w-fit"
+                      size="sm"
                       type="button"
                       onClick={() => onResolve(item.id, "keep-mine")}
                       disabled={disabled}
-                      className="bg-primary text-primary-foreground w-fit rounded-md px-3 py-1.5 text-sm font-medium disabled:opacity-50"
                     >
                       Keep mine
-                    </button>
-                    <button
+                    </Button>
+                    <Button
+                      className="w-fit"
+                      variant="outline"
+                      size="sm"
                       type="button"
                       onClick={() => onResolve(item.id, "take-theirs")}
                       disabled={disabled}
-                      className="border-border hover:bg-accent w-fit rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50"
                     >
                       Take theirs
-                    </button>
+                    </Button>
                   </div>
                 </>
               )}

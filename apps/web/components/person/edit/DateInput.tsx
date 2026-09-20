@@ -4,7 +4,7 @@ import { useId } from "react";
 
 import { interpretDateInput } from "@/lib/edit/date-input";
 
-import { inputClass } from "./form";
+import { Input } from "@/components/ui/input";
 
 /**
  * One text field, live-parsed interpretation, and a shorthand hint (SPEC
@@ -38,14 +38,13 @@ export function DateInput({
       <label htmlFor={id} className="text-muted-foreground text-xs font-medium">
         {label}
       </label>
-      <input
+      <Input
         id={id}
         value={value}
         disabled={disabled}
         onChange={(e) => onChange(e.target.value)}
         aria-describedby={hintId}
         placeholder="e.g. abt 1850"
-        className={inputClass}
       />
       <p id={hintId} className="text-muted-foreground text-xs">
         {preview !== "" ? (

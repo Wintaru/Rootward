@@ -13,11 +13,55 @@ side. The build contract is `docs/SPEC.md` §10 "Phase 10" plus §8.1 "Themed
 chrome", and WAYFINDER decision **38** (the issues say 37 — that number was
 taken by hosted multi-tenancy the day after they were filed). Order is one
 session each: #74 (docs, done) → #75 (token contract, done) → #76 (themes
-A, done) → #77 (themes B, done) → #78 (tree on tokens, done) → #79 → #80 →
-#81. **Next session: #79.** The tree reads the tokens and chassis switches;
-the header, sections, and controls still do not — #79 does that.
+A, done) → #77 (themes B, done) → #78 (tree on tokens, done) → #79 (chrome
+on tokens, done) → #80 → #81. **Next session: #80** — the picker. Every
+surface now reads the tokens and chassis switches; nothing lets a member
+choose yet.
 Bug issues #120 and #121 stay open and may be taken between phase items
 when Josh asks.
+
+**Issue #79 — Global chrome on tokens (wordmark, nav variants, account
+chip, sections, controls): done, staged on branch `feat/chrome-on-tokens`,
+one commit, issue closed.** Header rebuilt in `app/layout.tsx` on
+`components/layout/chrome.css`: `Wordmark` renders all four marks and
+`data-mark` picks one (`subtitle` = `tree_settings.tree_name` via the new
+`getTreeName`); `HeaderNav` (client, `usePathname` → `aria-current`, the
+new `isActiveHref` in `header-nav.ts`) with `data-nav` underline / pill /
+caps; `AccountChip` (shadcn `dropdown-menu`; initials + first name from the
+new `chipIdentity(account.display_name, email)`; menu = My record + Sign
+out, the form now inside the menu; **Appearance arrives with #80**, see
+`DECISIONS.md` 2026-09-20 18:09); bell badge is a dot. Below `sm` the
+header wraps and the nav hides in favour of `MobileNavMenu` (now a stacked
+`HeaderNav` under a `buttonVariants` summary). `Section` on card tokens
+with a display-face title; `/login` = wordmark + tagline + form in a
+Section. shadcn `button` / `input` / `dropdown-menu` added (the generator's
+`cn` package dropped for `lib/utils`), radii on `rounded-control`, and
+every hand-rolled `<button>` / `<input>` class in the app swept onto them
+(87 / 55; three native checkboxes and the bell's scrim stay plain;
+`<select>` / `<textarea>` share `inputClass`, rewritten as the `Input`'s
+twin). Global `a` colour is `--primary`. E2E: the six "visible Sign out"
+assertions and the `signOut` helper now open the chip (`openSignOut`,
+`accountMenuTrigger` in `support/auth.ts`); the item is a `menuitem`. Ran
+the `app` project minus the edge-function specs (379 green, one data-race
+flake re-run green) and the `mobile` project (13 green); unit suite 848.
+Verified live: Flexoki / Rosé Pine / Gruvbox on `/tree`, `/settings`,
+`/people`, an edit page, at 1280 and 390 wide; keyboard sign-out through the
+menu. Not run: `media*`, `import-export` e2e (need `supabase functions
+serve`; their buttons kept role and name).
+Review (no blocking findings) added: the sign-out item cancels Radix's
+`onSelect` so the form is still mounted when the native submit runs
+(otherwise only the exit animation kept it alive); the desktop/mobile
+header switch moved to `lg` (an admin's six links plus the search box need
+~1200px — at `sm` the header overflowed between 640 and 1200); the tree
+name is fetched only when the chassis mark is `subtitle`; `outline` /
+`ghost` variants set `text-foreground` and the six button-styled `<Link>`s
+use `buttonVariants` (the global `a` colour had recoloured them); a
+`ghost-destructive` variant replaces thirteen repeated overrides;
+`inputClass` moved beside `Input` (`components/ui/input.tsx`) with the
+three local copies and `selectClass` folded in; `chrome.test.ts` guards the
+`data-nav` / `data-mark` selectors against the registry. Verified live at
+1024 / 1000 wide and mouse sign-out; header-related e2e specs and the
+mobile project re-run green (141 + 13).
 
 **Issue #78 — Tree view on tokens (card anatomy, bands, connectors,
 Generations panel): done, staged on branch `feat/tree-on-tokens`, issue

@@ -1,6 +1,8 @@
 "use client";
 
 import { type FormEvent, useId, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input, inputClass } from "@/components/ui/input";
 
 import { inviteToClaim } from "./actions";
 
@@ -77,25 +79,24 @@ export function InviteToClaimForm({
       </div>
 
       <Field label="Email address" htmlFor={emailId}>
-        <input
+        <Input
           id={emailId}
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           autoComplete="email"
           disabled={busy}
-          className={inputClass}
         />
       </Field>
 
       <Field label="Person ID" htmlFor={personId}>
-        <input
+        <Input
           id={personId}
           value={person}
           onChange={(e) => setPerson(e.target.value)}
           placeholder="00000000-0000-0000-0000-000000000000"
           disabled={busy}
-          className={`${inputClass} font-mono`}
+          className="font-mono"
         />
       </Field>
 
@@ -126,18 +127,12 @@ export function InviteToClaimForm({
         </p>
       )}
 
-      <button
-        type="submit"
-        disabled={busy}
-        className="bg-primary text-primary-foreground w-fit rounded-md px-4 py-2 text-sm font-medium disabled:opacity-50"
-      >
+      <Button className="w-fit" type="submit" disabled={busy}>
         {busy ? "Sending…" : "Send invitation"}
-      </button>
+      </Button>
     </form>
   );
 }
-
-const inputClass = "border-border rounded-md border px-3 py-2 text-sm";
 
 function Field({
   label,

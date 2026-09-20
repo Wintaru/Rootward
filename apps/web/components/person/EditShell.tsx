@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 
 import type { EditRelativeLine, EditShellView } from "@/lib/edit/view-model";
 import { PresenceBanner } from "@/components/person/edit/PresenceBanner";
+import { buttonVariants } from "@/components/ui/button";
 
 /**
  * Presentational edit-view shell (SPEC §8.3, §10 item 26). Full-screen,
@@ -48,7 +49,7 @@ export function EditShell({
           </div>
           <Link
             href={view.profileHref}
-            className="border-border hover:bg-accent rounded-md border px-3 py-1.5 text-sm font-medium"
+            className={buttonVariants({ variant: "outline", size: "sm" })}
           >
             Done
           </Link>

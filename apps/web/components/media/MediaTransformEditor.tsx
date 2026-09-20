@@ -33,6 +33,7 @@ import {
   type EditableOriginal,
 } from "@/lib/media/regenerate";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { Button } from "@/components/ui/button";
 
 type SourceState =
   | { readonly status: "loading" }
@@ -44,9 +45,6 @@ type SaveState =
   | { readonly status: "idle" }
   | { readonly status: "saving" }
   | { readonly status: "error"; readonly message: string };
-
-const buttonClass =
-  "border-border hover:bg-accent inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50";
 
 /**
  * Rotate/crop for one media item on `/media/[mediaId]` (SPEC §8.3),
@@ -208,13 +206,15 @@ export function MediaTransformEditor({
 
   if (!open) {
     return (
-      <button
+      <Button
         type="button"
+        variant="outline"
+        size="sm"
         onClick={openEditor}
-        className={`${buttonClass} w-fit`}
+        className="w-fit"
       >
         Rotate or crop
-      </button>
+      </Button>
     );
   }
 
@@ -267,57 +267,62 @@ export function MediaTransformEditor({
       )}
 
       <div className="flex flex-wrap items-center gap-2">
-        <button
+        <Button
+          variant="outline"
+          size="sm"
           type="button"
           onClick={() => rotate(-90)}
           disabled={source === null || saving}
-          className={buttonClass}
         >
           <RotateCcw aria-hidden className="size-4" />
           Rotate left
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
           type="button"
           onClick={() => rotate(90)}
           disabled={source === null || saving}
-          className={buttonClass}
         >
           <RotateCw aria-hidden className="size-4" />
           Rotate right
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
           type="button"
           onClick={() => setCrop(null)}
           disabled={source === null || saving || !isUsableCrop(crop)}
-          className={buttonClass}
         >
           Clear crop
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
           type="button"
           onClick={resetToOriginal}
           disabled={source === null || saving}
-          className={buttonClass}
         >
           Reset to original
-        </button>
+        </Button>
         <span className="ml-auto flex gap-2">
-          <button
+          <Button
+            variant="outline"
+            size="sm"
             type="button"
             onClick={closeEditor}
             disabled={saving}
-            className={buttonClass}
           >
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
+            size="sm"
             type="button"
             onClick={() => source !== null && void save(source)}
             disabled={source === null || saving || !dirty}
-            className="bg-foreground text-background rounded-md px-3 py-1.5 text-sm font-medium disabled:opacity-50"
           >
             {saving ? "Saving…" : "Save"}
-          </button>
+          </Button>
         </span>
       </div>
 

@@ -3,6 +3,8 @@
 import { useId, useState } from "react";
 
 import { requestHideAction } from "@/app/person/[personId]/actions";
+import { Button } from "@/components/ui/button";
+import { inputClass } from "@/components/ui/input";
 
 /**
  * "Ask a moderator to hide this record" (SPEC §5/§7, decisions 7/14/27, issue
@@ -30,13 +32,15 @@ export function HideRequestButton({ personId }: { readonly personId: string }) {
 
   if (!open) {
     return (
-      <button
+      <Button
+        className="w-fit"
+        variant="outline"
+        size="sm"
         type="button"
         onClick={() => setOpen(true)}
-        className="border-border hover:bg-accent w-fit rounded-md border px-3 py-1.5 text-sm font-medium"
       >
         Ask a moderator to hide this record
-      </button>
+      </Button>
     );
   }
 
@@ -64,7 +68,7 @@ export function HideRequestButton({ personId }: { readonly personId: string }) {
         onChange={(e) => setReason(e.target.value)}
         placeholder="Reason (optional)"
         rows={3}
-        className="border-border rounded-md border px-3 py-2 text-sm"
+        className={inputClass}
       />
       {status === "error" && error !== null && (
         <p className="text-destructive text-sm" role="alert">
@@ -72,22 +76,25 @@ export function HideRequestButton({ personId }: { readonly personId: string }) {
         </p>
       )}
       <div className="flex gap-2">
-        <button
+        <Button
+          className="w-fit"
+          size="sm"
           type="button"
           onClick={handleSend}
           disabled={status === "sending"}
-          className="bg-foreground text-background w-fit rounded-md px-3 py-1.5 text-sm font-medium disabled:opacity-50"
         >
           {status === "sending" ? "Sending…" : "Send request"}
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
           type="button"
           onClick={() => setOpen(false)}
           disabled={status === "sending"}
-          className="text-muted-foreground hover:text-foreground w-fit rounded-md px-3 py-1.5 text-sm"
+          className="text-muted-foreground w-fit"
         >
           Cancel
-        </button>
+        </Button>
       </div>
     </div>
   );

@@ -1,5 +1,7 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
+
 /**
  * Shared bits between the edit view's form sections (Name & Gender,
  * Reference Numbers, Additional Names — SPEC §8.3, §10 item 27): the input
@@ -9,8 +11,9 @@
  * adds).
  */
 
-export const inputClass =
-  "border-border w-full rounded-md border px-3 py-2 text-sm";
+// The `<select>` / `<textarea>` class lives beside `Input`; re-exported so
+// the edit sections keep one import.
+export { inputClass } from "@/components/ui/input";
 
 export type SectionSaveStatus =
   "idle" | "saving" | "saved" | "conflict" | "error";
@@ -48,14 +51,14 @@ export function SaveBar({
           Saved.
         </p>
       )}
-      <button
+      <Button
+        className="w-fit"
         type="button"
         onClick={onSave}
         disabled={!dirty || saving}
-        className="bg-primary text-primary-foreground w-fit rounded-md px-4 py-2 text-sm font-medium disabled:opacity-50"
       >
         {saving ? "Saving…" : "Save"}
-      </button>
+      </Button>
     </div>
   );
 }

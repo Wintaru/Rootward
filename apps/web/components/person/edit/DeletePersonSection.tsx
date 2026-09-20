@@ -4,8 +4,10 @@ import { useRouter } from "next/navigation";
 import { useId, useState } from "react";
 
 import { deletePersonAction } from "@/app/person/[personId]/edit/actions";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
-import { Field, inputClass } from "./form";
+import { Field } from "./form";
 
 /**
  * Name & Gender's admin-only danger zone (SPEC §8.3, decision 18, issue #59).
@@ -58,12 +60,11 @@ export function DeletePersonSection({
         unlinked, not deleted.
       </p>
       <Field label={`Type "${personDisplayName}" to confirm`} htmlFor={inputId}>
-        <input
+        <Input
           id={inputId}
           value={confirmText}
           onChange={(e) => setConfirmText(e.target.value)}
           autoComplete="off"
-          className={inputClass}
         />
       </Field>
       {status === "error" && error !== null && (
@@ -71,14 +72,15 @@ export function DeletePersonSection({
           {error}
         </p>
       )}
-      <button
+      <Button
+        className="w-fit"
+        variant="destructive"
         type="button"
         onClick={handleDelete}
         disabled={!confirmed || status === "deleting"}
-        className="border-destructive text-destructive hover:bg-destructive/10 w-fit rounded-md border px-4 py-2 text-sm font-medium disabled:opacity-50"
       >
         {status === "deleting" ? "Deleting…" : `Delete ${personDisplayName}`}
-      </button>
+      </Button>
     </div>
   );
 }

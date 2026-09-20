@@ -22,6 +22,8 @@ import {
   type FactsDiff,
 } from "@/lib/edit/facts";
 import { enumTokenLabel } from "@/lib/person/labels";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 import { ConflictDialog } from "./ConflictDialog";
 import { DateInput } from "./DateInput";
@@ -231,14 +233,16 @@ export function FactsSection({
         )}
       </ul>
 
-      <button
+      <Button
+        className="w-fit"
+        variant="outline"
+        size="sm"
         type="button"
         onClick={addRow}
         disabled={saving}
-        className="border-border hover:bg-accent w-fit rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50"
       >
         Add a fact
-      </button>
+      </Button>
 
       <SaveBar
         dirty={dirty}
@@ -322,12 +326,11 @@ function FactRow({
 
         {row.type === "other" && (
           <Field label="Fact name" htmlFor={typeOtherId}>
-            <input
+            <Input
               id={typeOtherId}
               value={row.typeOther}
               disabled={disabled}
               onChange={(e) => onField("typeOther", e.target.value)}
-              className={inputClass}
             />
           </Field>
         )}
@@ -349,12 +352,11 @@ function FactRow({
         />
 
         <Field label="Value" htmlFor={valueId}>
-          <input
+          <Input
             id={valueId}
             value={row.value}
             disabled={disabled}
             onChange={(e) => onField("value", e.target.value)}
-            className={inputClass}
           />
         </Field>
 
@@ -397,14 +399,16 @@ function FactRow({
         </p>
       )}
 
-      <button
+      <Button
+        variant="ghost-destructive"
+        size="xs"
         type="button"
         onClick={onRemove}
         disabled={disabled}
-        className="text-destructive w-fit rounded-md px-2 py-1 text-xs font-medium disabled:opacity-40"
+        className="w-fit"
       >
         Remove
-      </button>
+      </Button>
     </li>
   );
 }

@@ -3,6 +3,8 @@
 import { useId, useState } from "react";
 
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 type Status =
   | { kind: "idle" }
@@ -82,7 +84,7 @@ export function LoginForm() {
         <label htmlFor={emailId} className="text-sm font-medium">
           Email
         </label>
-        <input
+        <Input
           id={emailId}
           type="email"
           autoComplete="email"
@@ -90,16 +92,11 @@ export function LoginForm() {
           value={email}
           onChange={(event) => setEmail(event.target.value)}
           disabled={busy}
-          className="border-border rounded-md border px-3 py-2 text-sm"
           placeholder="you@example.com"
         />
-        <button
-          type="submit"
-          disabled={busy}
-          className="bg-primary text-primary-foreground rounded-md px-4 py-2 text-sm font-medium disabled:opacity-50"
-        >
+        <Button type="submit" disabled={busy}>
           {busy ? "Sending…" : "Email me a sign-in link"}
-        </button>
+        </Button>
       </form>
 
       <div className="flex items-center gap-3">
@@ -108,14 +105,14 @@ export function LoginForm() {
         <span className="bg-border h-px flex-1" />
       </div>
 
-      <button
+      <Button
+        variant="outline"
         type="button"
         onClick={signInWithGoogle}
         disabled={busy}
-        className="border-border rounded-md border px-4 py-2 text-sm font-medium disabled:opacity-50"
       >
         Continue with Google
-      </button>
+      </Button>
 
       {status.kind === "error" ? (
         <p className="text-destructive text-sm" role="alert">

@@ -49,6 +49,8 @@ import {
   type SourcesDiff,
 } from "@/lib/edit/sources";
 import { eventTypeLabel, factTypeLabel } from "@/lib/person/labels";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 import { ConflictDialog } from "./ConflictDialog";
 import { DateInput } from "./DateInput";
@@ -119,14 +121,16 @@ export function SourcesSection({
             </li>
           )}
         </ul>
-        <button
+        <Button
+          className="w-fit"
+          variant="outline"
+          size="sm"
           type="button"
           onClick={repositories.addRow}
           disabled={repositories.saving}
-          className="border-border hover:bg-accent w-fit rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50"
         >
           Add a repository
-        </button>
+        </Button>
         <SaveBar
           dirty={repositories.dirty}
           status={repositories.status}
@@ -168,14 +172,16 @@ export function SourcesSection({
             </li>
           )}
         </ul>
-        <button
+        <Button
+          className="w-fit"
+          variant="outline"
+          size="sm"
           type="button"
           onClick={sources.addRow}
           disabled={sources.saving}
-          className="border-border hover:bg-accent w-fit rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50"
         >
           Add a source
-        </button>
+        </Button>
         <SaveBar
           dirty={sources.dirty}
           status={sources.status}
@@ -453,59 +459,56 @@ function RepositoryRow({
     <li className="border-border flex flex-col gap-3 rounded-lg border p-4">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <Field label="Name" htmlFor={nameId}>
-          <input
+          <Input
             id={nameId}
             value={row.name}
             disabled={disabled}
             onChange={(e) => onField("name", e.target.value)}
-            className={inputClass}
           />
         </Field>
         <Field label="Address" htmlFor={addressId}>
-          <input
+          <Input
             id={addressId}
             value={row.address}
             disabled={disabled}
             onChange={(e) => onField("address", e.target.value)}
-            className={inputClass}
           />
         </Field>
         <Field label="Phone" htmlFor={phoneId}>
-          <input
+          <Input
             id={phoneId}
             value={row.phone}
             disabled={disabled}
             onChange={(e) => onField("phone", e.target.value)}
-            className={inputClass}
           />
         </Field>
         <Field label="Email" htmlFor={emailId}>
-          <input
+          <Input
             id={emailId}
             value={row.email}
             disabled={disabled}
             onChange={(e) => onField("email", e.target.value)}
-            className={inputClass}
           />
         </Field>
         <Field label="Website" htmlFor={websiteId}>
-          <input
+          <Input
             id={websiteId}
             value={row.website}
             disabled={disabled}
             onChange={(e) => onField("website", e.target.value)}
-            className={inputClass}
           />
         </Field>
       </div>
-      <button
+      <Button
+        variant="ghost-destructive"
+        size="xs"
         type="button"
         onClick={onRemove}
         disabled={disabled}
-        className="text-destructive w-fit rounded-md px-2 py-1 text-xs font-medium disabled:opacity-40"
+        className="w-fit"
       >
         Remove
-      </button>
+      </Button>
     </li>
   );
 }
@@ -707,30 +710,27 @@ function SourceRow({
     <li className="border-border flex flex-col gap-3 rounded-lg border p-4">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <Field label="Title" htmlFor={titleId}>
-          <input
+          <Input
             id={titleId}
             value={row.title}
             disabled={disabled}
             onChange={(e) => onField("title", e.target.value)}
-            className={inputClass}
           />
         </Field>
         <Field label="Author" htmlFor={authorId}>
-          <input
+          <Input
             id={authorId}
             value={row.author}
             disabled={disabled}
             onChange={(e) => onField("author", e.target.value)}
-            className={inputClass}
           />
         </Field>
         <Field label="Publication info" htmlFor={publicationId}>
-          <input
+          <Input
             id={publicationId}
             value={row.publicationInfo}
             disabled={disabled}
             onChange={(e) => onField("publicationInfo", e.target.value)}
-            className={inputClass}
           />
         </Field>
         <Field label="Repository" htmlFor={repositoryId}>
@@ -776,14 +776,16 @@ function SourceRow({
           on this person and on anyone else in the tree.
         </p>
       )}
-      <button
+      <Button
+        variant="ghost-destructive"
+        size="xs"
         type="button"
         onClick={onRemove}
         disabled={disabled}
-        className="text-destructive w-fit rounded-md px-2 py-1 text-xs font-medium disabled:opacity-40"
+        className="w-fit"
       >
         Remove
-      </button>
+      </Button>
     </li>
   );
 }
@@ -1012,14 +1014,16 @@ function CitationGroup({
           </li>
         )}
       </ul>
-      <button
+      <Button
+        className="w-fit"
+        variant="outline"
+        size="sm"
         type="button"
         onClick={onAdd}
         disabled={disabled}
-        className="border-border hover:bg-accent w-fit rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50"
       >
         Add a citation
-      </button>
+      </Button>
     </div>
   );
 }
@@ -1071,12 +1075,11 @@ function CitationRow({
         </Field>
 
         <Field label="Page" htmlFor={pageId}>
-          <input
+          <Input
             id={pageId}
             value={row.page}
             disabled={disabled}
             onChange={(e) => onField("page", e.target.value)}
-            className={inputClass}
           />
         </Field>
 
@@ -1111,12 +1114,11 @@ function CitationRow({
         </Field>
 
         <Field label="Data" htmlFor={dataId}>
-          <input
+          <Input
             id={dataId}
             value={row.dataText}
             disabled={disabled}
             onChange={(e) => onField("dataText", e.target.value)}
-            className={inputClass}
           />
         </Field>
       </div>
@@ -1127,14 +1129,16 @@ function CitationRow({
         </p>
       )}
 
-      <button
+      <Button
+        variant="ghost-destructive"
+        size="xs"
         type="button"
         onClick={onRemove}
         disabled={disabled}
-        className="text-destructive w-fit rounded-md px-2 py-1 text-xs font-medium disabled:opacity-40"
+        className="w-fit"
       >
         Remove
-      </button>
+      </Button>
     </li>
   );
 }

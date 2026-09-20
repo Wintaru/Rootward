@@ -5,7 +5,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { searchPlaces } from "@/app/person/[personId]/edit/actions";
 import type { PlaceOption } from "@/lib/db";
 
-import { inputClass } from "./form";
+import { Input } from "@/components/ui/input";
 
 const SEARCH_DEBOUNCE_MS = 250;
 
@@ -74,14 +74,13 @@ export function PlaceInput({
       <label htmlFor={id} className="text-muted-foreground text-xs font-medium">
         {label}
       </label>
-      <input
+      <Input
         id={id}
         value={value}
         disabled={disabled}
         onChange={(e) => onChange(e.target.value)}
         list={listId}
         placeholder="e.g. Boston, Suffolk, Massachusetts"
-        className={inputClass}
       />
       <datalist id={listId}>
         {shownOptions.map((option) => (

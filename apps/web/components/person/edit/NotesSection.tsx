@@ -21,6 +21,7 @@ import {
   type NotesDiff,
 } from "@/lib/edit/notes";
 import { eventTypeLabel } from "@/lib/person/labels";
+import { Button } from "@/components/ui/button";
 
 import { ConflictDialog } from "./ConflictDialog";
 import { inputClass, SaveBar } from "./form";
@@ -298,14 +299,16 @@ function NoteGroup({
           <li className="text-muted-foreground text-sm">No notes recorded.</li>
         )}
       </ul>
-      <button
+      <Button
+        className="w-fit"
+        variant="outline"
+        size="sm"
         type="button"
         onClick={onAdd}
         disabled={disabled}
-        className="border-border hover:bg-accent w-fit rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50"
       >
         Add a note
-      </button>
+      </Button>
     </div>
   );
 }
@@ -346,32 +349,36 @@ function NoteRow({
         className={inputClass}
       />
       <div className="flex gap-2">
-        <button
+        <Button
+          variant="outline"
+          size="xs"
           type="button"
           onClick={() => onMove("up")}
           disabled={disabled || index === 0}
           aria-label="Move up"
-          className="border-border rounded-md border px-2 py-1 text-xs disabled:opacity-40"
         >
           ▲
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="outline"
+          size="xs"
           type="button"
           onClick={() => onMove("down")}
           disabled={disabled || index === count - 1}
           aria-label="Move down"
-          className="border-border rounded-md border px-2 py-1 text-xs disabled:opacity-40"
         >
           ▼
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="ghost-destructive"
+          size="xs"
           type="button"
           onClick={onRemove}
           disabled={disabled}
-          className="text-destructive ml-auto rounded-md px-2 py-1 text-xs font-medium disabled:opacity-40"
+          className="ml-auto"
         >
           Remove
-        </button>
+        </Button>
       </div>
     </li>
   );
