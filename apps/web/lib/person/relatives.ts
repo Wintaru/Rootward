@@ -1,6 +1,9 @@
-import type { Neighborhood, NeighborhoodPerson } from "@/lib/db/types";
-
-import { unionTypeLabel } from "./labels";
+import type {
+  Neighborhood,
+  NeighborhoodPerson,
+  UnionEndedBy,
+  UnionType,
+} from "@/lib/db/types";
 
 /**
  * Shared person-display and relationship-resolution helpers. Pulled out of
@@ -53,7 +56,9 @@ export interface ResolvedRelationships {
   readonly partners: {
     readonly person: NeighborhoodPerson;
     readonly familyId: string;
-    readonly unionType: string | null;
+    readonly relationshipType: UnionType | null;
+    /** Set once the union ended (issue #122) — see `NeighborhoodFamily`. */
+    readonly endedBy: UnionEndedBy | null;
   }[];
   readonly children: NeighborhoodPerson[];
 }
@@ -87,7 +92,8 @@ export function resolveRelationships(
   const partners: {
     person: NeighborhoodPerson;
     familyId: string;
-    unionType: string | null;
+    relationshipType: UnionType | null;
+    endedBy: UnionEndedBy | null;
   }[] = [];
   const seenPartners = new Set<string>();
   const childIds = new Set<string>();
@@ -103,7 +109,8 @@ export function resolveRelationships(
       partners.push({
         person: other,
         familyId: family.id,
-        unionType: unionTypeLabel(family.relationship_type),
+        relationshipType: family.relationship_type,
+        endedBy: family.ended_by,
       });
     }
     for (const childId of family.child_ids) childIds.add(childId);

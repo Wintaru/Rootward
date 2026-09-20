@@ -41,6 +41,7 @@ function family(
     partner1_role: null,
     partner2_role: null,
     relationship_type: "married",
+    ended_by: null,
     child_ids: [],
     ...overrides,
   };

@@ -26,6 +26,19 @@ export type AccountStatus = Database["public"]["Enums"]["account_status"];
 export type NotificationType = Database["public"]["Enums"]["notification_type"];
 
 /**
+ * The event types that end a union (issue #122). Mirrors the `in ('divorce',
+ * 'annulment')` list in the `family_ended_by` SQL function — that function is
+ * the one place the "has this union ended" rule is evaluated; this list only
+ * names the values it can hand back, so `parseFamily` can narrow them.
+ */
+export const UNION_ENDING_EVENT_TYPES = [
+  "divorce",
+  "annulment",
+] as const satisfies readonly EventType[];
+
+export type UnionEndedBy = (typeof UNION_ENDING_EVENT_TYPES)[number];
+
+/**
  * One person in a {@link Neighborhood}. Carries only the fields the tree card
  * needs (name parts, sex, living flag, birth/death year) plus `generation`
  * relative to the focus: 0 for the focus, its siblings, and its partners;
@@ -65,6 +78,10 @@ export interface NeighborhoodFamily {
   partner1_role: PartnerRole | null;
   partner2_role: PartnerRole | null;
   relationship_type: UnionType | null;
+  /** The event that ended the union (`family_ended_by`, issue #122), or
+   * `null` while it stands. Derived server-side from the family's events —
+   * never from `relationship_type`, which is the kind of union, not its state. */
+  ended_by: UnionEndedBy | null;
   child_ids: string[];
 }
 

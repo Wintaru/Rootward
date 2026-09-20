@@ -1,7 +1,7 @@
 import type { PersonEditShellData } from "@/lib/db/person";
 import type { NeighborhoodPerson } from "@/lib/db/types";
 
-import { sexLabel } from "@/lib/person/labels";
+import { sexLabel, unionStatusLabel } from "@/lib/person/labels";
 import {
   assembleName,
   formatLifespan,
@@ -89,7 +89,10 @@ export function buildEditShellView(
     parents: rel.parents.map((parent) => toRelativeLine(parent)),
     partnersAndChildren: [
       ...rel.partners.map((entry) =>
-        toRelativeLine(entry.person, entry.unionType),
+        toRelativeLine(
+          entry.person,
+          unionStatusLabel(entry.relationshipType, entry.endedBy),
+        ),
       ),
       ...rel.children.map((child) => toRelativeLine(child)),
     ],

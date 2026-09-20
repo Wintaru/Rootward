@@ -7,7 +7,12 @@ import type {
   ProfileFamilyEvent,
   ProfileName,
 } from "@/lib/db/person";
-import type { NeighborhoodPerson } from "@/lib/db/types";
+import {
+  UNION_ENDING_EVENT_TYPES,
+  type NeighborhoodPerson,
+  type UnionEndedBy,
+  type UnionType,
+} from "@/lib/db/types";
 
 import {
   eventTypeLabel,
@@ -15,6 +20,9 @@ import {
   humanizeToken,
   nameTypeLabel,
   sexLabel,
+  unionEndedLabel,
+  unionSegment,
+  unionTypeLabel,
 } from "./labels";
 import {
   assembleName,
@@ -142,7 +150,11 @@ export function buildPersonProfileView(
     partners: rel.partners.map((entry) =>
       toRelationLine(
         entry.person,
-        unionDetail(entry.unionType, familyEventsById.get(entry.familyId)),
+        unionDetail(
+          entry.relationshipType,
+          entry.endedBy,
+          familyEventsById.get(entry.familyId) ?? [],
+        ),
       ),
     ),
     children: rel.children.map((p) => toRelationLine(p)),
@@ -234,27 +246,49 @@ function groupFamilyEvents(
 
 /** The partner line's `detail` (SPEC §8.3, issue #57's "both partners'
  * profiles show it"): the union type plus its one most relevant event's date
- * and place, e.g. `"Married — 12 Jun 1990, Springfield"`. A recorded
- * `marriage` event wins over any other type (engagement, divorce, …) as the
- * headline date for a v1 glance line; ties broken by `sortKey` (undated
- * last) — the full set is still every partner's own Events section, this is
- * only the profile's one-line summary. */
+ * and place, e.g. `"Married — 12 Jun 1990, Springfield"`, and — once the
+ * union has ended (issue #122) — a second segment for that:
+ * `"Married — 1990 · Divorced — 2003, Reno"`. Whether it ended is the
+ * server's call (`ended_by`, from `family_ended_by`); this only looks up
+ * that event's date. A recorded `marriage` event wins over any other type
+ * (engagement, banns, …) as the headline date for a v1 glance line; ties
+ * broken by `sortKey` (undated last). An ending event never headlines the
+ * standing segment, so a divorce alone reads "Divorced — 2003", not
+ * "Married — 2003". The full set is still every partner's own Events
+ * section; this is only the profile's one-line summary. */
 function unionDetail(
-  unionType: string | null,
-  events: readonly ProfileFamilyEvent[] | undefined,
+  relationshipType: UnionType | null,
+  endedBy: UnionEndedBy | null,
+  events: readonly ProfileFamilyEvent[],
 ): string | null {
-  const headline = pickHeadlineUnionEvent(events ?? []);
-  const dateAndPlace =
-    headline === undefined
-      ? null
-      : [formatRowDate(headline.date) || null, headline.placeName]
-          .filter((part): part is string => part !== null && part !== "")
-          .join(", ") || null;
-
-  const parts = [unionType, dateAndPlace].filter(
-    (part): part is string => part !== null,
+  const standing = unionEventSegment(
+    unionTypeLabel(relationshipType),
+    pickHeadlineUnionEvent(events.filter((event) => !isEndingEvent(event))),
   );
-  return parts.length === 0 ? null : parts.join(" — ");
+  if (endedBy === null) {
+    return standing;
+  }
+  const ended = unionEventSegment(
+    unionEndedLabel(endedBy),
+    events.find((event) => event.type === endedBy),
+  );
+  const segments = [standing, ended].filter(
+    (segment): segment is string => segment !== null,
+  );
+  return segments.length === 0 ? null : segments.join(" · ");
+}
+
+function isEndingEvent(event: ProfileFamilyEvent): boolean {
+  return UNION_ENDING_EVENT_TYPES.some((type) => type === event.type);
+}
+
+function unionEventSegment(
+  label: string | null,
+  event: ProfileFamilyEvent | undefined,
+): string | null {
+  return event === undefined
+    ? unionSegment(label, null, null)
+    : unionSegment(label, formatRowDate(event.date) || null, event.placeName);
 }
 
 function pickHeadlineUnionEvent(

@@ -6,6 +6,8 @@ import {
   humanizeToken,
   nameTypeLabel,
   sexLabel,
+  unionEndedLabel,
+  unionStatusLabel,
   unionTypeLabel,
 } from "./labels";
 
@@ -40,6 +42,20 @@ describe("unionTypeLabel", () => {
     expect(unionTypeLabel("unknown")).toBeNull();
     expect(unionTypeLabel("married")).toBe("Married");
     expect(unionTypeLabel("civil_union")).toBe("Civil union");
+  });
+});
+
+describe("unionEndedLabel / unionStatusLabel", () => {
+  it("names the ended state as a participle, not the event", () => {
+    expect(unionEndedLabel("divorce")).toBe("Divorced");
+    expect(unionEndedLabel("annulment")).toBe("Annulled");
+  });
+
+  it("status prefers the ended state over the union type", () => {
+    expect(unionStatusLabel("married", null)).toBe("Married");
+    expect(unionStatusLabel("married", "divorce")).toBe("Divorced");
+    expect(unionStatusLabel(null, "annulment")).toBe("Annulled");
+    expect(unionStatusLabel("unknown", null)).toBeNull();
   });
 });
 

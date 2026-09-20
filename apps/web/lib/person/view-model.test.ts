@@ -152,6 +152,7 @@ function fixtureNeighborhood(): Neighborhood {
         partner1_role: "husband",
         partner2_role: "wife",
         relationship_type: "married",
+        ended_by: null,
         child_ids: ["p1", "p4"],
       },
       {
@@ -161,6 +162,7 @@ function fixtureNeighborhood(): Neighborhood {
         partner1_role: "wife",
         partner2_role: "husband",
         relationship_type: "married",
+        ended_by: null,
         child_ids: ["p6", "p7"],
       },
     ],
@@ -378,6 +380,48 @@ describe("buildPersonProfileView", () => {
       fixtureData({
         familyEvents: [
           {
+            id: "fe-engagement",
+            familyId: "fam-own",
+            type: "engagement",
+            typeOther: null,
+            value: null,
+            ageText: null,
+            sortKey: "1949",
+            placeName: "Elsewhere",
+            date: exactDate(1949),
+          },
+          {
+            id: "fe-marriage",
+            familyId: "fam-own",
+            type: "marriage",
+            typeOther: null,
+            value: null,
+            ageText: null,
+            sortKey: "1950",
+            placeName: "Springfield",
+            date: exactDate(1950),
+          },
+        ],
+      }),
+    );
+
+    expect(view.partners[0]?.detail).toBe("Married — 1950, Springfield");
+  });
+
+  it("adds the ended segment when the server flags the union as ended (#122)", () => {
+    const neighborhood = fixtureNeighborhood();
+    const view = buildPersonProfileView(
+      fixtureData({
+        relationships: {
+          ...neighborhood,
+          families: neighborhood.families.map((family) =>
+            family.id === "fam-own"
+              ? { ...family, ended_by: "divorce" }
+              : family,
+          ),
+        },
+        familyEvents: [
+          {
             id: "fe-divorce",
             familyId: "fam-own",
             type: "divorce",
@@ -403,7 +447,40 @@ describe("buildPersonProfileView", () => {
       }),
     );
 
-    expect(view.partners[0]?.detail).toBe("Married — 1950, Springfield");
+    expect(view.partners[0]?.detail).toBe(
+      "Married — 1950, Springfield · Divorced — 1960, Elsewhere",
+    );
+  });
+
+  it("never headlines the standing segment with the ending event", () => {
+    const neighborhood = fixtureNeighborhood();
+    const view = buildPersonProfileView(
+      fixtureData({
+        relationships: {
+          ...neighborhood,
+          families: neighborhood.families.map((family) =>
+            family.id === "fam-own"
+              ? { ...family, ended_by: "annulment" }
+              : family,
+          ),
+        },
+        familyEvents: [
+          {
+            id: "fe-annulment",
+            familyId: "fam-own",
+            type: "annulment",
+            typeOther: null,
+            value: null,
+            ageText: null,
+            sortKey: "1960",
+            placeName: null,
+            date: exactDate(1960),
+          },
+        ],
+      }),
+    );
+
+    expect(view.partners[0]?.detail).toBe("Married · Annulled — 1960");
   });
 
   it("maps media, sources, and notes", () => {

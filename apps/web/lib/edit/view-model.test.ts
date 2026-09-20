@@ -31,6 +31,7 @@ function fixtureNeighborhood(): Neighborhood {
         partner1_role: "husband",
         partner2_role: "wife",
         relationship_type: "married",
+        ended_by: null,
         child_ids: ["p1", "p4"],
       },
       {
@@ -40,6 +41,7 @@ function fixtureNeighborhood(): Neighborhood {
         partner1_role: "wife",
         partner2_role: "husband",
         relationship_type: "married",
+        ended_by: null,
         child_ids: ["p6", "p7"],
       },
     ],
@@ -137,6 +139,20 @@ describe("buildEditShellView", () => {
       "p6",
     ]);
     expect(view.partnersAndChildren[0]?.detail).toBe("Married");
+  });
+
+  it("labels an ended union by its ending event, not the union type (#122)", () => {
+    const data = fixtureData();
+    const view = buildEditShellView({
+      ...data,
+      relationships: {
+        ...data.relationships,
+        families: data.relationships.families.map((family) =>
+          family.id === "fam-own" ? { ...family, ended_by: "divorce" } : family,
+        ),
+      },
+    });
+    expect(view.partnersAndChildren[0]?.detail).toBe("Divorced");
   });
 
   it("defaults to the first section and marks it active", () => {

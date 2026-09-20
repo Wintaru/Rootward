@@ -5,6 +5,7 @@ import type {
   NameType,
   PartnerRole,
   Sex,
+  UnionEndedBy,
   UnionType,
 } from "@/lib/db";
 
@@ -49,6 +50,53 @@ export function nameTypeLabel(type: NameType | null): string {
 
 export function unionTypeLabel(type: UnionType | null): string | null {
   return type === null || type === "unknown" ? null : enumTokenLabel(type);
+}
+
+/** "Divorced" / "Annulled" — the state a union is in once its
+ * `ended_by` event exists (issue #122). Not derivable by rule: the event
+ * type is a noun and the status is a participle. */
+export function unionEndedLabel(endedBy: UnionEndedBy): string {
+  switch (endedBy) {
+    case "divorce":
+      return "Divorced";
+    case "annulment":
+      return "Annulled";
+    default:
+      return assertNeverEndedBy(endedBy);
+  }
+}
+
+function assertNeverEndedBy(value: never): never {
+  throw new Error(`unionEndedLabel: unhandled ended_by ${String(value)}`);
+}
+
+/** `"<label> — <date>, <place>"`, dropping whichever part is missing:
+ * `"Married — 1950, Springfield"` · `"Divorced — 1960"` · `"Married"` ·
+ * `null` when there is nothing at all. The profile's partner line and the
+ * Relationships card's status line both build from this (issues #57, #122). */
+export function unionSegment(
+  label: string | null,
+  dateText: string | null,
+  placeName: string | null,
+): string | null {
+  const dateAndPlace =
+    [dateText, placeName]
+      .filter((part): part is string => part !== null && part !== "")
+      .join(", ") || null;
+  const parts = [label, dateAndPlace].filter(
+    (part): part is string => part !== null,
+  );
+  return parts.length === 0 ? null : parts.join(" — ");
+}
+
+/** The one-word state of a union for a compact line — "Divorced" once it
+ * has ended, otherwise the union type ("Married", "Partnership", …) or
+ * `null` when that is unset / unknown. */
+export function unionStatusLabel(
+  type: UnionType | null,
+  endedBy: UnionEndedBy | null,
+): string | null {
+  return endedBy === null ? unionTypeLabel(type) : unionEndedLabel(endedBy);
 }
 
 /** Unlike {@link unionTypeLabel}, `unknown` gets its own label here rather

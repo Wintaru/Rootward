@@ -1,12 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { Constants, type Database } from "./database.types";
-import type {
-  ExpandRelation,
-  Neighborhood,
-  NeighborhoodFamily,
-  NeighborhoodFragment,
-  NeighborhoodPerson,
+import {
+  UNION_ENDING_EVENT_TYPES,
+  type ExpandRelation,
+  type Neighborhood,
+  type NeighborhoodFamily,
+  type NeighborhoodFragment,
+  type NeighborhoodPerson,
 } from "./types";
 import { isUuid } from "./uuid";
 
@@ -183,6 +184,7 @@ function parseFamily(raw: unknown, index: number): NeighborhoodFamily {
       f.relationship_type,
       Constants.public.Enums.union_type,
     ),
+    ended_by: asNullableEnum(f.ended_by, UNION_ENDING_EVENT_TYPES),
     child_ids: asArray(f.child_ids, `families[${index}].child_ids`).map(
       (id, i) => asString(id, `families[${index}].child_ids[${i}]`),
     ),
