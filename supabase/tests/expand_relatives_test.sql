@@ -9,7 +9,7 @@
 -- superuser pg_prove connects as, identity switched with a fake JWT.
 
 begin;
-select plan(19);
+select plan(20);
 
 create function pg_temp.act_as(p_uid uuid)
 returns void
@@ -84,6 +84,12 @@ insert into public.person (id, given_name, surname, visibility) values
   ('11000000-0000-0000-0000-000000000040', 'Kid1', 'Pat', 'everyone_approved'),
   ('11000000-0000-0000-0000-000000000041', 'Kid2', 'Pat', 'everyone_approved'),
   ('11000000-0000-0000-0000-000000000050', 'GGkd', 'Pat', 'everyone_approved');
+
+-- Dad carries a married-name variant, so the parents expansion can show the
+-- surname-variant fields ride along (the rule itself is covered in
+-- get_neighborhood_test.sql -- both RPCs call `person_surname_variant`).
+insert into public.person_name (person_id, type, surname) values
+  ('11000000-0000-0000-0000-000000000010', 'married', 'Mat');
 
 insert into public.account (id, role, status, person_id) values
   ('30000000-0000-0000-0000-000000000001', 'admin',     'active', null),
@@ -172,9 +178,16 @@ select is(
      (public.expand_relatives('11000000-0000-0000-0000-000000000020', 'parents') -> 'persons') -> 0
    ) as k),
   array['birth_year', 'can_expand_down', 'can_expand_up', 'death_year',
-        'given_name', 'id', 'is_living', 'name_prefix', 'name_suffix',
-        'nickname', 'sex', 'surname']::text[],
+        'given_name', 'id', 'is_living', 'maiden_surname', 'married_surname',
+        'name_prefix', 'name_suffix', 'nickname', 'sex', 'surname']::text[],
   'persons[] element carries exactly the documented keys (no generation)'
+);
+select is(
+  pg_temp.field(
+    public.expand_relatives('11000000-0000-0000-0000-000000000020', 'parents'),
+    '11000000-0000-0000-0000-000000000010', 'married_surname'),
+  'Mat',
+  'parents: married_surname comes from the person_name variant'
 );
 select is(
   (select array_agg(k order by k)

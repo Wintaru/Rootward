@@ -8,7 +8,7 @@
 -- fixture row that genuinely exists so a deny never passes vacuously.
 
 begin;
-select plan(28);
+select plan(32);
 
 create function pg_temp.act_as(p_uid uuid)
 returns void
@@ -162,6 +162,18 @@ insert into public.event (id, owner_type, family_id, type, date_year1) values
   ('40000000-0000-0000-0000-000000000013', 'family', '20000000-0000-0000-0000-000000000010', 'divorce', 1990),
   ('40000000-0000-0000-0000-000000000014', 'family', '20000000-0000-0000-0000-000000000020', 'marriage', 2010);
 
+-- Surname variants (tree card married / maiden names). Mom carries one of
+-- each kind plus two decoys: a `married` row with no surname that sorts
+-- first (must be skipped) and a `birth` row that sorts before her `maiden`
+-- row (`maiden` must still win). Spouse has only a `birth` row, which stands
+-- in for `maiden`. Everyone else has none.
+insert into public.person_name (person_id, type, surname, sort_order) values
+  ('10000000-0000-0000-0000-000000000011', 'married', null,       0),
+  ('10000000-0000-0000-0000-000000000011', 'married', 'Pat',      1),
+  ('10000000-0000-0000-0000-000000000011', 'birth',   'MatBirth', 0),
+  ('10000000-0000-0000-0000-000000000011', 'maiden',  'Mat',      1),
+  ('10000000-0000-0000-0000-000000000030', 'birth',   'Born',     0);
+
 set local role authenticated;
 
 -- ===========================================================================
@@ -205,8 +217,9 @@ select is(
      (public.get_neighborhood('10000000-0000-0000-0000-000000000020', 2, 2) -> 'persons') -> 0
    ) as k),
   array['birth_year', 'can_expand_down', 'can_expand_up', 'death_year',
-        'generation', 'given_name', 'id', 'is_living', 'name_prefix',
-        'name_suffix', 'nickname', 'sex', 'surname']::text[],
+        'generation', 'given_name', 'id', 'is_living', 'maiden_surname',
+        'married_surname', 'name_prefix', 'name_suffix', 'nickname', 'sex',
+        'surname']::text[],
   'persons[] element carries exactly the documented keys'
 );
 select is(
@@ -217,6 +230,37 @@ select is(
   array['child_ids', 'ended_by', 'id', 'partner1_id', 'partner1_role',
         'partner2_id', 'partner2_role', 'relationship_type']::text[],
   'families[] element carries exactly the documented keys'
+);
+
+-- Surname variants: first row of the kind with a surname; `maiden` beats
+-- `birth`; `birth` alone stands in for `maiden`; null when none.
+select is(
+  pg_temp.field(
+    public.get_neighborhood('10000000-0000-0000-0000-000000000020', 2, 2),
+    '10000000-0000-0000-0000-000000000011', 'married_surname'),
+  'Pat',
+  'married_surname: the first married row that has a surname'
+);
+select is(
+  pg_temp.field(
+    public.get_neighborhood('10000000-0000-0000-0000-000000000020', 2, 2),
+    '10000000-0000-0000-0000-000000000011', 'maiden_surname'),
+  'Mat',
+  'maiden_surname: a maiden row wins over a birth row regardless of sort_order'
+);
+select is(
+  pg_temp.field(
+    public.get_neighborhood('10000000-0000-0000-0000-000000000020', 2, 2),
+    '10000000-0000-0000-0000-000000000030', 'maiden_surname'),
+  'Born',
+  'maiden_surname: a birth row stands in when there is no maiden row'
+);
+select is(
+  pg_temp.field(
+    public.get_neighborhood('10000000-0000-0000-0000-000000000020', 2, 2),
+    '10000000-0000-0000-0000-000000000020', 'married_surname'),
+  null,
+  'married_surname: null when no such variant is recorded'
 );
 
 -- Per-person generation: 0 focus/sibling/partner, positive up, negative down.
