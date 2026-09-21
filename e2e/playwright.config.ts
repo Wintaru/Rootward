@@ -99,6 +99,9 @@ export default defineConfig({
             testMatch: ["**/destructive/**"],
             fullyParallel: false,
             workers: 1,
+            // A backup export plus a full-size GedZip import; the specs
+            // set their own expect timeouts inside this.
+            timeout: 1_200_000,
             use: { ...devices["Desktop Chrome"] },
           },
         ]

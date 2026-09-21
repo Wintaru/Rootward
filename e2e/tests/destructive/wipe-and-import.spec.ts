@@ -1,10 +1,8 @@
-import { readFileSync } from "node:fs";
-
 import {
   gedcomFunctionsAvailable,
   SERVE_HINT,
 } from "../../support/edge-functions";
-import { resolveGedcomPath } from "../../support/gedcom-file";
+import { resolveGedcomPath, summarizeGedcom } from "../../support/gedcom-file";
 import {
   fixtureIds,
   removeFixtureFamily,
@@ -38,6 +36,7 @@ test.beforeAll(() => {
 });
 
 const gedcom = resolveGedcomPath();
+const summary = summarizeGedcom(gedcom.path);
 
 test.beforeAll(async () => {
   test.skip(!(await gedcomFunctionsAvailable()), SERVE_HINT);
@@ -77,7 +76,10 @@ test("the empty tree offers to import or add the first person", async ({
 }) => {
   await adminPage.goto("/tree");
   await expect(
-    adminPage.getByText(/Import a GEDCOM|Add the first person/),
+    adminPage.getByRole("link", { name: "Import a GEDCOM" }),
+  ).toBeVisible();
+  await expect(
+    adminPage.getByRole("link", { name: "Add the first person" }),
   ).toBeVisible();
 });
 
@@ -92,16 +94,49 @@ test(`an admin imports ${gedcom.label}`, async ({ adminPage }) => {
   const picker = adminPage.locator('input[type="file"]');
   await expect(picker).toBeAttached();
   await picker.setInputFiles(gedcom.path);
+  await adminPage.getByRole("button", { name: "Start import" }).click();
 
-  await expect(adminPage.getByText(/Import finished|Imported/)).toBeVisible({
-    timeout: 600_000,
-  });
+  // A GedZip is unpacked and every photo processed in the browser before
+  // the job even starts (issue #104), then the engine runs in batches: the
+  // demo archive's ~870 files take a few minutes end to end.
+  await expect(
+    adminPage.getByRole("heading", { name: "Import complete" }),
+  ).toBeVisible({ timeout: 900_000 });
   await expect(alerts(adminPage)).toHaveCount(0);
 
   const { count } = await admin
     .from("person")
     .select("id", { count: "exact", head: true });
   expect(count ?? 0).toBeGreaterThan(0);
+});
+
+test("every record in the file landed, photos included", async () => {
+  // Counted off the file itself, so this holds for whichever GEDCOM
+  // `resolveGedcomPath` picked, as long as its media are level-0 OBJE
+  // records (an inline OBJE under a person also makes a media row, which
+  // this count does not see). For an archive every media row must also
+  // have its bytes in storage (`storage_path_original`), which is what
+  // "the photos came through" means on the import side.
+  const countRows = async (table: "person" | "family" | "media") => {
+    const { count, error } = await admin
+      .from(table)
+      .select("id", { count: "exact", head: true });
+    expect(error).toBeNull();
+    return count ?? 0;
+  };
+
+  expect(await countRows("person")).toBe(summary.individuals);
+  expect(await countRows("family")).toBe(summary.families);
+  expect(await countRows("media")).toBe(summary.mediaRecords);
+
+  if (summary.isArchive) {
+    const stored = await admin
+      .from("media")
+      .select("id", { count: "exact", head: true })
+      .not("storage_path_original", "is", null);
+    expect(stored.error).toBeNull();
+    expect(stored.count ?? 0).toBe(summary.mediaRecords);
+  }
 });
 
 test("the imported people are browsable", async ({ adminPage }) => {
@@ -139,6 +174,6 @@ test.afterAll(async () => {
  * not a GEDCOM" rather than as a mysterious import error twenty minutes in.
  */
 test("the GEDCOM under test is readable", () => {
-  const text = readFileSync(gedcom.path, "utf8");
-  expect(text.startsWith("0 HEAD")).toBe(true);
+  expect(summary.gedcomText.startsWith("0 HEAD")).toBe(true);
+  expect(summary.individuals).toBeGreaterThan(0);
 });
