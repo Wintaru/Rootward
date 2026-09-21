@@ -63,7 +63,33 @@ are in `EXTERNAL-SETUP-HANDOFF.md` (local). **Branching for Phase 11
 `release_work` branch, not `origin/main`, and Josh merges each one back
 into it — `.trillian-repo.json` `git.baseBranch` is `release_work` for the
 duration. `release_work` has no remote yet, so use the local form
-`git switch -c <type>/<slug> release_work`. **Next session:** #120.
+`git switch -c <type>/<slug> release_work`. **Next session:** #121.
+
+**Issue #120 — Media section: primary pick leaves `sort_order` stale:
+done, staged on branch `fix/media-primary-sort-order`, issue closed.**
+
+- Root cause was the read order, not the write: `getPersonMedia` (and
+  the profile gallery in `person.ts`) ordered `is_primary desc,
+sort_order asc`, so a promoted photo jumped to index 0 while its stored
+  `sort_order` stayed put — `diffMediaLinks` read that as a pending
+  reorder. The same order also silently undid any saved order that put
+  the primary elsewhere. Fix: `sort_order` is the only order in both
+  queries (`created_at` as the tiebreak); `is_primary` is the badge.
+  Rejected: renumbering every link on "Set as primary" (N writes or a
+  new RPC + migration) plus pinning the primary at index 0 in the reorder
+  UI — more moving parts to keep two orders agreeing.
+- **User-visible:** the profile's Media grid now shows the primary at its
+  saved position with the "Primary" badge, not always first. Tree cards
+  are unaffected (`primary-photos.ts` filters on the flag).
+- The shipped #116 backfill migration's comment describes the old
+  primary-first read order. Shipped migrations are never edited, and
+  the numbering it produced is simply the saved `sort_order` now.
+- E2E: `edit-media.spec.ts` "Set as primary" gained a reload assertion
+  (promoted photo still second, Save disabled). Ran live: fails on the
+  old ordering, passes on the new; `person-profile`, `media`, and
+  `edit-media` specs green (28 passed, 4 upload tests skipped without
+  `functions serve`). Gate green: typecheck, lint, format, build, 896
+  vitest. Review: no blocking findings.
 
 **Issue #125 — GEDCOM import: no primary photo without `_PRIM`: done,
 staged on branch `fix/gedcom-primary-photo-no-prim`, issue closed.**

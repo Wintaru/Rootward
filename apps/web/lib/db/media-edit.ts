@@ -97,7 +97,11 @@ function mapMediaLinkRow(row: MediaLinkDbRow): MediaEditRow {
   };
 }
 
-/** Load every media attached directly to `personId`, primary first. */
+/** Load every media attached directly to `personId`, in `sort_order`.
+ * `sort_order` is the whole order — `is_primary` is a badge, not a
+ * position (#120): ordering primary-first here made a "Set as primary"
+ * look like a pending reorder to `diffMediaLinks`, and quietly undid any
+ * saved order that put the primary elsewhere. */
 export async function getPersonMedia(
   client: Db,
   personId: string,
@@ -107,7 +111,6 @@ export async function getPersonMedia(
     .select(MEDIA_LINK_COLUMNS)
     .eq("owner_type", "person")
     .eq("owner_id", personId)
-    .order("is_primary", { ascending: false })
     .order("sort_order", { ascending: true, nullsFirst: false })
     .order("created_at", { ascending: true });
 

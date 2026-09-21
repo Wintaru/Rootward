@@ -138,6 +138,21 @@ test.describe("the Media section", () => {
         { timeout: 15_000 },
       )
       .toBe(promoted);
+
+    // #120: the promotion is a badge, not a move. After a reload the
+    // promoted photo is still second, and nothing reads as unsaved.
+    await moderatorPage.reload();
+    const after = mediaCards(moderatorPage);
+    await expect(after).toHaveCount(2);
+    await expect(after.nth(1).getByLabel("Caption")).toHaveValue(
+      "Wants to be primary",
+    );
+    await expect(
+      after.nth(1).getByRole("button", { name: "Primary" }),
+    ).toBeDisabled();
+    await expect(
+      moderatorPage.getByRole("button", { name: "Save" }),
+    ).toBeDisabled();
   });
 
   test("reorders two photos and keeps the order", async ({ moderatorPage }) => {

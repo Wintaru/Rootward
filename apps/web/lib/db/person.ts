@@ -231,8 +231,10 @@ export async function getPersonProfile(
       )
       .eq("owner_type", "person")
       .eq("owner_id", personId)
-      .order("is_primary", { ascending: false })
-      .order("sort_order", { ascending: true, nullsFirst: false }),
+      // The same order the edit view saves (#120) — the primary wears a
+      // badge instead of being pulled to the front.
+      .order("sort_order", { ascending: true, nullsFirst: false })
+      .order("created_at", { ascending: true }),
     client
       .from("citation")
       .select(
