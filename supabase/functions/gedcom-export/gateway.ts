@@ -25,7 +25,7 @@ import type {
   SourceRow,
   TreeRows,
 } from "./exporter.ts";
-import { BUCKET } from "./exporter.ts";
+import { BUCKET, MEDIA_BUCKET } from "./exporter.ts";
 
 /** PostgREST caps an unpaginated select at 1000 rows; page every table read. */
 const PAGE = 1000;
@@ -148,7 +148,7 @@ export function createSupabaseGateway(supabase: SupabaseClient): ExportGateway {
         fetchAll<MediaRow>(
           "media",
           "id,gedcom_xref,original_filename,mime_type,title," +
-            `raw_gedcom,created_at,${DATE_COLUMNS}`,
+            `storage_path_original,raw_gedcom,created_at,${DATE_COLUMNS}`,
         ),
         fetchAll<PlaceRow>("place", "id,name,normalized_name"),
       ]);
@@ -177,6 +177,34 @@ export function createSupabaseGateway(supabase: SupabaseClient): ExportGateway {
           contentType: "text/plain; charset=utf-8",
           upsert: true,
         });
+      if (error !== null) {
+        throw new Error(`upload ${BUCKET}/${key}: ${error.message}`);
+      }
+    },
+
+    async readMediaOriginal(storagePath: string): Promise<Uint8Array> {
+      const { data, error } = await supabase.storage
+        .from(MEDIA_BUCKET)
+        .download(storagePath);
+      if (error !== null || data === null) {
+        throw new Error(
+          `download ${MEDIA_BUCKET}/${storagePath}: ${
+            error?.message ?? "no body"
+          }`,
+        );
+      }
+      return new Uint8Array(await data.arrayBuffer());
+    },
+
+    async uploadArchive(
+      key: string,
+      body: ReadableStream<Uint8Array>,
+    ): Promise<void> {
+      // storage-js streams a `ReadableStream` body (it sets `duplex: "half"`
+      // itself), so the archive never sits whole in this worker's memory.
+      const { error } = await supabase.storage
+        .from(BUCKET)
+        .upload(key, body, { contentType: "application/zip", upsert: true });
       if (error !== null) {
         throw new Error(`upload ${BUCKET}/${key}: ${error.message}`);
       }

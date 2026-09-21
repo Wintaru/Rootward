@@ -662,7 +662,15 @@ rejected file (size, MIME) stays reference-only and is reported in
 
 - `manual_gedcom` — build a 5.5.1 file from the DB, write to a private bucket,
   return a signed URL.
-- `manual_full` — GEDCOM + all media as a zip.
+- `manual_full` — GEDCOM + all media as a GedZip (`<jobId>.gdz`, #124):
+  `gedcom.ged` at the root, then every media row's stored original as a flat
+  entry named by its original basename (a repeated basename gets
+  `-<id prefix>`), and the `.ged`'s `FILE` values are those entry names so a
+  re-import resolves each one exactly. Built as a stream — one original in
+  memory at a time, the storage upload streams too — so the edge worker's
+  memory cap does not bound the archive; a media row with no stored file
+  keeps its recorded `FILE` and is warned about. This is the wipe-tree
+  backup's type (decision 33).
 - `scheduled_full` — post-MVP, `pg_cron` target, writes to the backup bucket,
   prunes to `backup_retention`.
 

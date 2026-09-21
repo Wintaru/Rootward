@@ -1,5 +1,7 @@
 /**
- * The `gedcom-export` engine (SPEC §7, issue #15) — `manual_gedcom` mode only.
+ * The `gedcom-export` engine (SPEC §7, issues #15, #124) — `manual_gedcom`
+ * (a `.ged`) and `manual_full` (a GedZip: the `.ged` plus every stored media
+ * original, streamed — see `@rootward/gedcom`'s `gedzip-write.ts`).
  *
  * Portable TypeScript: no Deno APIs, no database driver. The tree read, the file
  * upload, the signed URL, and the job row all go through {@link ExportGateway},
@@ -17,11 +19,14 @@
  */
 
 import {
+  archiveEntryNames,
+  createGedZipStream,
   DEFAULT_VISIBILITY,
   mapVisibility,
   normalizePlaceName,
   writeGedcom,
 } from "@rootward/gedcom";
+import { EXTENSION_FOR_MIME } from "@rootward/media";
 import type {
   GedcomReadResult,
   ParsedCitation,
@@ -204,6 +209,9 @@ export interface MediaRow extends DateColumns {
   readonly original_filename: string | null;
   readonly mime_type: string | null;
   readonly title: string | null;
+  /** Key in the `media` bucket, `null` for a record with no stored file (an
+   * import whose archive lacked it). Only `manual_full` reads it. */
+  readonly storage_path_original: string | null;
   readonly raw_gedcom: unknown;
   readonly created_at: string;
 }
@@ -258,6 +266,12 @@ export interface ExportGateway {
   fetchTree(): Promise<TreeRows>;
   /** Write the GEDCOM text to `<bucket>/<key>` (private bucket). */
   uploadGedcom(key: string, text: string): Promise<void>;
+  /** One media original's bytes, by its `media` bucket key. */
+  readMediaOriginal(storagePath: string): Promise<Uint8Array>;
+  /** Stream a GedZip to `<bucket>/<key>`; resolves once the object is
+   * written. The body is consumed once — the engine counts its bytes on the
+   * way through. */
+  uploadArchive(key: string, body: ReadableStream<Uint8Array>): Promise<void>;
   /** A time-limited signed URL for the object just written. */
   signUrl(key: string, expiresInSeconds: number): Promise<string>;
   updateJob(jobId: string, patch: ExportJobPatch): Promise<void>;
@@ -267,6 +281,8 @@ export interface ExportGateway {
 
 /** Object key inside the `exports` bucket. */
 export const BUCKET = "exports";
+/** Where `media.storage_path_original` keys live. */
+export const MEDIA_BUCKET = "media";
 /** Signed-URL lifetime handed back to the caller. */
 export const SIGNED_URL_TTL_SECONDS = 3600;
 
@@ -321,10 +337,10 @@ export async function runExport(
     return failedOutcome();
   }
 
-  if (job.type !== "manual_gedcom") {
+  if (job.type !== "manual_gedcom" && job.type !== "manual_full") {
     await fail(
       deps,
-      `gedcom-export handles 'manual_gedcom' only, got '${job.type}'`,
+      `gedcom-export handles 'manual_gedcom' and 'manual_full', got '${job.type}'`,
     );
     return failedOutcome();
   }
@@ -340,25 +356,58 @@ export async function runExport(
   }
 
   try {
-    return await build(deps);
+    return await build(deps, job.type);
   } catch (err) {
     await fail(deps, describeError(err));
     return failedOutcome();
   }
 }
 
-async function build(deps: RunExportDeps): Promise<RunExportOutcome> {
+/** Object key extension per export type. `.gdz` is GEDCOM 7's GedZip
+ * extension, the one MacFamilyTree writes and the import page sniffs by
+ * content anyway. */
+const KEY_EXTENSION: Readonly<Record<"manual_gedcom" | "manual_full", string>> =
+  {
+    manual_gedcom: "ged",
+    manual_full: "gdz",
+  };
+
+async function build(
+  deps: RunExportDeps,
+  type: "manual_gedcom" | "manual_full",
+): Promise<RunExportOutcome> {
   const { jobId, gateway, now } = deps;
 
   await gateway.updateJob(jobId, { status: "running" });
 
-  const rows = await gateway.fetchTree();
+  const fetched = await gateway.fetchTree();
+  // `manual_full` renames each stored original to its archive entry, so the
+  // `.ged`'s `FILE` values resolve inside the zip on re-import (#124).
+  const archive = type === "manual_full" ? planArchive(fetched) : null;
+  const rows = archive === null ? fetched : archive.rows;
   const { result, warnings } = buildResult(rows, new Date(now()));
+  if (archive !== null) {
+    warnings.push(...archive.warnings);
+  }
   const text = writeGedcom(result, { version: "5.5.1" });
-  const sizeBytes = new TextEncoder().encode(text).length;
 
-  const key = `${jobId}.ged`;
-  await gateway.uploadGedcom(key, text);
+  const key = `${jobId}.${KEY_EXTENSION[type]}`;
+  let sizeBytes: number;
+  if (archive === null) {
+    sizeBytes = new TextEncoder().encode(text).length;
+    await gateway.uploadGedcom(key, text);
+  } else {
+    const counter = { bytes: 0 };
+    const body = createGedZipStream(
+      text,
+      archive.entries.map((entry) => ({
+        name: entry.name,
+        read: () => gateway.readMediaOriginal(entry.storagePath),
+      })),
+    ).pipeThrough(countBytes(counter));
+    await gateway.uploadArchive(key, body);
+    sizeBytes = counter.bytes;
+  }
   const signedUrl = await gateway.signUrl(key, SIGNED_URL_TTL_SECONDS);
 
   await gateway.updateJob(jobId, {
@@ -382,6 +431,56 @@ async function build(deps: RunExportDeps): Promise<RunExportOutcome> {
     },
     warnings,
   };
+}
+
+interface ArchivePlan {
+  /** `fetched` with each stored original's `original_filename` replaced by
+   * its archive entry name; media with no stored file are left as recorded. */
+  readonly rows: TreeRows;
+  readonly entries: readonly { name: string; storagePath: string }[];
+  readonly warnings: readonly string[];
+}
+
+/** Which media go into the archive and under what name. Exported for the
+ * test suite; `build` is the caller. */
+export function planArchive(fetched: TreeRows): ArchivePlan {
+  const stored = fetched.media.filter(
+    (row) => row.storage_path_original !== null,
+  );
+  const names = archiveEntryNames(stored, EXTENSION_FOR_MIME);
+  const warnings: string[] = [];
+  const media = fetched.media.map((row) => {
+    const name = names.get(row.id);
+    if (name === undefined) {
+      warnings.push(
+        `media ${
+          row.original_filename ?? row.id
+        } has no stored file; FILE kept as recorded, not in the archive`,
+      );
+      return row;
+    }
+    return { ...row, original_filename: name };
+  });
+  const entries = stored.flatMap((row) => {
+    const name = names.get(row.id);
+    return name === undefined || row.storage_path_original === null
+      ? []
+      : [{ name, storagePath: row.storage_path_original }];
+  });
+  return { rows: { ...fetched, media }, entries, warnings };
+}
+
+/** Pass bytes through unchanged and total them — the archive's size is not
+ * known until the stream has run. */
+function countBytes(counter: {
+  bytes: number;
+}): TransformStream<Uint8Array, Uint8Array> {
+  return new TransformStream({
+    transform(chunk, controller) {
+      counter.bytes += chunk.length;
+      controller.enqueue(chunk);
+    },
+  });
 }
 
 async function fail(deps: RunExportDeps, message: string): Promise<void> {

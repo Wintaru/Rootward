@@ -2,10 +2,12 @@ import { assert, assertEquals } from "@std/assert";
 
 import {
   buildMediaFileIndex,
+  GEDZIP_GEDCOM_ENTRY,
   matchMediaFile,
   readGedcom,
   readGedZip,
   readMediaEntries,
+  readStreamToBytes,
 } from "../../../packages/gedcom/src/index.ts";
 import { GEDCOM_551 } from "../../../packages/gedcom/src/fixtures.ts";
 import {
@@ -38,6 +40,7 @@ import type {
   ExportGateway,
   ExportJobPatch,
   ExportJobRow,
+  MediaRow,
   TreeRows,
 } from "./exporter.ts";
 
@@ -240,16 +243,22 @@ const EMPTY_TREE: TreeRows = {
 interface FakeExportOptions {
   readonly tree?: TreeRows;
   readonly type?: ExportJobRow["type"];
+  /** The `media` bucket: storage path → bytes, for `manual_full`. */
+  readonly mediaObjects?: ReadonlyMap<string, Uint8Array>;
 }
 
 class FakeExportGateway implements ExportGateway {
   readonly uploads = new Map<string, string>();
+  /** Every archive `uploadArchive` received, fully drained. */
+  readonly archives = new Map<string, Uint8Array>();
   readonly patches: ExportJobPatch[] = [];
   private job: ExportJobRow;
   private readonly tree: TreeRows;
+  private readonly mediaObjects: ReadonlyMap<string, Uint8Array>;
 
   constructor(opts: FakeExportOptions = {}) {
     this.tree = opts.tree ?? EMPTY_TREE;
+    this.mediaObjects = opts.mediaObjects ?? new Map();
     this.job = {
       id: JOB_ID,
       type: opts.type ?? "manual_gedcom",
@@ -267,6 +276,18 @@ class FakeExportGateway implements ExportGateway {
   uploadGedcom(key: string, text: string): Promise<void> {
     this.uploads.set(key, text);
     return Promise.resolve();
+  }
+  readMediaOriginal(storagePath: string): Promise<Uint8Array> {
+    const bytes = this.mediaObjects.get(storagePath);
+    return bytes === undefined
+      ? Promise.reject(new Error(`no fake object at ${storagePath}`))
+      : Promise.resolve(bytes);
+  }
+  async uploadArchive(
+    key: string,
+    body: ReadableStream<Uint8Array>,
+  ): Promise<void> {
+    this.archives.set(key, await readStreamToBytes(body));
   }
   signUrl(key: string, ttl: number): Promise<string> {
     return Promise.resolve(`https://signed.example/${key}?ttl=${ttl}`);
@@ -817,11 +838,62 @@ Deno.test({
       );
     }
     assertEquals(gw.writtenObjects.size, parsed.media.length);
+
+    // And back out (#124): a `manual_full` export of what landed carries
+    // every original, byte for byte, under a FILE value the importer's own
+    // matcher resolves exactly -- the round trip a wipe-tree backup relies
+    // on.
+    const exportGw = new FakeExportGateway({
+      tree: treeFromImport(gw),
+      type: "manual_full",
+      mediaObjects: gw.writtenObjects,
+    });
+    const exported = await runExport({
+      jobId: JOB_ID,
+      gateway: exportGw,
+      now: FIXED_NOW,
+    });
+    assertEquals(exported.status, "completed");
+    assertEquals(
+      exported.warnings.filter((w) => w.startsWith("media ")),
+      [],
+    );
+    const archive = exportGw.archives.get(`${JOB_ID}.gdz`);
+    assert(archive !== undefined);
+    const outZip = readGedZip(archive);
+    const outParsed = readGedcom(outZip.gedcomText);
+    assertEquals(outParsed.media.length, parsed.media.length);
+    const outIndex = buildMediaFileIndex(outZip.mediaEntryNames);
+    const outEntries = readMediaEntries(
+      archive,
+      new Set(outZip.mediaEntryNames),
+    );
+    const inByXref = new Map(parsed.media.map((m) => [m.gedcom_xref, m]));
+    const outClaimed = new Set<string>();
+    for (const m of outParsed.media) {
+      const match = matchMediaFile(m.original_filename, outIndex, outClaimed);
+      assert(match !== null, `${m.gedcom_xref}: ${m.original_filename}`);
+      // An exact hit, not the basename guess: the FILE value *is* the path.
+      assertEquals(match.path, m.original_filename);
+      const source = inByXref.get(m.gedcom_xref);
+      assert(source !== undefined, `${m.gedcom_xref} not in the import`);
+      const sourceMatch = matchMediaFile(
+        source.original_filename,
+        index,
+        new Set(),
+      );
+      assert(sourceMatch !== null);
+      assertEquals(
+        outEntries.get(match.path),
+        entries.get(sourceMatch.path),
+        `${m.gedcom_xref} bytes differ`,
+      );
+    }
   },
 });
 
-Deno.test("a non-manual_gedcom job fails without writing a file", async () => {
-  const gw = new FakeExportGateway({ type: "manual_full" });
+Deno.test("a scheduled_full job fails without writing a file", async () => {
+  const gw = new FakeExportGateway({ type: "scheduled_full" });
   const outcome = await runExport({
     jobId: JOB_ID,
     gateway: gw,
@@ -836,3 +908,146 @@ Deno.test("a non-manual_gedcom job fails without writing a file", async () => {
   );
   assertEquals(gw.uploads.size, 0);
 });
+
+// --- manual_full (#124) ------------------------------------------------
+
+const NO_DATE = {
+  date_value_raw: null,
+  date_kind: null,
+  date_year1: null,
+  date_month1: null,
+  date_day1: null,
+  date_year2: null,
+  date_month2: null,
+  date_day2: null,
+  date_calendar: null,
+  date_dual_year: null,
+  date_phrase: null,
+};
+
+function mediaRow(
+  n: number,
+  original_filename: string | null,
+  storage_path_original: string | null,
+  mime_type = "image/jpeg",
+): MediaRow {
+  return {
+    id: `aaaaaaaa-0000-4000-8000-0000000000${String(n).padStart(2, "0")}`,
+    gedcom_xref: `@O${String(n)}@`,
+    original_filename,
+    mime_type,
+    title: null,
+    storage_path_original,
+    raw_gedcom: null,
+    created_at: `2020-01-01T00:00:${String(n).padStart(2, "0")}.000Z`,
+    ...NO_DATE,
+  };
+}
+
+const JPEG_A = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x01]);
+const JPEG_B = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x02]);
+
+Deno.test(
+  "manual_full: the archive holds gedcom.ged plus every stored original under the FILE name",
+  async () => {
+    const tree: TreeRows = {
+      ...EMPTY_TREE,
+      media: [
+        mediaRow(1, "C:\\Users\\Jane\\photo.jpg", "m1/original.jpg"),
+        mediaRow(2, "photo.jpg", "m2/original.jpg"),
+        mediaRow(3, "lost.jpg", null),
+      ],
+    };
+    const gw = new FakeExportGateway({
+      tree,
+      type: "manual_full",
+      mediaObjects: new Map([
+        ["m1/original.jpg", JPEG_A],
+        ["m2/original.jpg", JPEG_B],
+      ]),
+    });
+
+    const outcome = await runExport({
+      jobId: JOB_ID,
+      gateway: gw,
+      now: FIXED_NOW,
+    });
+
+    assertEquals(outcome.status, "completed");
+    assertEquals(outcome.storagePath, `exports/${JOB_ID}.gdz`);
+    assertEquals(gw.uploads.size, 0);
+    const archive = gw.archives.get(`${JOB_ID}.gdz`);
+    assert(archive !== undefined, "one archive written");
+    assertEquals(outcome.sizeBytes, archive.length);
+    assertEquals(gw.currentJob.status, "completed");
+    assertEquals(
+      gw.patches.find((p) => p.status === "completed")?.size_bytes,
+      archive.length,
+    );
+
+    const zip = readGedZip(archive);
+    assertEquals(zip.gedcomEntryName, GEDZIP_GEDCOM_ENTRY);
+    // Flat basenames; the second `photo.jpg` is told apart by its id.
+    assertEquals(zip.mediaEntryNames, ["photo.jpg", "photo-aaaaaaaa.jpg"]);
+    const entries = readMediaEntries(archive, new Set(zip.mediaEntryNames));
+    assertEquals(entries.get("photo.jpg"), JPEG_A);
+    assertEquals(entries.get("photo-aaaaaaaa.jpg"), JPEG_B);
+
+    // The .ged's FILE values are the entry names, so a re-import resolves
+    // each one exactly; the record with no stored file keeps its name.
+    const parsed = readGedcom(zip.gedcomText);
+    assertEquals(
+      parsed.media.map((m) => [m.gedcom_xref, m.original_filename]),
+      [
+        ["@O1@", "photo.jpg"],
+        ["@O2@", "photo-aaaaaaaa.jpg"],
+        ["@O3@", "lost.jpg"],
+      ],
+    );
+    assertEquals(
+      outcome.warnings.filter((w) => w.includes("lost.jpg")).length,
+      1,
+    );
+  },
+);
+
+Deno.test(
+  "manual_full: a media original that cannot be read fails the job instead of writing a partial archive",
+  async () => {
+    const tree: TreeRows = {
+      ...EMPTY_TREE,
+      media: [mediaRow(1, "photo.jpg", "m1/original.jpg")],
+    };
+    const gw = new FakeExportGateway({ tree, type: "manual_full" });
+
+    const outcome = await runExport({
+      jobId: JOB_ID,
+      gateway: gw,
+      now: FIXED_NOW,
+    });
+
+    assertEquals(outcome.status, "failed");
+    assertEquals(gw.currentJob.status, "failed");
+    assert(
+      gw.patches.some((p) => p.error_text?.includes("m1/original.jpg")),
+      "error_text names the missing object",
+    );
+    assertEquals(gw.patches.some((p) => p.status === "completed"), false);
+  },
+);
+
+Deno.test(
+  "manual_full with no media is a GedZip with just the .ged",
+  async () => {
+    const gw = new FakeExportGateway({ type: "manual_full" });
+    const outcome = await runExport({
+      jobId: JOB_ID,
+      gateway: gw,
+      now: FIXED_NOW,
+    });
+    assertEquals(outcome.status, "completed");
+    const archive = gw.archives.get(`${JOB_ID}.gdz`);
+    assert(archive !== undefined);
+    assertEquals(readGedZip(archive).mediaEntryNames, []);
+  },
+);
