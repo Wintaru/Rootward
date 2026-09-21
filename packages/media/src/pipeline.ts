@@ -7,6 +7,11 @@
  */
 
 import { sniffMimeType } from "./mime.ts";
+import {
+  applyExifOrientation,
+  orientationToApply,
+  type ExifOrientation,
+} from "./orientation.ts";
 
 const THUMB_MAX_DIMENSION = 240;
 const DISPLAY_MAX_DIMENSION = 1200;
@@ -52,6 +57,21 @@ export interface ExifResult {
    * or `null` when absent/unparseable. */
   readonly dateTaken: string | null;
   readonly hasGps: boolean;
+  /** The EXIF `Orientation` tag as written, or `null` when absent. */
+  readonly orientation: ExifOrientation | null;
+}
+
+/** What the `media.exif` jsonb records about the processing -- the one
+ * declaration every writer (`media-process`, `gedcom-import`, the browser's
+ * import sidecar) shares. */
+export interface MediaExifMeta {
+  readonly hasGps: boolean;
+  readonly gpsStripped: boolean;
+  /** The `Orientation` tag value the decoded raster was turned by so the
+   * derivatives come out upright (2-8), or `null` when nothing was applied.
+   * Informational: `media.rotation` stays the moderator's own edit on top of
+   * the upright image, never this. */
+  readonly orientationApplied: ExifOrientation | null;
 }
 
 export interface GpsStripResult {
@@ -94,7 +114,7 @@ export interface ProcessedMediaBytes {
   readonly finalBytes: Uint8Array;
   readonly derivatives: MediaDerivatives | null;
   readonly dateTaken: string | null;
-  readonly exif: { readonly hasGps: boolean; readonly gpsStripped: boolean };
+  readonly exif: MediaExifMeta;
   readonly warnings: readonly string[];
 }
 
@@ -125,12 +145,43 @@ export type ReadyMediaFile =
         readonly thumb: Uint8Array;
         readonly display: Uint8Array;
       } | null;
-      readonly exif: {
-        readonly hasGps: boolean;
-        readonly gpsStripped: boolean;
-      };
+      readonly exif: MediaExifMeta;
       readonly warnings: readonly string[];
     };
+
+export interface UprightImage {
+  readonly image: DecodedImage;
+  /** See {@link MediaExifMeta.orientationApplied}. */
+  readonly orientationApplied: ExifOrientation | null;
+}
+
+/**
+ * Decode `bytes` and turn the raster upright per its EXIF `Orientation`
+ * (issue #108). The one decode path for anything that goes on to encode
+ * derivatives -- a first upload here, and the rotate/crop editor's
+ * regeneration in `apps/web/lib/media/regenerate.ts` -- so `media.rotation`
+ * and `media.crop_*` always mean "on top of the upright image". `null` when
+ * the MIME has no codec.
+ */
+export async function decodeUpright(
+  bytes: Uint8Array,
+  mimeType: string,
+  orientation: ExifOrientation | null,
+  codec: ImageCodec,
+): Promise<UprightImage | null> {
+  const decoded = await codec.decode(bytes, mimeType);
+  if (decoded === null) {
+    return null;
+  }
+  const toApply = orientationToApply(mimeType, orientation);
+  if (toApply === null) {
+    return { image: decoded, orientationApplied: null };
+  }
+  return {
+    image: applyExifOrientation(decoded, toApply),
+    orientationApplied: toApply,
+  };
+}
 
 /**
  * Validate `original` against `settings`, strip GPS EXIF when asked for and
@@ -171,10 +222,17 @@ export async function processMediaBytes(
   }
 
   let derivatives: ProcessedMediaBytes["derivatives"] = null;
+  let orientationApplied: ExifOrientation | null = null;
   try {
-    const decoded = await codec.decode(finalBytes, mimeType);
-    if (decoded !== null) {
-      derivatives = await generateDerivatives(decoded, codec);
+    const upright = await decodeUpright(
+      finalBytes,
+      mimeType,
+      exifResult.orientation,
+      codec,
+    );
+    if (upright !== null) {
+      derivatives = await generateDerivatives(upright.image, codec);
+      orientationApplied = upright.orientationApplied;
     } else {
       warnings.push(`no thumbnail codec for ${mimeType}; stored original only`);
     }
@@ -190,7 +248,7 @@ export async function processMediaBytes(
       finalBytes,
       derivatives,
       dateTaken: exifResult.dateTaken,
-      exif: { hasGps: exifResult.hasGps, gpsStripped },
+      exif: { hasGps: exifResult.hasGps, gpsStripped, orientationApplied },
       warnings,
     },
   };

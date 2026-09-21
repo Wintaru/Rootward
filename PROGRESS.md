@@ -58,7 +58,39 @@ name, label `phase:11`, filed 2026-09-21; contract in `docs/SPEC.md` §10
 (#129, #130), the RLS test gap (#100, #109), a security once-over (#132),
 and release mechanics (#131, last). The external accounts Josh sets up on
 his side (Supabase project, Google OAuth client, SMTP, Vercel, a server)
-are in `EXTERNAL-SETUP-HANDOFF.md` (local). **Next session:** #108.
+are in `EXTERNAL-SETUP-HANDOFF.md` (local). **Next session:** #125.
+
+**Issue #108 — EXIF Orientation on derivatives: done, staged on branch
+`fix/exif-orientation`, issue closed.** SPEC §4.4 `rotation` / `crop_*`.
+
+- `packages/media/src/orientation.ts`: `ExifOrientation` (1-8),
+  `applyExifOrientation` (flip-horizontal first, then a quarter-turn —
+  the order matters for 5 and 7), `orientationToApply` (null for absent /
+  1 / HEIC — libheif applies `irot`/`imir` itself, so the tag would turn
+  an iPhone photo twice). `exif.ts` picks `Orientation` with
+  `translateValues: false` (exifr otherwise returns "Rotate 90 CW").
+  `pipeline.ts` gains `decodeUpright`, the one decode path for anything
+  that encodes derivatives: `processMediaBytes` and the rotate/crop
+  editor's `loadEditableOriginal` both go through it, so `media.rotation`
+  and `crop_*` now mean "on top of the upright image". `MediaExifMeta`
+  (`hasGps`, `gpsStripped`, `orientationApplied`) replaces the four
+  inline copies of the exif shape; the import sidecar carries
+  `orientationApplied` as a plain number (older in-flight sidecars read
+  as `null`).
+- Tests: all eight tag values against hand-derived stored rasters,
+  `orientationToApply`, a real-`exifr` read of the tag with the date still
+  revived, a real-codec `pipeline.test.ts` (40×20 JPEG tagged 6 → 20×40
+  thumb), and two fake-codec `runMediaProcess` cases (JPEG turns, HEIC
+  does not). Gate green: typecheck, lint, format, build, **896** vitest,
+  71 Deno.
+- Accepted consequence (review advisory): a **legacy** media row whose
+  moderator rotation or crop compensated for the raw raster will look
+  wrong in the editor preview on its next open — the moderator resets it
+  and saves. No backfill: pre-1.0, single-tenant, and the wipe + re-import
+  path regenerates everything. Not live-checked in the app (needs
+  `supabase functions serve`, Josh's call) — the real-codec test covers
+  the same engine path `media-process` runs. `exifr` does not parse WebP
+  EXIF, so a WebP with an Orientation tag stays as decoded.
 
 **Issue #81 — Contrast audit: done, staged on branch
 `feat/contrast-audit`, issue closed.** SPEC §10 Phase 10, §8.1.

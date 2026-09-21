@@ -18,7 +18,7 @@
  * item to hang bytes off of, and stays reference-only as it always has.
  */
 
-import { EXTENSION_FOR_MIME } from "@rootward/media";
+import { EXTENSION_FOR_MIME, type MediaExifMeta } from "@rootward/media";
 import type { MatchedMediaFile, ParsedMedia } from "@rootward/gedcom";
 
 import type { ReadyMediaFile } from "./importer.ts";
@@ -29,7 +29,7 @@ export interface MediaBytesPatch {
   readonly storagePathOriginal: string;
   readonly storagePathThumb: string | null;
   readonly storagePathDisplay: string | null;
-  readonly exif: { readonly hasGps: boolean; readonly gpsStripped: boolean };
+  readonly exif: MediaExifMeta;
 }
 
 export interface MediaAttachGateway {

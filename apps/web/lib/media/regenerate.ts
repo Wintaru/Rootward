@@ -1,6 +1,8 @@
 import {
   applyTransform,
+  createExifTools,
   createImageCodec,
+  decodeUpright,
   generateDerivatives,
   resizeImage,
   type DecodedImage,
@@ -22,7 +24,9 @@ import {
 const PREVIEW_MAX_DIMENSION = 1000;
 
 export interface EditableOriginal {
-  /** Full-resolution, unrotated -- what the derivatives are cut from. */
+  /** Full-resolution and upright (EXIF `Orientation` applied, issue #108)
+   * -- what the derivatives are cut from, and what `media.rotation` is on
+   * top of. */
   readonly original: DecodedImage;
   /** A downscaled copy for the on-screen preview. */
   readonly preview: DecodedImage;
@@ -39,10 +43,17 @@ export async function loadEditableOriginal(
     throw new Error(`loadEditableOriginal: HTTP ${response.status}`);
   }
   const bytes = new Uint8Array(await response.arrayBuffer());
-  const original = await createImageCodec().decode(bytes, mimeType);
-  if (original === null) {
+  const { orientation } = await createExifTools().read(bytes, mimeType);
+  const upright = await decodeUpright(
+    bytes,
+    mimeType,
+    orientation,
+    createImageCodec(),
+  );
+  if (upright === null) {
     return null;
   }
+  const original = upright.image;
   const preview = await resizeImage(original, PREVIEW_MAX_DIMENSION);
   return { original, preview };
 }

@@ -54,6 +54,8 @@ interface FakeState {
   readonly objects: Map<string, Uint8Array>;
   readonly removed: string[];
   readonly media: MediaRowInsert[];
+  /** `[width, height]` of every raster handed to `encodeWebp`. */
+  readonly encodedSizes: [number, number][];
   readonly links: MediaLinkInsert[];
   stripCalls: number;
   decodeCalls: number;
@@ -118,16 +120,18 @@ function createFakeCodec(state: FakeState, supportsHeic = true): ImageCodec {
       }
       return Promise.resolve(null);
     },
-    encodeWebp: (_image, maxDimension) =>
-      Promise.resolve(
+    encodeWebp: (image, maxDimension) => {
+      state.encodedSizes.push([image.width, image.height]);
+      return Promise.resolve(
         new Uint8Array([0x52, 0x49, 0x46, 0x46, maxDimension & 0xff]),
-      ),
+      );
+    },
   };
 }
 
 function createFakeExif(
   state: FakeState,
-  result: ExifResult = { dateTaken: null, hasGps: false },
+  result: ExifResult = { dateTaken: null, hasGps: false, orientation: null },
 ): ExifTools {
   return {
     read: () => Promise.resolve(result),
@@ -146,6 +150,7 @@ function newState(): FakeState {
     objects: new Map(),
     removed: [],
     media: [],
+    encodedSizes: [],
     links: [],
     stripCalls: 0,
     decodeCalls: 0,
@@ -178,7 +183,11 @@ Deno.test(
       {
         gateway: createFakeGateway(state),
         codec: createFakeCodec(state),
-        exif: createFakeExif(state, { dateTaken: "2020-05-14", hasGps: true }),
+        exif: createFakeExif(state, {
+          dateTaken: "2020-05-14",
+          hasGps: true,
+          orientation: null,
+        }),
         newId: () => "m1",
       },
     );
@@ -204,7 +213,11 @@ Deno.test(
     assertEquals(row.mimeType, "image/jpeg");
     assertEquals(row.storagePathThumb, "m1/thumb.webp");
     assertEquals(row.storagePathDisplay, "m1/display.webp");
-    assertEquals(row.exif, { hasGps: true, gpsStripped: true });
+    assertEquals(row.exif, {
+      hasGps: true,
+      gpsStripped: true,
+      orientationApplied: null,
+    });
     assertExists(row.date);
     assertEquals(row.date?.date_year1, 2020);
 
@@ -216,6 +229,61 @@ Deno.test(
         sortOrder: 0,
       },
     ]);
+  },
+);
+
+Deno.test(
+  "runMediaProcess: a JPEG shot in portrait (Orientation 6) encodes upright derivatives and records the turn (#108)",
+  async () => {
+    const state = newState();
+    const staging = stagePath(state, JPEG_BYTES);
+    const outcome = await runMediaProcess(
+      { ...BASE_INPUT, stagingPath: staging },
+      {
+        gateway: createFakeGateway(state),
+        codec: createFakeCodec(state),
+        exif: createFakeExif(state, {
+          dateTaken: null,
+          hasGps: false,
+          orientation: 6,
+        }),
+        newId: () => "m6",
+      },
+    );
+
+    assertEquals(outcome.status, "processed");
+    // The fake decoder hands back 400x300; a 90 CW turn makes it 300x400,
+    // and both derivatives must be cut from that upright raster.
+    assertEquals(state.encodedSizes, [[300, 400], [300, 400]]);
+    assertEquals(state.media[0].exif, {
+      hasGps: false,
+      gpsStripped: false,
+      orientationApplied: 6,
+    });
+  },
+);
+
+Deno.test(
+  "runMediaProcess: HEIC ignores the Orientation tag -- libheif already applied the turn (#108)",
+  async () => {
+    const state = newState();
+    const staging = stagePath(state, HEIC_BYTES, "staging/portrait.heic");
+    await runMediaProcess(
+      { ...BASE_INPUT, stagingPath: staging, originalFilename: "p.heic" },
+      {
+        gateway: createFakeGateway(state),
+        codec: createFakeCodec(state),
+        exif: createFakeExif(state, {
+          dateTaken: null,
+          hasGps: false,
+          orientation: 6,
+        }),
+        newId: () => "m6h",
+      },
+    );
+
+    assertEquals(state.encodedSizes, [[400, 300], [400, 300]]);
+    assertEquals(state.media[0].exif.orientationApplied, null);
   },
 );
 
@@ -410,14 +478,22 @@ Deno.test(
           stripExifGps: false,
         }),
         codec: createFakeCodec(state),
-        exif: createFakeExif(state, { dateTaken: null, hasGps: true }),
+        exif: createFakeExif(state, {
+          dateTaken: null,
+          hasGps: true,
+          orientation: null,
+        }),
         newId: () => "m8",
       },
     );
 
     assertEquals(state.stripCalls, 0);
     assertEquals(state.objects.get("m8/original.jpg"), JPEG_BYTES);
-    assertEquals(state.media[0].exif, { hasGps: true, gpsStripped: false });
+    assertEquals(state.media[0].exif, {
+      hasGps: true,
+      gpsStripped: false,
+      orientationApplied: null,
+    });
   },
 );
 
@@ -431,7 +507,8 @@ Deno.test(
       "staging/upload-heic-gps.heic",
     );
     const exif: ExifTools = {
-      read: () => Promise.resolve({ dateTaken: null, hasGps: true }),
+      read: () =>
+        Promise.resolve({ dateTaken: null, hasGps: true, orientation: null }),
       // Mirrors the real exif.ts: image/heic can't be edited in place, so
       // stripGps reports stripped: false and hands the bytes back untouched.
       stripGps: (bytes) => Promise.resolve({ bytes, stripped: false }),
@@ -449,7 +526,11 @@ Deno.test(
     // The bytes are untouched -- the original still carries the GPS data --
     // and the DB record must not claim otherwise.
     assertEquals(state.objects.get("m8b/original.heic"), HEIC_BYTES);
-    assertEquals(state.media[0].exif, { hasGps: true, gpsStripped: false });
+    assertEquals(state.media[0].exif, {
+      hasGps: true,
+      gpsStripped: false,
+      orientationApplied: null,
+    });
     if (outcome.status === "processed") {
       assertEquals(
         outcome.warnings.some((w) => w.includes("could not be stripped")),

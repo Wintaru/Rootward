@@ -14,6 +14,7 @@
  */
 
 export {
+  decodeUpright,
   EXTENSION_FOR_MIME,
   generateDerivatives,
   processMediaBytes,
@@ -21,6 +22,7 @@ export {
 export type {
   DecodedImage,
   MediaDerivatives,
+  MediaExifMeta,
   ExifResult,
   ExifTools,
   GpsStripResult,
@@ -29,6 +31,7 @@ export type {
   ProcessMediaBytesOutcome,
   ReadyMediaFile,
   TreeMediaSettings,
+  UprightImage,
 } from "./pipeline.ts";
 
 export { createImageCodec, resizeImage } from "./codec.ts";
@@ -48,3 +51,11 @@ export {
   ROTATIONS,
 } from "./transform.ts";
 export type { CropRect, MediaTransform, Rotation } from "./transform.ts";
+export {
+  applyExifOrientation,
+  EXIF_ORIENTATIONS,
+  flipHorizontal,
+  isExifOrientation,
+  orientationToApply,
+} from "./orientation.ts";
+export type { ExifOrientation } from "./orientation.ts";

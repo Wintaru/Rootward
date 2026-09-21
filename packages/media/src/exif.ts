@@ -10,7 +10,8 @@
 import exifr from "exifr";
 import piexifRaw from "piexifjs";
 
-import type { ExifTools } from "./pipeline.ts";
+import { isExifOrientation } from "./orientation.ts";
+import type { ExifResult, ExifTools } from "./pipeline.ts";
 
 // piexifjs ships as a CommonJS default export with no types.
 const piexif = piexifRaw as {
@@ -24,6 +25,12 @@ const piexif = piexifRaw as {
 
 const GPS_STRIPPABLE_MIME = "image/jpeg";
 
+const NO_EXIF: ExifResult = {
+  dateTaken: null,
+  hasGps: false,
+  orientation: null,
+};
+
 export function createExifTools(): ExifTools {
   return {
     async read(bytes) {
@@ -34,26 +41,35 @@ export function createExifTools(): ExifTools {
             "CreateDate",
             "GPSLatitude",
             "GPSLongitude",
+            "Orientation",
           ],
+          // Off so `Orientation` arrives as its numeric tag value (6), not
+          // exifr's label ("Rotate 90 CW"). Dates and GPS are *revived*, a
+          // separate option, so they still come back as `Date` / degrees.
+          translateValues: false,
         })) as
           | {
               DateTimeOriginal?: Date;
               CreateDate?: Date;
               GPSLatitude?: number;
               GPSLongitude?: number;
+              Orientation?: unknown;
             }
           | undefined;
         if (tags === undefined) {
-          return { dateTaken: null, hasGps: false };
+          return NO_EXIF;
         }
         return {
           dateTaken: formatLocalDate(tags.DateTimeOriginal ?? tags.CreateDate),
           hasGps:
             tags.GPSLatitude !== undefined && tags.GPSLongitude !== undefined,
+          orientation: isExifOrientation(tags.Orientation)
+            ? tags.Orientation
+            : null,
         };
       } catch {
         // No EXIF segment, or one exifr can't parse -- not fatal to the upload.
-        return { dateTaken: null, hasGps: false };
+        return NO_EXIF;
       }
     },
 

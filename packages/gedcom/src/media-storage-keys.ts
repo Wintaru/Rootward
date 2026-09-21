@@ -48,6 +48,12 @@ export type MediaMetaJson =
       readonly hasDerivatives: boolean;
       readonly hasGps: boolean;
       readonly gpsStripped: boolean;
+      /** The EXIF `Orientation` value (2-8) applied to make the derivatives
+       * upright, `null` when none (issue #108). A plain number here, not
+       * `@rootward/media`'s `ExifOrientation` -- see the note above on why
+       * this package does not import from there. Absent on a sidecar
+       * written before the field existed. */
+      readonly orientationApplied?: number | null;
       readonly warnings: readonly string[];
     };
 

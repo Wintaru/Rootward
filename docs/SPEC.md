@@ -282,8 +282,8 @@ Republican are stored raw with `date_phrase` set, no conversion.
 | `storage_path_original` | text | Path in the private bucket. |
 | `storage_path_thumb` | text | ~240px WebP. Repointed at a fresh versioned path (`<id>/thumb-<token>.webp`) after a rotate/crop. |
 | `storage_path_display` | text | ~1200px WebP. Same versioning as the thumb. |
-| `rotation` | smallint | `0 · 90 · 180 · 270`, clockwise, default `0`. A non-destructive edit: the original is never rewritten, the derivatives are regenerated with it applied. |
-| `crop_x / crop_y / crop_width / crop_height` | integer | Optional crop rectangle in the *rotated* original's pixel space, all four set or all null (CHECK). Applied after `rotation` when the derivatives are regenerated. |
+| `rotation` | smallint | `0 · 90 · 180 · 270`, clockwise, default `0`. A non-destructive edit on top of the original *after its EXIF `Orientation` is applied* (issue #108 — the decoder returns the raw sensor raster, the pipeline turns it upright first). The original is never rewritten, the derivatives are regenerated with it applied. |
+| `crop_x / crop_y / crop_width / crop_height` | integer | Optional crop rectangle in the *rotated* upright original's pixel space, all four set or all null (CHECK). Applied after `rotation` when the derivatives are regenerated. |
 | `title` | text | |
 | `date_*` | (embedded date set) | "Date taken". |
 | `exif` | jsonb | GPS stripped when `tree_settings.strip_exif_gps` (default true). |

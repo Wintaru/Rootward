@@ -37,7 +37,12 @@ export type {
   ImageCodec,
   TreeMediaSettings,
 } from "@rootward/media";
-import type { ExifTools, ImageCodec, TreeMediaSettings } from "@rootward/media";
+import type {
+  ExifTools,
+  ImageCodec,
+  MediaExifMeta,
+  TreeMediaSettings,
+} from "@rootward/media";
 
 /** SPEC §4.4 `media_owner` -- guarded against the migration enum by
  * `schema_parity.test.ts`. The single array (not a separate type + a second
@@ -75,7 +80,7 @@ export interface MediaRowInsert {
   readonly storagePathThumb: string | null;
   readonly storagePathDisplay: string | null;
   readonly date: GenealogyDateFields | null;
-  readonly exif: { readonly hasGps: boolean; readonly gpsStripped: boolean };
+  readonly exif: MediaExifMeta;
   readonly uploadedBy: string | null;
 }
 

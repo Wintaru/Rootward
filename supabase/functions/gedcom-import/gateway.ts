@@ -13,7 +13,11 @@ import {
   MEDIA_SUBPREFIX,
   type MediaMetaJson,
 } from "@rootward/gedcom";
-import { EXTENSION_FOR_MIME } from "@rootward/media";
+import {
+  EXTENSION_FOR_MIME,
+  isExifOrientation,
+  orientationToApply,
+} from "@rootward/media";
 
 import type { MediaBytesPatch } from "./media-attach.ts";
 import type {
@@ -306,7 +310,18 @@ async function readReadyMediaFolder(
     mimeType: meta.mimeType,
     originalBytes,
     derivatives,
-    exif: { hasGps: meta.hasGps, gpsStripped: meta.gpsStripped },
+    exif: {
+      hasGps: meta.hasGps,
+      gpsStripped: meta.gpsStripped,
+      // A sidecar written before the field existed reads as `null`; the
+      // same rule as the pipeline keeps `1` out of the jsonb too.
+      orientationApplied: orientationToApply(
+        meta.mimeType,
+        isExifOrientation(meta.orientationApplied)
+          ? meta.orientationApplied
+          : null,
+      ),
+    },
     warnings: meta.warnings,
   };
 }

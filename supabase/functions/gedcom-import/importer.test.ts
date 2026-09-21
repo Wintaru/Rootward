@@ -449,7 +449,7 @@ function processedJpeg(bytes: Uint8Array): ReadyMediaFile {
     mimeType: "image/jpeg",
     originalBytes: bytes,
     derivatives: null,
-    exif: { hasGps: false, gpsStripped: false },
+    exif: { hasGps: false, gpsStripped: false, orientationApplied: null },
     warnings: [],
   };
 }

@@ -160,6 +160,7 @@ export async function uploadImportFiles(
       hasDerivatives: ready.derivatives !== null,
       hasGps: ready.exif.hasGps,
       gpsStripped: ready.exif.gpsStripped,
+      orientationApplied: ready.exif.orientationApplied,
       warnings: ready.warnings,
     });
   }

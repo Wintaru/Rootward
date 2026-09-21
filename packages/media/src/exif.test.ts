@@ -13,6 +13,8 @@ import { describe, expect, it } from "vitest";
 import { createExifTools } from "./exif.ts";
 
 const piexif = piexifRaw as {
+  ImageIFD: { Orientation: number };
+  ExifIFD: { DateTimeOriginal: number };
   GPSIFD: {
     GPSLatitudeRef: number;
     GPSLatitude: number;
@@ -45,15 +47,26 @@ function binaryStringToBytes(binary: string): Uint8Array {
   return out;
 }
 
-/** A real, valid JPEG with a real GPS IFD embedded via `piexifjs` itself. */
-async function jpegWithGps(): Promise<Uint8Array> {
+/** A real, valid JPEG with the given EXIF dictionary embedded via
+ * `piexifjs` itself. */
+async function jpegWith(exifObj: {
+  "0th": Record<number, unknown>;
+  Exif: Record<number, unknown>;
+  GPS: Record<number, unknown>;
+}): Promise<Uint8Array> {
   const raw = {
     width: 2,
     height: 2,
     data: new Uint8ClampedArray(2 * 2 * 4).fill(180),
   };
   const plainJpeg = new Uint8Array(await encodeJpeg(raw));
-  const exifObj = {
+  const binary = bytesToBinaryString(plainJpeg);
+  const exifBytes = piexif.dump({ ...exifObj, "1st": {}, thumbnail: null });
+  return binaryStringToBytes(piexif.insert(exifBytes, binary));
+}
+
+function jpegWithGps(): Promise<Uint8Array> {
+  return jpegWith({
     "0th": {},
     Exif: {},
     GPS: {
@@ -70,19 +83,39 @@ async function jpegWithGps(): Promise<Uint8Array> {
         [0, 1],
       ],
     },
-    "1st": {},
-    thumbnail: null,
-  };
-  const binary = bytesToBinaryString(plainJpeg);
-  const exifBytes = piexif.dump(exifObj);
-  return binaryStringToBytes(piexif.insert(exifBytes, binary));
+  });
 }
 
 describe("createExifTools", () => {
   it("read: a PNG with no EXIF segment reports nothing found", async () => {
     const exif = createExifTools();
     const result = await exif.read(PNG_BYTES, "image/png");
-    expect(result).toEqual({ dateTaken: null, hasGps: false });
+    expect(result).toEqual({
+      dateTaken: null,
+      hasGps: false,
+      orientation: null,
+    });
+  });
+
+  it("read: the Orientation tag comes back as its numeric value, with the date still revived (#108)", async () => {
+    const exif = createExifTools();
+    const bytes = await jpegWith({
+      "0th": { [piexif.ImageIFD.Orientation]: 6 },
+      Exif: { [piexif.ExifIFD.DateTimeOriginal]: "2021:07:04 15:30:00" },
+      GPS: {},
+    });
+    const result = await exif.read(bytes, "image/jpeg");
+    expect(result).toEqual({
+      dateTaken: "2021-07-04",
+      hasGps: false,
+      orientation: 6,
+    });
+  });
+
+  it("read: a JPEG with EXIF but no Orientation tag reports orientation null", async () => {
+    const exif = createExifTools();
+    const result = await exif.read(await jpegWithGps(), "image/jpeg");
+    expect(result.orientation).toBeNull();
   });
 
   it("read: a JPEG with an embedded GPS IFD reports hasGps", async () => {

@@ -762,7 +762,7 @@ Deno.test({
         mimeType: m.mime_type,
         originalBytes: fileBytes,
         derivatives: null,
-        exif: { hasGps: false, gpsStripped: false },
+        exif: { hasGps: false, gpsStripped: false, orientationApplied: null },
         warnings: [],
       });
     }
