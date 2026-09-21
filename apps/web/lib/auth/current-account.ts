@@ -3,6 +3,7 @@ import "server-only";
 import { cache } from "react";
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import type { StoredAppearance } from "@/lib/theme/preference";
 
 import type { AccountAccess } from "./access";
 
@@ -17,6 +18,9 @@ export interface CurrentAccount {
   /** `account.person_id` — the linked person, for the header's "My record"
    * link (#50). Null when unlinked or when there is no `account` row yet. */
   readonly personId: string | null;
+  /** `account.theme` / `account.color_mode` (#80), raw — the layout narrows
+   * them through `resolveThemePreference`. Null with no `account` row. */
+  readonly appearance: StoredAppearance | null;
 }
 
 /**
@@ -54,7 +58,7 @@ export const getCurrentAccount = cache(
 
     const { data: account, error: accountError } = await supabase
       .from("account")
-      .select("role, status, person_id, display_name")
+      .select("role, status, person_id, display_name, theme, color_mode")
       .eq("id", user.id)
       .maybeSingle();
 
@@ -73,6 +77,10 @@ export const getCurrentAccount = cache(
           ? null
           : { role: account.role, status: account.status },
       personId: account?.person_id ?? null,
+      appearance:
+        account === null
+          ? null
+          : { theme: account.theme, colorMode: account.color_mode },
     };
   },
 );

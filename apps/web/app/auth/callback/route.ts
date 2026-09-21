@@ -3,7 +3,13 @@ import { NextResponse, type NextRequest } from "next/server";
 import { maybeAcceptInvitation } from "@/lib/auth/accept-invitation";
 import { maybeBootstrapAdmin } from "@/lib/auth/bootstrap-admin";
 import { resolveRequestOrigin } from "@/lib/auth/request-origin";
+import { getAppearance } from "@/lib/db";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import {
+  APPEARANCE_COOKIE_OPTIONS,
+  appearanceCookies,
+  toThemePreference,
+} from "@/lib/theme/preference";
 
 /**
  * `/auth/callback` — the single return point for both sign-in methods
@@ -16,6 +22,11 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
  * session cookie the exchange just wrote is scoped to that host, so sending
  * them to `request.url`'s origin — the one the server bound — would strand
  * them on `/login` with a cookie that does not apply.
+ *
+ * The final redirect also carries the `rw-theme` / `rw-mode` cookies from
+ * the account (#80), so this device's signed-out login page and the
+ * pre-paint script match the member who just signed in. A failed read is
+ * not fatal: the cookies simply keep whatever they held.
  */
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const requestUrl = new URL(request.url);
@@ -62,5 +73,23 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     // Fall through to the redirect below.
   }
 
-  return NextResponse.redirect(`${origin}${next}`);
+  const response = NextResponse.redirect(`${origin}${next}`);
+  try {
+    const stored = await getAppearance(supabase, data.user.id);
+    if (stored !== null) {
+      const preference = toThemePreference(stored.theme, stored.colorMode);
+      for (const cookie of appearanceCookies(preference)) {
+        response.cookies.set(
+          cookie.name,
+          cookie.value,
+          APPEARANCE_COOKIE_OPTIONS,
+        );
+      }
+    }
+  } catch (error: unknown) {
+    console.error(
+      `auth/callback: appearance cookies: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  return response;
 }

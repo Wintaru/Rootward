@@ -40,25 +40,30 @@ export const metadata: Metadata = {
  * signed-out visitor gets no header at all, no layout shift — they can reach
  * only `/login` and the `/auth/*` handlers.
  *
- * Theme (#75, decision 38): `<html>` carries `data-theme`, the chassis
- * `data-*` switches, and `.dark`, all resolved server-side from the
- * preference cookies so the first paint is already themed. In `system`
- * mode the class is added client-side before paint by `SYSTEM_MODE_SCRIPT`,
- * so the server-rendered `className` and the hydrated one legitimately
- * differ — `suppressHydrationWarning` covers exactly that one element.
+ * Theme (#75, #80, decision 38): `<html>` carries `data-theme`, the chassis
+ * `data-*` switches, and `data-mode`, all resolved server-side — from the
+ * account when signed in, else the preference cookies — so the first paint
+ * is already themed. The `.dark` class is never in the server `className`:
+ * `SYSTEM_MODE_SCRIPT` adds it before first paint from `data-mode` (see
+ * that module for why the server must not own it), so the server-rendered
+ * `class` and the hydrated one legitimately differ —
+ * `suppressHydrationWarning` covers exactly that one element. The
+ * Appearance picker writes the same attributes client-side
+ * (`lib/theme/apply.ts`) so a pick shows before its save lands.
  */
 export default async function RootLayout({ children }: LayoutProps<"/">) {
-  const cookieStore = await cookies();
+  const [cookieStore, current] = await Promise.all([
+    cookies(),
+    getCurrentAccount(),
+  ]);
   const preference = resolveThemePreference(
     (name) => cookieStore.get(name)?.value,
+    current?.appearance ?? null,
   );
   const theme = themeById(preference.theme);
-  const htmlClassName = [
-    "h-full antialiased",
-    ...FONT_VARIABLE_CLASSES,
-    ...(preference.mode === "dark" ? ["dark"] : []),
-  ].join(" ");
-  const current = await getCurrentAccount();
+  const htmlClassName = ["h-full antialiased", ...FONT_VARIABLE_CLASSES].join(
+    " ",
+  );
   const navLinks = current !== null ? resolveHeaderNav(current) : [];
   const showBell = current !== null && isActiveModerator(current.account);
   const supabase = current !== null ? await createSupabaseServerClient() : null;
@@ -82,14 +87,13 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
       lang="en"
       className={htmlClassName}
       data-theme={theme.id}
+      data-mode={preference.mode}
       {...chassisAttributes(theme.chassis)}
       suppressHydrationWarning
     >
-      {preference.mode === "system" && (
-        <head>
-          <script dangerouslySetInnerHTML={{ __html: SYSTEM_MODE_SCRIPT }} />
-        </head>
-      )}
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: SYSTEM_MODE_SCRIPT }} />
+      </head>
       <body className="bg-background text-foreground flex min-h-full flex-col">
         {current !== null && (
           <header className="rw-header">
