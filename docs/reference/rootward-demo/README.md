@@ -52,9 +52,10 @@ matches each `OBJE` `FILE` to an archive entry and stores the bytes.
   `DATA`, inline and shared notes, `REFN` / `AFN` / `_FSFTID` ids, and SSNs
   on some living people (a sensitive fact).
 
-Nothing in a GEDCOM maps to `person.visibility`, so every imported person is
-`everyone_approved`. Set visibility in the app after import if a demo needs
-hidden people.
+A few living people carry Rootward's own `_ROOTWARD_VIS` tag — one for each
+rung of the visibility ladder (`hidden`, `moderators_only`, `close_family`)
+— and two facts on visible people are marked the same way. Everyone else
+imports as `everyone_approved`. Other genealogy tools ignore the tag.
 
 ## Change it
 

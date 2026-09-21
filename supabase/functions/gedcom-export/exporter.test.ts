@@ -14,6 +14,7 @@ import {
   FACT_TYPES,
   NAME_TYPE_KEYWORD,
 } from "../../../packages/gedcom/src/mapping.ts";
+import { VISIBILITY_VALUES } from "../../../packages/gedcom/src/types.ts";
 import { sniffMimeType } from "../../../packages/media/src/index.ts";
 import {
   CALENDARS,
@@ -494,6 +495,21 @@ Deno.test(
       distinct(events, (e) => e.type),
       [...new Set(Object.values(EVENT_TYPES)), "other"],
       "event types",
+    );
+    // The visibility ladder rides on `_ROOTWARD_VIS` (#126): every rung on
+    // a person, and a restricted fact on an otherwise visible person.
+    assertCovers(
+      distinct(parsed.persons, (p) => p.visibility),
+      VISIBILITY_VALUES,
+      "person visibility",
+    );
+    assert(
+      parsed.persons.some(
+        (p) =>
+          p.visibility === "everyone_approved" &&
+          p.facts.some((f) => f.visibility !== "everyone_approved"),
+      ),
+      "a restricted fact on a visible person",
     );
     assertCovers(
       distinct(facts, (f) => f.type),

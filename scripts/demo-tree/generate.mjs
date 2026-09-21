@@ -15,8 +15,10 @@
 // parents, adopted / step / foster / guardian / sealed children, twins, a
 // first-cousin marriage (pedigree collapse), an unlinked stray family, and
 // people of unknown or other sex. Dates cover every `genealogy_date_kind` and
-// every calendar the parser knows. Nothing here maps to `person.visibility`
-// (no GEDCOM tag does), so every imported person is `everyone_approved`.
+// every calendar the parser knows. A handful of living people carry
+// Rootward's own `_ROOTWARD_VIS` tag (#126) so the visibility ladder --
+// `hidden`, `moderators_only`, `close_family` -- is in the tree from the
+// import, and two facts on visible people are marked the same way.
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -2859,6 +2861,31 @@ for (const p of persons) {
   }
 }
 
+// The visibility ladder (#126): every rung on a few living people, and a
+// hidden / moderators-only fact on two visible living people. Chosen by
+// position, not by `rng`, so the rest of the tree is unchanged.
+{
+  const VISIBILITY_RUNGS = ["hidden", "moderators_only", "close_family"];
+  const livingPeople = persons.filter((p) => p.death === null);
+  livingPeople.forEach((p, i) => {
+    if (i % 40 === 7) {
+      p.visibility =
+        VISIBILITY_RUNGS[Math.floor(i / 40) % VISIBILITY_RUNGS.length];
+    }
+  });
+  const withFacts = livingPeople.filter(
+    (p) => p.visibility === undefined && p.facts.length > 0,
+  );
+  const hiddenFact = withFacts[5]?.facts[0];
+  if (hiddenFact !== undefined) {
+    hiddenFact.visibility = "hidden";
+  }
+  const moderatorsFact = withFacts[11]?.facts[0];
+  if (moderatorsFact !== undefined) {
+    moderatorsFact.visibility = "moderators_only";
+  }
+}
+
 // One title of nobility and one caste, for the two rarest fact types.
 {
   const gen0 = persons.find((p) => p.tags.has("gen0") && p.sex === "M");
@@ -3020,6 +3047,9 @@ function emitFact(level, fact) {
   emit(level, fact.tag, fact.value ?? null);
   if (fact.type !== undefined) {
     emit(level + 1, "TYPE", fact.type);
+  }
+  if (fact.visibility !== undefined) {
+    emit(level + 1, "_ROOTWARD_VIS", fact.visibility);
   }
   emitDate(level + 1, fact.date ?? null, { exact: true });
   if (fact.place) {
@@ -3257,6 +3287,9 @@ for (const p of persons) {
     emit(1, "AFN", p.afn);
   }
   emit(1, "_FSFTID", p.fsftid);
+  if (p.visibility !== undefined) {
+    emit(1, "_ROOTWARD_VIS", p.visibility);
+  }
   for (const n of p.notes) {
     emitNote(1, n);
   }
@@ -3383,10 +3416,11 @@ writeFileSync(
 );
 
 const living = persons.filter((p) => p.death === null).length;
+const restricted = persons.filter((p) => p.visibility !== undefined).length;
 const tally = (tag) => families.filter((f) => f.tags?.has(tag)).length;
 console.log(
   [
-    `Wrote ${GED_FILENAME}: ${persons.length} persons (${living} living), ${families.length} families,`,
+    `Wrote ${GED_FILENAME}: ${persons.length} persons (${living} living, ${restricted} restricted), ${families.length} families,`,
     `${sources.length} sources, ${repositories.length} repositories, ${mediaRecords.length} media, ${out.length} lines.`,
     `Generations: ${[...generations.keys()]
       .sort((a, b) => a - b)

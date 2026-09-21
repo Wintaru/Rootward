@@ -19616,6 +19616,7 @@
 2 DATE 16 NOV 2011
 2 PLAC Ipswich, Essex, Massachusetts, USA
 1 OCCU graphic designer
+2 _ROOTWARD_VIS hidden
 2 DATE FROM 1968 TO 2010
 2 PLAC Ipswich, Essex, Massachusetts, USA
 1 RELI Congregationalist
@@ -19830,6 +19831,7 @@
 1 REFN RW-0235
 2 TYPE Rootward demo id
 1 _FSFTID LS3G-G27B
+1 _ROOTWARD_VIS hidden
 1 NOTE Never learned to drive and saw no reason to start.
 1 SOUR @S13@
 2 PAGE clipping 108
@@ -21148,6 +21150,7 @@
 2 DATE 28 JUN 2014
 2 PLAC Lowell, Middlesex, Massachusetts, USA
 1 OCCU dental hygienist
+2 _ROOTWARD_VIS moderators_only
 2 DATE FROM 1971 TO 2015
 2 PLAC Lowell, Middlesex, Massachusetts, USA
 1 RELI Roman Catholic
@@ -24861,6 +24864,7 @@
 1 REFN RW-0318
 2 TYPE Rootward demo id
 1 _FSFTID 4QFS-WZ7Z
+1 _ROOTWARD_VIS moderators_only
 1 NOTE Built the porch swing that three later generations were photographed on.
 2 CONT Ran the household accounts down to the last cent.
 2 CONT Known in the family for a dry sense of humour and an unbeatable pie crust.
@@ -27526,6 +27530,7 @@
 1 REFN RW-0371
 2 TYPE Rootward demo id
 1 _FSFTID HM62-543S
+1 _ROOTWARD_VIS close_family
 1 NOTE Built the porch swing that three later generations were photographed on.
 2 CONT Lost a brother in the war and did not talk about it afterward.
 1 OBJE @O408@
@@ -29731,6 +29736,7 @@
 1 REFN RW-0417
 2 TYPE Rootward demo id
 1 _FSFTID VNKH-PSCV
+1 _ROOTWARD_VIS hidden
 1 NOTE Walked to church every Sunday regardless of the weather.
 1 OBJE @O462@
 2 _PRIM Y
@@ -31821,6 +31827,7 @@
 1 REFN RW-0462
 2 TYPE Rootward demo id
 1 _FSFTID 9KKC-FMXE
+1 _ROOTWARD_VIS moderators_only
 1 NOTE Lost a brother in the war and did not talk about it afterward.
 2 CONT Ran the household accounts down to the last cent.
 2 CONT Was the first in the family to finish high school.
@@ -33479,6 +33486,7 @@
 1 REFN RW-0502
 2 TYPE Rootward demo id
 1 _FSFTID YC7H-7S01
+1 _ROOTWARD_VIS close_family
 1 NOTE Never learned to drive and saw no reason to start.
 1 OBJE @O556@
 2 _PRIM Y
@@ -35209,6 +35217,7 @@
 1 REFN RW-0544
 2 TYPE Rootward demo id
 1 _FSFTID EM6M-V2PZ
+1 _ROOTWARD_VIS hidden
 1 NOTE Could recite the whole of the family tree from memory, back to the crossing.
 2 CONT Kept a diary for most of her adult life; three volumes survive.
 1 OBJE @O602@
@@ -36788,6 +36797,7 @@
 1 REFN RW-0584
 2 TYPE Rootward demo id
 1 _FSFTID CHJE-N6F9
+1 _ROOTWARD_VIS moderators_only
 1 NOTE Was the first in the family to finish high school.
 1 SOUR @S13@
 2 PAGE clipping 234
