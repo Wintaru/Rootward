@@ -85,6 +85,19 @@ curl -X POST "http://127.0.0.1:57321/auth/v1/token?grant_type=password" \
   -d '{"email":"admin@rootward.test","password":"rootward-admin"}'
 ```
 
+**The large demo tree.** For a full-size tree — about 600 fictional people
+over ten generations, every family shape, and a photo for every person — build
+the demo GedZip and import it through `/import`:
+
+```sh
+pnpm demo:build   # writes docs/reference/rootward-demo/rootward-demo.gdz
+```
+
+The GEDCOM text is committed (`rootward-demo.ged`). The photos are fetched
+once from [cataas.com](https://cataas.com) into a gitignored folder, so the
+build needs the network the first time only. See
+[`docs/reference/rootward-demo/README.md`](docs/reference/rootward-demo/README.md).
+
 After the stack is up, `supabase status -o env` prints the local keys as
 `ANON_KEY` / `SERVICE_ROLE_KEY` — copy those two values into
 `NEXT_PUBLIC_SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY` in `.env`.
@@ -118,6 +131,10 @@ Four of the themes use palettes published under the MIT license:
 
 The other four — Heirloom, Hearth, Orchard, and Kodachrome — are original
 Rootward palettes.
+
+The demo tree's photos are cats served by [Cat as a Service](https://cataas.com),
+with [Lorem Picsum](https://picsum.photos) as the fallback. The people are
+fictional.
 
 ## License
 

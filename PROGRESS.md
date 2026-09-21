@@ -28,8 +28,30 @@ shows `Given Married (Maiden)` for anyone with a `married` or `maiden` /
 `birth` `person_name` row — `married_surname` / `maiden_surname` on both
 tree RPCs (migration `20260920210000`), composed in
 `lib/tree/person-card.ts`. Tree only; the profile, People list, and search
-still show the primary name. **Next session:** whichever of those Josh picks, or the
-next milestone.
+still show the primary name. Ad-hoc (no issue, Josh's request, 2026-09-21):
+the **large demo tree** — `scripts/demo-tree/generate.mjs` (deterministic,
+seeded) writes `docs/reference/rootward-demo/rootward-demo.ged` (628
+people, 233 families, eleven generations, every event/fact/name/date shape,
+every family shape incl. same-sex, single-parent, cousin marriage, step /
+adopted / foster / guardian / sealed children) plus a media manifest;
+`build-gedzip.mjs` fetches a cat portrait per person from cataas.com,
+writes PDF "scans", and zips them flat next to the `.ged` (MacFamilyTree's
+layout) into the gitignored `rootward-demo.gdz`. `pnpm demo:build` runs
+both. `exporter.test.ts` gained three tests: shape coverage, a full
+import→export→re-import table-by-table equality check, and (when the `.gdz`
+exists) every `OBJE` attaching through the real engine. The destructive
+e2e now prefers the built `.gdz`, actually clicks "Start import", checks
+the real completion heading, and asserts every INDI/FAM/OBJE in the file
+landed with bytes in storage. Ran it live: 628 persons, 863 media with
+stored originals, ~75 s server-side, ~2 min more in the browser. It surfaced a real bug — deleting an
+account after an import 500'd because `event_set_sort_key` called
+`genealogy_date_sort_key` unqualified with no `search_path` (GoTrue's
+connection has no `public`); fixed in migration `20260921123000` with a
+pgTAP test. Filed: #124 (`manual_full` export with media — needed before
+the round trip can compare photo bytes), #125 (no primary photo when the
+file has no `_PRIM`, as MacFamilyTree writes), #126 (visibility has no
+GEDCOM tag), #127 (e2e teardown restores a deleted root person).
+**Next session:** whichever of those Josh picks, or the next milestone.
 
 **Issue #81 — Contrast audit: done, staged on branch
 `feat/contrast-audit`, issue closed.** SPEC §10 Phase 10, §8.1.

@@ -48,3 +48,9 @@ DECISIONS.md
 e2e/.auth/
 e2e/test-results/
 e2e/playwright-report/
+
+# Demo tree build output (scripts/demo-tree): fetched photos, the zipped
+# GedZip, and the manifest that names them. The .ged itself is committed.
+docs/reference/rootward-demo/media/
+docs/reference/rootward-demo/media-manifest.json
+docs/reference/rootward-demo/rootward-demo.gdz
