@@ -16,7 +16,12 @@
  * `gedcom_xref`, an app-created row (no xref) gets a synthesised one.
  */
 
-import { normalizePlaceName, writeGedcom } from "@rootward/gedcom";
+import {
+  DEFAULT_VISIBILITY,
+  mapVisibility,
+  normalizePlaceName,
+  writeGedcom,
+} from "@rootward/gedcom";
 import type {
   GedcomReadResult,
   ParsedCitation,
@@ -32,6 +37,7 @@ import type {
   ParsedRepository,
   ParsedSource,
   RawGedcomNode,
+  Visibility,
 } from "@rootward/gedcom";
 import { CALENDARS, GENEALOGY_DATE_KINDS } from "@rootward/shared";
 import type {
@@ -66,6 +72,7 @@ export interface PersonRow {
   readonly name_suffix: string | null;
   readonly nickname: string | null;
   readonly sex: string | null;
+  readonly visibility: string | null;
   readonly familysearch_id: string | null;
   readonly ancestral_file_number: string | null;
   readonly user_reference_number: string | null;
@@ -130,6 +137,7 @@ export interface FactRow extends DateColumns {
   readonly family_id: string | null;
   readonly type: string;
   readonly type_other: string | null;
+  readonly visibility: string | null;
   readonly value: string | null;
   readonly place_id: string | null;
   readonly raw_gedcom: unknown;
@@ -704,6 +712,7 @@ function buildPerson(
     nickname: row.nickname,
     primary_name_raw_gedcom: primaryNameRaw,
     sex: sex(row.sex),
+    visibility: visibility(row.visibility),
     familysearch_id: row.familysearch_id,
     ancestral_file_number: row.ancestral_file_number,
     user_reference_number: row.user_reference_number,
@@ -805,6 +814,7 @@ function buildFact(row: FactRow, links: AttachmentIndex): ParsedFact {
   return {
     type: factType(row.type),
     type_other: row.type_other,
+    visibility: visibility(row.visibility),
     date: dateFields(row),
     place_name: links.place(row.place_id),
     value: row.value,
@@ -1073,6 +1083,12 @@ function calendar(value: string | null): Calendar {
 // shape wants non-null gets a default first.
 function sex(value: string | null): ParsedPerson["sex"] {
   return (value ?? "unknown") as ParsedPerson["sex"];
+}
+
+/** The enum column is never null; `mapVisibility` is the one place that
+ * knows the value set, and it treats anything else as the default. */
+function visibility(value: string | null): Visibility {
+  return mapVisibility(value) ?? DEFAULT_VISIBILITY;
 }
 
 function nameType(value: string | null): ParsedPersonName["type"] {

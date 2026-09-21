@@ -212,3 +212,70 @@ describe("writeGedcom — version option", () => {
     expect(readGedcom(output).version).toBe("5.5.1");
   });
 });
+
+describe("writeGedcom — _ROOTWARD_VIS (#126)", () => {
+  const GEDCOM_VISIBILITY = `0 HEAD
+1 GEDC
+2 VERS 5.5.1
+0 @I1@ INDI
+1 NAME Hidden /Person/
+1 _ROOTWARD_VIS hidden
+1 _ROOTWARD_VIS close_family
+1 OCCU Spy
+2 _ROOTWARD_VIS moderators_only
+1 OCCU Baker
+2 _ROOTWARD_VIS not_a_rung
+0 @I2@ INDI
+1 NAME Plain /Person/
+1 _ROOTWARD_VIS not_a_rung
+0 TRLR
+`;
+  const result = readGedcom(GEDCOM_VISIBILITY);
+  const hidden = must(result.persons[0], "@I1@");
+  const plain = must(result.persons[1], "@I2@");
+  const output = writeGedcom(result);
+
+  it("reads the first tag on the INDI, consumes it, and keeps a second as raw", () => {
+    expect(hidden.visibility).toBe("hidden");
+    expect(hidden.raw_gedcom).toEqual([
+      { tag: "_ROOTWARD_VIS", value: "close_family" },
+    ]);
+  });
+
+  it("reads the tag on a fact, and keeps an unknown value on a fact as raw", () => {
+    expect(hidden.facts.map((f) => [f.value, f.visibility])).toEqual([
+      ["Spy", "moderators_only"],
+      ["Baker", "everyone_approved"],
+    ]);
+    expect(hidden.facts[0]?.raw_gedcom).toEqual([]);
+    expect(hidden.facts[1]?.raw_gedcom).toEqual([
+      { tag: "_ROOTWARD_VIS", value: "not_a_rung" },
+    ]);
+  });
+
+  it("defaults an absent tag and keeps an unknown value as raw", () => {
+    expect(plain.visibility).toBe("everyone_approved");
+    expect(plain.raw_gedcom).toContainEqual({
+      tag: "_ROOTWARD_VIS",
+      value: "not_a_rung",
+    });
+  });
+
+  it("emits the tag only for a non-default value", () => {
+    expect(output).toContain("1 _ROOTWARD_VIS hidden");
+    expect(output).toContain("2 _ROOTWARD_VIS moderators_only");
+    expect(output.match(/_ROOTWARD_VIS/g)).toHaveLength(5); // + three raw
+  });
+
+  it("round-trips", () => {
+    const reread = readGedcom(output);
+    expect(reread.persons.map((p) => p.visibility)).toEqual([
+      "hidden",
+      "everyone_approved",
+    ]);
+    expect(reread.persons[0]?.facts.map((f) => f.visibility)).toEqual([
+      "moderators_only",
+      "everyone_approved",
+    ]);
+  });
+});

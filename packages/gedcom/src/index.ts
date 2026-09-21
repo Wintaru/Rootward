@@ -72,4 +72,7 @@ export type {
   PartnerRole,
   Sex,
   UnionType,
+  Visibility,
 } from "./types.ts";
+export { DEFAULT_VISIBILITY, VISIBILITY_VALUES } from "./types.ts";
+export { mapVisibility, VISIBILITY_TAG } from "./mapping.ts";

@@ -15,6 +15,22 @@ export type GedcomVersion = "5.5.1" | "7.0" | "unknown";
 
 export type Sex = "male" | "female" | "unknown" | "other";
 
+/** `person_visibility` / `fact_visibility` (SPEC §5) — one value set, two
+ * Postgres enums (`schema_parity.test.ts` checks this list against both).
+ * Carried through GEDCOM on Rootward's own `_ROOTWARD_VIS` tag (#126) so a
+ * backup round trip keeps the ladder. The array is the source and the type
+ * derives from it, so `mapVisibility` cannot fall behind a new rung. */
+export const VISIBILITY_VALUES = [
+  "everyone_approved",
+  "close_family",
+  "moderators_only",
+  "hidden",
+] as const;
+
+export type Visibility = (typeof VISIBILITY_VALUES)[number];
+
+export const DEFAULT_VISIBILITY: Visibility = "everyone_approved";
+
 export type NameType =
   | "birth"
   | "married"
@@ -148,6 +164,8 @@ export interface ParsedEvent extends DatedRecord {
 export interface ParsedFact extends DatedRecord {
   readonly type: FactType;
   readonly type_other: string | null;
+  /** `fact.visibility`; `_ROOTWARD_VIS` on the attribute, default when absent. */
+  readonly visibility: Visibility;
 }
 
 /** An additional `person_name` row (the primary name lives on `person`). */
@@ -174,6 +192,8 @@ export interface ParsedPerson {
    * `raw_gedcom` so the writer re-emits them under `NAME`, not under `INDI`. */
   readonly primary_name_raw_gedcom: readonly RawGedcomNode[];
   readonly sex: Sex;
+  /** `person.visibility`; `_ROOTWARD_VIS` on the `INDI`, default when absent. */
+  readonly visibility: Visibility;
   readonly familysearch_id: string | null;
   readonly ancestral_file_number: string | null;
   readonly user_reference_number: string | null;

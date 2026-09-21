@@ -383,6 +383,7 @@ Deno.test(
           name_suffix: null,
           nickname: null,
           sex: "female",
+          visibility: "everyone_approved",
           familysearch_id: null,
           ancestral_file_number: null,
           user_reference_number: null,
@@ -697,6 +698,7 @@ Deno.test(
         p.name_suffix,
         p.nickname,
         p.sex,
+        p.visibility,
         p.user_reference_number,
         p.familysearch_id,
         p.ancestral_file_number,
@@ -712,7 +714,9 @@ Deno.test(
       sortedKeys(first.events, eventKey),
     );
     const factKey = (f: TreeRows["facts"][number]) =>
-      [f.type, f.type_other, f.value, f.date_value_raw].join("|");
+      [f.type, f.type_other, f.visibility, f.value, f.date_value_raw].join(
+        "|",
+      );
     assertEquals(
       sortedKeys(second.facts, factKey),
       sortedKeys(first.facts, factKey),

@@ -22,7 +22,9 @@ import {
   mapChildRelation,
   mapNameType,
   mapSex,
+  mapVisibility,
   unionType,
+  VISIBILITY_TAG,
 } from "./mapping.ts";
 import {
   buildForest,
@@ -35,6 +37,7 @@ import {
   unhandledChildren,
 } from "./nodes.ts";
 import type { GedcomNode, RawGedcomNode } from "./nodes.ts";
+import { DEFAULT_VISIBILITY } from "./types.ts";
 import type {
   EventType,
   FactType,
@@ -54,7 +57,34 @@ import type {
   ParsedRepository,
   ParsedSource,
   PartnerRole,
+  Visibility,
 } from "./types.ts";
+
+/**
+ * The first `_ROOTWARD_VIS` under `node`, or the default when absent. An
+ * unknown payload reads as the default too, and the caller leaves the node
+ * in `raw` so a round trip still carries it (`consumed` says whether to
+ * strip it).
+ */
+function readVisibility(node: GedcomNode): {
+  readonly visibility: Visibility;
+  readonly consumed: boolean;
+} {
+  const mapped = mapVisibility(childValue(node, VISIBILITY_TAG));
+  return mapped === null
+    ? { visibility: DEFAULT_VISIBILITY, consumed: false }
+    : { visibility: mapped, consumed: true };
+}
+
+/** `raw` without its first `tag` node — for a sub-tag a reader mapped after
+ * the generic pass already copied it to raw. */
+function withoutFirst(
+  raw: readonly RawGedcomNode[],
+  tag: string,
+): RawGedcomNode[] {
+  const index = raw.findIndex((r) => r.tag === tag);
+  return index === -1 ? [...raw] : raw.filter((_, i) => i !== index);
+}
 
 const EVENT_TAGS: readonly string[] = Object.keys(EVENT_TYPES);
 const FACT_TAGS: readonly string[] = Object.keys(FACT_TYPES);
@@ -353,17 +383,23 @@ function readFact(node: GedcomNode, places: PlaceCollector): ParsedFact {
     type === "other"
       ? (parts.type_value ?? (node.tag === "FACT" ? null : node.tag))
       : null;
+  // `readDatedParts` is shared with events, which have no visibility, so the
+  // tag reaches `raw` there and is lifted out here (#126).
+  const vis = readVisibility(node);
 
   return {
     type,
     type_other: typeOther,
+    visibility: vis.visibility,
     date: parts.date,
     place_name: parts.place_name,
     value: trimOrNull(node.value),
     notes: parts.notes,
     citations: parts.citations,
     media_links: parts.media_links,
-    raw_gedcom: parts.raw_gedcom,
+    raw_gedcom: vis.consumed
+      ? withoutFirst(parts.raw_gedcom, VISIBILITY_TAG)
+      : parts.raw_gedcom,
   };
 }
 
@@ -507,6 +543,8 @@ function readIndi(node: GedcomNode, places: PlaceCollector): ParsedPerson {
     }
   }
 
+  const vis = readVisibility(node);
+
   return {
     gedcom_xref: node.xref ?? "",
     given_name: primary.given_name,
@@ -516,6 +554,7 @@ function readIndi(node: GedcomNode, places: PlaceCollector): ParsedPerson {
     nickname: primary.nickname,
     primary_name_raw_gedcom: primary.raw_gedcom,
     sex: mapSex(childValue(node, "SEX")),
+    visibility: vis.visibility,
     familysearch_id: childValue(node, "_FSFTID"),
     ancestral_file_number: childValue(node, "AFN"),
     user_reference_number: childValue(node, "REFN"),
@@ -525,7 +564,11 @@ function readIndi(node: GedcomNode, places: PlaceCollector): ParsedPerson {
     notes,
     citations,
     media_links: mediaLinks,
-    raw_gedcom: unhandledChildren(node, INDI_HANDLED_ONCE, INDI_HANDLED_MANY),
+    raw_gedcom: unhandledChildren(
+      node,
+      vis.consumed ? [...INDI_HANDLED_ONCE, VISIBILITY_TAG] : INDI_HANDLED_ONCE,
+      INDI_HANDLED_MANY,
+    ),
   };
 }
 

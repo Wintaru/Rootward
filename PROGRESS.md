@@ -63,7 +63,30 @@ are in `EXTERNAL-SETUP-HANDOFF.md` (local). **Branching for Phase 11
 `release_work` branch, not `origin/main`, and Josh merges each one back
 into it — `.trillian-repo.json` `git.baseBranch` is `release_work` for the
 duration. `release_work` has no remote yet, so use the local form
-`git switch -c <type>/<slug> release_work`. **Next session:** #126.
+`git switch -c <type>/<slug> release_work`. **Next session:** #124.
+
+**Issue #126 — `person.visibility` has no GEDCOM representation: done,
+staged on branch `feat/gedcom-visibility-tag`, issue closed.** SPEC §6.
+
+- `packages/gedcom`: `VISIBILITY_VALUES` (the array is the source, the
+  `Visibility` type derives from it — review caught that a hand-copied
+  list in `mapVisibility` would silently miss a fifth rung and reproduce
+  this exact bug), `VISIBILITY_TAG = "_ROOTWARD_VIS"`, `mapVisibility`.
+  The reader maps the tag on `INDI` and on a fact (first wins; a second
+  or an unknown value stays raw so a round trip carries it — the fact
+  reader lifts the tag out of the shared `readDatedParts` raw). The writer
+  emits it only for a non-default value, so a tree that never used the
+  ladder exports with no Rootward tags.
+- `gedcom-import` writes `visibility` on person and fact rows;
+  `gedcom-export` selects and maps it. `schema_parity.test.ts` checks
+  `VISIBILITY_VALUES` against both Postgres enums. The demo generator marks
+  8 living people (every rung, by position — no `rng`, so the committed
+  `.ged` diff is exactly 10 lines) and two facts; the coverage test now
+  demands every rung. The gitignored `.gdz` was rebuilt from cache.
+- Tests: reader/writer round trip incl. both raw edge cases (102 vitest in
+  the package), importer fixture, exporter round-trip keys carry
+  `visibility`. Gate green: typecheck, lint, format, build, 901 vitest, 73
+  Deno. Review: no blocking findings.
 
 **Issue #121 — Tree: hidden focus person with visible relatives renders a
 chart with no main card: done, staged on branch

@@ -95,8 +95,8 @@ export function createSupabaseGateway(supabase: SupabaseClient): ExportGateway {
         fetchAll<PersonRow>(
           "person",
           "id,gedcom_xref,given_name,surname,name_prefix,name_suffix,nickname," +
-            "sex,familysearch_id,ancestral_file_number,user_reference_number," +
-            "raw_gedcom,created_at",
+            "sex,visibility,familysearch_id,ancestral_file_number," +
+            "user_reference_number,raw_gedcom,created_at",
         ),
         fetchAll<PersonNameRow>(
           "person_name",
@@ -120,8 +120,8 @@ export function createSupabaseGateway(supabase: SupabaseClient): ExportGateway {
         ),
         fetchAll<FactRow>(
           "fact",
-          "id,owner_type,person_id,family_id,type,type_other,value,place_id," +
-            `raw_gedcom,created_at,${DATE_COLUMNS}`,
+          "id,owner_type,person_id,family_id,type,type_other,visibility,value," +
+            `place_id,raw_gedcom,created_at,${DATE_COLUMNS}`,
         ),
         fetchAll<NoteRow>(
           "note",

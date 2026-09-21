@@ -13,7 +13,9 @@ import type {
   NameType,
   Sex,
   UnionType,
+  Visibility,
 } from "./types.ts";
+import { VISIBILITY_VALUES } from "./types.ts";
 
 /** GEDCOM individual / family event tags → `event_type`. */
 export const EVENT_TYPES: Readonly<Record<string, EventType>> = {
@@ -62,6 +64,17 @@ export const FACT_TYPES: Readonly<Record<string, FactType>> = {
   NMR: "number_of_marriages",
   IDNO: "national_id",
 };
+
+/** Rootward's own tag for `person.visibility` / `fact.visibility` (#126).
+ * A `_` tag, so every other GEDCOM tool ignores it. */
+export const VISIBILITY_TAG = "_ROOTWARD_VIS";
+
+/** `_ROOTWARD_VIS` payload → `Visibility`, or `null` for an absent or
+ * unknown value (the caller keeps an unknown one as raw GEDCOM). */
+export function mapVisibility(value: string | null): Visibility | null {
+  const key = (value ?? "").trim().toLowerCase();
+  return VISIBILITY_VALUES.find((v) => v === key) ?? null;
+}
 
 /** GEDCOM `SEX` payload → `sex`. */
 export function mapSex(value: string | null): Sex {

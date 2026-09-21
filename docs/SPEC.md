@@ -605,6 +605,7 @@ compatibility) with a 7.0 option.
 | `OBJE` | `media` + `media_link` |
 | `NOTE` | `note` |
 | `REFN / _UID / RIN / _FSFTID` | `person.user_reference_number` / provenance / `familysearch_id` |
+| `_ROOTWARD_VIS` on `INDI` / on an attribute | `person.visibility` / `fact.visibility` — Rootward's own tag (#126), written only for a non-default value, read back as the ladder value; absent means `everyone_approved`. Other tools ignore it. |
 | any unmapped sub-tag | parent record's `raw_gedcom` |
 
 **Provenance:** import writes an `import_job` row; every created record keeps its

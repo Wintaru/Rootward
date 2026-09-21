@@ -541,6 +541,43 @@ Deno.test(
   },
 );
 
+const GEDCOM_VISIBILITY = `0 HEAD
+1 GEDC
+2 VERS 5.5.1
+0 @I1@ INDI
+1 NAME Quiet /Doe/
+1 _ROOTWARD_VIS hidden
+1 OCCU Spy
+2 _ROOTWARD_VIS moderators_only
+0 @I2@ INDI
+1 NAME Loud /Doe/
+1 OCCU Crier
+0 TRLR
+`;
+
+Deno.test(
+  "_ROOTWARD_VIS lands in person.visibility and fact.visibility, absent means the default (#126)",
+  async () => {
+    const gw = new FakeGateway({ gedcom: GEDCOM_VISIBILITY });
+
+    const outcome = await runToCompletion(gw);
+
+    assertEquals(outcome.status, "completed");
+    const byXref = new Map(
+      gw.rows("person").map((p) => [p.gedcom_xref, p]),
+    );
+    assertEquals(byXref.get("@I1@")?.visibility, "hidden");
+    assertEquals(byXref.get("@I2@")?.visibility, "everyone_approved");
+    const facts = gw.rows("fact");
+    const factFor = (xref: string) =>
+      facts.find((f) => f.person_id === byXref.get(xref)?.id);
+    assertEquals(factFor("@I1@")?.visibility, "moderators_only");
+    assertEquals(factFor("@I2@")?.visibility, "everyone_approved");
+    // The tag was mapped, not kept as unknown raw GEDCOM.
+    assertEquals(byXref.get("@I1@")?.raw_gedcom, []);
+  },
+);
+
 /** One person, three `OBJE` pointers and no `_PRIM` anywhere -- the shape
  * MacFamilyTree 11 (GEDCOM 7) writes -- behind a bare `OBJE` with neither
  * pointer nor `FILE`, which the importer skips and which must not use up

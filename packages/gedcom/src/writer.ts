@@ -28,8 +28,10 @@ import {
   FACT_TAG_FOR,
   NAME_TYPE_KEYWORD,
   SEX_KEYWORD,
+  VISIBILITY_TAG,
 } from "./mapping.ts";
 import type { RawGedcomNode } from "./nodes.ts";
+import { DEFAULT_VISIBILITY } from "./types.ts";
 import type {
   GedcomReadResult,
   GedcomVersion,
@@ -45,6 +47,7 @@ import type {
   ParsedRepository,
   ParsedSource,
   PartnerRole,
+  Visibility,
 } from "./types.ts";
 
 export interface GedcomWriteOptions {
@@ -363,7 +366,20 @@ function emitFact(out: string[], level: number, fact: ParsedFact): void {
       emitValue(out, level + 1, "TYPE", label);
     }
   }
+  emitVisibility(out, level + 1, fact.visibility);
   emitDatedParts(out, level + 1, fact);
+}
+
+/** `_ROOTWARD_VIS` only when the value is not the default — a tree that
+ * never used the ladder exports with no Rootward tags at all (#126). */
+function emitVisibility(
+  out: string[],
+  level: number,
+  visibility: Visibility,
+): void {
+  if (visibility !== DEFAULT_VISIBILITY) {
+    emitValue(out, level, VISIBILITY_TAG, visibility);
+  }
 }
 
 // --- names ------------------------------------------------------------
@@ -429,6 +445,7 @@ function emitPerson(out: string[], person: ParsedPerson): void {
   emitOptional(out, 1, "REFN", person.user_reference_number);
   emitOptional(out, 1, "AFN", person.ancestral_file_number);
   emitOptional(out, 1, "_FSFTID", person.familysearch_id);
+  emitVisibility(out, 1, person.visibility);
 
   for (const event of person.events) {
     emitEvent(out, 1, event);

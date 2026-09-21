@@ -60,6 +60,8 @@ Deno.test("gedcom TS unions match the Postgres enums", async () => {
     ["ChildRelation", "child_relation", gedcomTypes],
     ["EventType", "event_type", gedcomTypes],
     ["FactType", "fact_type", gedcomTypes],
+    ["VISIBILITY_VALUES", "person_visibility", gedcomTypes],
+    ["VISIBILITY_VALUES", "fact_visibility", gedcomTypes],
     ["GENEALOGY_DATE_KINDS", "genealogy_date_kind", sharedDates],
     ["CALENDARS", "calendar", sharedDates],
   ];
