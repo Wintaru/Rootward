@@ -35,8 +35,9 @@ type BackupOutcome =
   | { readonly ok: false; readonly message: string };
 
 /**
- * Run one `manual_gedcom` export to completion and hand back the finished
- * job, or why it did not finish. The same `createExportJob` /
+ * Run one `manual_full` export (the GedZip with every media file, #124) to
+ * completion and hand back the finished job, or why it did not finish. The
+ * same `createExportJob` /
  * `invokeGedcomExport` / `getExportJob` calls `useGedcomExport` makes, and
  * the same pure `settle` / `settlePoll` decisions that hook's reducer runs on
  * (`lib/export/orchestrator.ts`) — reused here rather than re-derived, so a
@@ -51,7 +52,11 @@ async function runBackupExport(
   startedBy: string,
 ): Promise<BackupOutcome> {
   const jobId = crypto.randomUUID();
-  await createExportJob(supabase, { id: jobId, startedBy });
+  await createExportJob(supabase, {
+    id: jobId,
+    startedBy,
+    type: "manual_full",
+  });
   const invoke = await invokeGedcomExport(supabase, jobId);
 
   let job = await getExportJob(supabase, jobId);
@@ -102,7 +107,7 @@ type Stage =
  * `handleWipe` re-reads the count itself right before deciding whether a
  * backup is needed, since the prop is a page-load snapshot that could be
  * stale by the time of the click. On a non-empty tree, decision 33's
- * "automatic backup first" runs a `manual_gedcom` export
+ * "automatic backup first" runs a `manual_full` export
  * ({@link runBackupExport}) before the wipe, and only proceeds if it
  * completes; a failed or dropped backup halts here rather than wiping data
  * with nothing to restore it from. The finished card offers the same
@@ -209,7 +214,7 @@ export function WipeTreeSection({
               ? "This tree is already empty. No backup is needed."
               : skipBackup
                 ? "No backup will be made — the tree wipes immediately."
-                : `This tree has ${personCount.toLocaleString()} ${personCount === 1 ? "person" : "people"}. A backup GEDCOM export runs first, automatically — the wipe only proceeds once it succeeds.`}
+                : `This tree has ${personCount.toLocaleString()} ${personCount === 1 ? "person" : "people"}. A backup GEDCOM + media export runs first, automatically — the wipe only proceeds once it succeeds.`}
           </p>
           {personCount > 0 && (
             <label

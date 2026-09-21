@@ -1,4 +1,9 @@
-import { type ExportJob, type ExportStatus, isDownloadable } from "@/lib/db";
+import {
+  type ExportJob,
+  type ExportStatus,
+  type ExportType,
+  isDownloadable,
+} from "@/lib/db";
 
 import { DownloadButton } from "./DownloadButton";
 import { formatByteSize } from "./format";
@@ -31,6 +36,7 @@ function ExportJobRow({ job }: { job: ExportJob }) {
   return (
     <li className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 text-sm">
       <span className="tabular-nums">{formatTimestamp(job.createdAt)}</span>
+      <span>{TYPE_LABEL[job.type]}</span>
       <span className="text-muted-foreground">{STATUS_LABEL[job.status]}</span>
       {job.sizeBytes !== null && (
         <span className="text-muted-foreground tabular-nums">
@@ -48,6 +54,12 @@ function ExportJobRow({ job }: { job: ExportJob }) {
     </li>
   );
 }
+
+const TYPE_LABEL: Record<ExportType, string> = {
+  manual_gedcom: "GEDCOM only",
+  manual_full: "GEDCOM + media",
+  scheduled_full: "Scheduled backup",
+};
 
 const STATUS_LABEL: Record<ExportStatus, string> = {
   pending: "Queued",

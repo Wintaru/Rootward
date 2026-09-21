@@ -253,7 +253,7 @@ test.describe("the wipe-tree gate", () => {
     const skip = adminPage.getByLabel(/Skip the automatic backup/);
     await expect(skip).not.toBeChecked();
     await expect(
-      adminPage.getByText(/A backup GEDCOM export runs first/),
+      adminPage.getByText(/A backup GEDCOM \+ media export runs first/),
     ).toBeVisible();
 
     await skip.check();
@@ -263,7 +263,7 @@ test.describe("the wipe-tree gate", () => {
 
     await skip.uncheck();
     await expect(
-      adminPage.getByText(/A backup GEDCOM export runs first/),
+      adminPage.getByText(/A backup GEDCOM \+ media export runs first/),
     ).toBeVisible();
   });
 

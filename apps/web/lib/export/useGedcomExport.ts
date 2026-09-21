@@ -7,6 +7,7 @@ import {
   type ExportJob,
   getExportJob,
   invokeGedcomExport,
+  type ManualExportType,
   markExportJobFailed,
 } from "@/lib/db";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -24,8 +25,8 @@ import {
 
 export interface UseGedcomExport {
   readonly state: ExportFlowState;
-  /** Start a `manual_gedcom` export. Ignored while one is in flight. */
-  readonly start: () => void;
+  /** Start an export of the given type. Ignored while one is in flight. */
+  readonly start: (type: ManualExportType) => void;
   /** Return to the idle state so another export can start. */
   readonly reset: () => void;
 }
@@ -104,43 +105,46 @@ export function useGedcomExport(
     [fail, settled, supabase],
   );
 
-  const start = useCallback(() => {
-    if (inFlight.current) {
-      return;
-    }
-    inFlight.current = true;
-    const jobId = crypto.randomUUID();
-    dispatch({ type: "submit", jobId });
-
-    void (async () => {
-      try {
-        await createExportJob(supabase, { id: jobId, startedBy });
-      } catch (error: unknown) {
-        fail(jobId, messageOf(error));
+  const start = useCallback(
+    (type: ManualExportType) => {
+      if (inFlight.current) {
         return;
       }
+      inFlight.current = true;
+      const jobId = crypto.randomUUID();
+      dispatch({ type: "submit", jobId });
 
-      // The call settles either way; the row says what actually happened.
-      const invoke = await invokeGedcomExport(supabase, jobId);
+      void (async () => {
+        try {
+          await createExportJob(supabase, { id: jobId, startedBy, type });
+        } catch (error: unknown) {
+          fail(jobId, messageOf(error));
+          return;
+        }
 
-      let job: ExportJob;
-      try {
-        job = await getExportJob(supabase, jobId);
-      } catch (error: unknown) {
-        fail(jobId, invoke.ok ? messageOf(error) : invoke.message);
-        return;
-      }
+        // The call settles either way; the row says what actually happened.
+        const invoke = await invokeGedcomExport(supabase, jobId);
 
-      const terminal = await apply(jobId, job, settle(job, invoke));
-      if (!terminal) {
-        dispatch({
-          type: "wait",
-          jobId,
-          dropped: invoke.ok ? NEVER_STARTED_MESSAGE : invoke.message,
-        });
-      }
-    })();
-  }, [apply, fail, startedBy, supabase]);
+        let job: ExportJob;
+        try {
+          job = await getExportJob(supabase, jobId);
+        } catch (error: unknown) {
+          fail(jobId, invoke.ok ? messageOf(error) : invoke.message);
+          return;
+        }
+
+        const terminal = await apply(jobId, job, settle(job, invoke));
+        if (!terminal) {
+          dispatch({
+            type: "wait",
+            jobId,
+            dropped: invoke.ok ? NEVER_STARTED_MESSAGE : invoke.message,
+          });
+        }
+      })();
+    },
+    [apply, fail, startedBy, supabase],
+  );
 
   const reset = useCallback(() => {
     inFlight.current = false;

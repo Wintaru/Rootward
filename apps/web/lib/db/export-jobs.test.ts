@@ -46,6 +46,14 @@ describe("isDownloadable", () => {
 describe("exportDownloadFilename", () => {
   it("dates the file from completed_at", () => {
     expect(exportDownloadFilename(job())).toBe("rootward-2026-09-12.ged");
+    expect(
+      exportDownloadFilename(
+        job({
+          type: "manual_full",
+          storagePath: "exports/11111111-1111-1111-1111-111111111111.gdz",
+        }),
+      ),
+    ).toBe("rootward-2026-09-12.gdz");
   });
 
   it("falls back to created_at", () => {

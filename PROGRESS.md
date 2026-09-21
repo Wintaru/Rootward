@@ -63,7 +63,48 @@ are in `EXTERNAL-SETUP-HANDOFF.md` (local). **Branching for Phase 11
 `release_work` branch, not `origin/main`, and Josh merges each one back
 into it — `.trillian-repo.json` `git.baseBranch` is `release_work` for the
 duration. `release_work` has no remote yet, so use the local form
-`git switch -c <type>/<slug> release_work`. **Next session:** #124.
+`git switch -c <type>/<slug> release_work`. **Next session:** #128.
+
+**Issue #124 — `gedcom-export` `manual_full`: GEDCOM plus every media
+file as a GedZip: done, staged on branch `feat/export-manual-full-gedzip`,
+issue closed.** SPEC §7.
+
+- `packages/gedcom/src/gedzip-write.ts` (portable): `createGedZipStream`
+  — `gedcom.ged` deflated, then each original stored, as a
+  `ReadableStream` driven by `pull`, so one original is in memory at a
+  time and the storage upload streams too (storage-js accepts a
+  `ReadableStream` body; a 40 MiB streamed upload was verified against the
+  local storage API from a scratch Deno script). `archiveEntryNames`: flat
+  basenames, `-<id8>` (then the full id) on a collision, `<id>.<ext>` when
+  there is no usable filename (`.`/`..` count as none), `gedcom.ged`
+  reserved; the extension table is injected from `@rootward/media` so the
+  gedcom package stays free of it. Stream globals are declared ambiently
+  in `global.d.ts` (the build tsconfig has no DOM lib, on purpose).
+- `exporter.ts`: `manual_full` rewrites each stored original's
+  `original_filename` to its entry name so the `.ged`'s `FILE` values
+  resolve exactly on re-import; a row with no stored file keeps its `FILE`
+  and is warned about; `size_bytes` is counted through a `TransformStream`;
+  key `<jobId>.gdz`. A media read failure fails the job — no partial
+  archive can complete. `scheduled_full` still fails (post-MVP).
+- Frontend: `createExportJob` takes a `type`; `/import` has a radio picker
+  (default GEDCOM only); the jobs list shows the type; the wipe-tree backup
+  is `manual_full`; the download name takes its extension from the stored
+  key. **Not live-checked in the app** (needs `supabase functions serve`,
+  Josh's call) — the Deno suite covers the engine with a fake gateway, and
+  the demo round trip now imports the 863-media GedZip, exports
+  `manual_full`, and compares every original byte for byte. The new e2e
+  case in `import-export.spec.ts` (GEDCOM + media → `.gdz` that starts with
+  the zip signature) is written but unrun for the same reason.
+- **Deploy note for #129/#130:** a `manual_full` backup is one storage
+  object. The local `config.toml` allows 500 MiB; hosted Supabase's global
+  file size limit defaults lower (50 MiB on the free tier) and must be
+  raised for a tree with real photo volume. Decision 29's scheduled backup
+  will reuse this engine. Rejected alternative: building the zip in the
+  browser (#104-style) — the wipe flow needs a stored object it can verify
+  before wiping, and the scheduled backup has no browser.
+- Gate green: typecheck, lint, format, build, 910 vitest, 76 Deno. Review:
+  no blocking findings; four should-fixes applied (entry-name uniqueness
+  loop, injected extension map, `.`/`..` guard, extension from the key).
 
 **Issue #126 — `person.visibility` has no GEDCOM representation: done,
 staged on branch `feat/gedcom-visibility-tag`, issue closed.** SPEC §6.

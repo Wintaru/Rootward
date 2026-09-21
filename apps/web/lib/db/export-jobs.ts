@@ -6,8 +6,9 @@ export type ExportStatus = Database["public"]["Enums"]["export_status"];
 export type ExportType = Database["public"]["Enums"]["export_type"];
 
 /** Private bucket `gedcom-export` writes to (migration 20260830231234). The
- * function stores `<jobId>.ged` at the bucket root and records
- * `export_job.storage_path = 'exports/<jobId>.ged'`. */
+ * function stores `<jobId>.ged` (or `<jobId>.gdz` for a `manual_full` GedZip,
+ * #124) at the bucket root and records `export_job.storage_path =
+ * 'exports/<jobId>.<ext>'`. */
 export const EXPORTS_BUCKET = "exports";
 
 /** Lifetime of a download URL minted by {@link signExportDownload}. Minted on
@@ -40,7 +41,34 @@ export interface NewExportJob {
   readonly id: string;
   /** `account.id` of the moderator starting the export. */
   readonly startedBy: string;
+  /** `manual_gedcom` (a `.ged`) or `manual_full` (a GedZip with every media
+   * original, #124). `scheduled_full` is post-MVP and never started here. */
+  readonly type: ManualExportType;
 }
+
+export type ManualExportType = Extract<
+  ExportType,
+  "manual_gedcom" | "manual_full"
+>;
+
+/** What each manual export produces, for the picker and the jobs list. */
+export const MANUAL_EXPORT_TYPES: readonly {
+  readonly value: ManualExportType;
+  readonly label: string;
+  readonly description: string;
+}[] = [
+  {
+    value: "manual_gedcom",
+    label: "GEDCOM only",
+    description: "A .ged text file. Opens in any genealogy app.",
+  },
+  {
+    value: "manual_full",
+    label: "GEDCOM + media",
+    description:
+      "A GedZip (.gdz): the .ged plus every photo and document. The full backup.",
+  },
+];
 
 const JOB_COLUMNS =
   "id, type, status, storage_path, size_bytes, error_text, created_at, completed_at";
@@ -49,9 +77,9 @@ type Db = SupabaseClient<Database>;
 type ExportJobInsert = Database["public"]["Tables"]["export_job"]["Insert"];
 
 /**
- * Insert a `manual_gedcom` job row. `status` defaults to `'pending'`; the
- * function moves it to `running` and then `completed` / `failed`. RLS
- * (`export_job_write`) requires an active moderator.
+ * Insert a job row. `status` defaults to `'pending'`; the function moves it
+ * to `running` and then `completed` / `failed`. RLS (`export_job_write`)
+ * requires an active moderator.
  */
 export async function createExportJob(
   client: Db,
@@ -59,7 +87,7 @@ export async function createExportJob(
 ): Promise<void> {
   const row: ExportJobInsert = {
     id: job.id,
-    type: "manual_gedcom",
+    type: job.type,
     started_by: job.startedBy,
   };
   const { error } = await client.from("export_job").insert(row);
@@ -222,14 +250,19 @@ export function exportObjectKey(job: ExportJob): string | null {
   return key === "" ? null : key;
 }
 
-/** `rootward-2026-09-12.ged`, dated from `completed_at` (falls back to
- * `created_at`). Exported for tests. */
+/** `rootward-2026-09-12.ged` (or `.gdz` for a full export), dated from
+ * `completed_at` (falls back to `created_at`). Exported for tests. */
 export function exportDownloadFilename(job: ExportJob): string {
   const stamp = (job.completedAt ?? job.createdAt).slice(
     0,
     "YYYY-MM-DD".length,
   );
-  return `rootward-${stamp}.ged`;
+  // The extension is the stored object's: the function that writes the key
+  // is the one place that maps type → extension.
+  const key = exportObjectKey(job);
+  const dot = key?.lastIndexOf(".") ?? -1;
+  const extension = key !== null && dot > 0 ? key.slice(dot + 1) : "ged";
+  return `rootward-${stamp}.${extension}`;
 }
 
 // --- boundary parsing ----------------------------------------------------

@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+
 import type { Locator, Page } from "@playwright/test";
 
 import {
@@ -157,9 +159,13 @@ test.describe("the export panel", () => {
      * are serial (see the describe above) and only one export is in flight
      * at a time.
      */
-    async function runExport(page: Page): Promise<string> {
+    async function runExport(
+      page: Page,
+      type: "GEDCOM only" | "GEDCOM + media" = "GEDCOM only",
+    ): Promise<string> {
       await page.goto("/import");
-      await page.getByRole("button", { name: "Export GEDCOM" }).click();
+      await page.getByRole("radio", { name: type }).check();
+      await page.getByRole("button", { name: /^Export GEDCOM/ }).click();
       await expect(page.getByText("Export ready")).toBeVisible({
         timeout: 90_000,
       });
@@ -229,6 +235,33 @@ test.describe("the export panel", () => {
           .click(),
       ]);
       expect(download.suggestedFilename()).toMatch(/\.ged(\.gz)?$/);
+    });
+
+    test("GEDCOM + media downloads a GedZip that opens as a zip (#124)", async ({
+      moderatorPage,
+    }) => {
+      const jobId = await runExport(moderatorPage, "GEDCOM + media");
+
+      const { data } = await admin
+        .from("export_job")
+        .select("type, storage_path")
+        .eq("id", jobId)
+        .single();
+      expect(data?.type).toBe("manual_full");
+      expect(data?.storage_path).toBe(`exports/${jobId}.gdz`);
+
+      const [download] = await Promise.all([
+        moderatorPage.waitForEvent("download"),
+        readyCard(moderatorPage)
+          .getByRole("button", { name: "Download" })
+          .click(),
+      ]);
+      expect(download.suggestedFilename()).toMatch(/\.gdz$/);
+      const head = new Uint8Array(
+        (await readFile(await download.path())).subarray(0, 4),
+      );
+      // The local-file-header signature every zip starts with.
+      expect([...head]).toEqual([0x50, 0x4b, 0x03, 0x04]);
     });
   });
 });
