@@ -1462,6 +1462,13 @@ export type Database = {
       }
       person_is_living: { Args: { p_person_id: string }; Returns: boolean }
       person_is_visible: { Args: { p_person_id: string }; Returns: boolean }
+      person_surname_variant: {
+        Args: {
+          p_kind: Database["public"]["Enums"]["name_type"]
+          p_person: string
+        }
+        Returns: string
+      }
       request_hide: {
         Args: { p_person_id: string; p_reason?: string }
         Returns: undefined
