@@ -151,6 +151,8 @@ function parsePerson(
     nickname: asNullableString(p.nickname),
     sex: asNullableEnum(p.sex, Constants.public.Enums.sex),
     is_living: asNullableBoolean(p.is_living),
+    married_surname: asNullableString(p.married_surname),
+    maiden_surname: asNullableString(p.maiden_surname),
     generation:
       generation ?? asNumber(p.generation, `persons[${index}].generation`),
     birth_year: asNullableNumber(p.birth_year),

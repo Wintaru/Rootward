@@ -715,6 +715,10 @@ function cardDataOf(node: unknown): FamilyChartPersonData {
     sex,
     givenName: typeof raw.givenName === "string" ? raw.givenName : "",
     surname: typeof raw.surname === "string" ? raw.surname : "",
+    marriedSurname:
+      typeof raw.marriedSurname === "string" ? raw.marriedSurname : "",
+    maidenSurname:
+      typeof raw.maidenSurname === "string" ? raw.maidenSurname : "",
     nickname: typeof raw.nickname === "string" ? raw.nickname : "",
     birthYear: typeof raw.birthYear === "number" ? raw.birthYear : null,
     deathYear: typeof raw.deathYear === "number" ? raw.deathYear : null,

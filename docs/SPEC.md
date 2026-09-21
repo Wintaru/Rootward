@@ -808,6 +808,14 @@ one at a time.
   overlay top-left.
 - **Ended unions** (#122): a divorced or annulled couple's spouse link is
   drawn dashed and faded (`ended_by` on the family payload — §8.3).
+- **Married names:** a person with a `married` or `maiden` / `birth` name
+  variant reads `Given Married (Maiden)` — the married surname shown, the
+  birth surname in parentheses; the primary surname stands in for whichever
+  variant is not recorded, and the parenthetical is dropped when it would
+  repeat the shown surname (`married_surname` / `maiden_surname` on the
+  person payload — §8.4; `lib/tree/person-card.ts`). Keyed on the name rows,
+  not on sex. Tree cards only — the profile, People list, and search show
+  the primary name.
 - **Click** a card → `router.push('/tree/<id>')`; `family-chart` animates the
   re-center. Focus person in the URL (decision 28) — back button works.
 - **Open the profile** (decision 28, #52): an icon button on the card and a
@@ -913,7 +921,10 @@ Influential Persons, DNA, Stories, ToDos, Numbering System — decision 21.)
   Returned `persons` are exactly the decision-28 set; a returned `family` row may
   still name a `partner*_id` outside that set (a descendant's spouse), which the
   expand-in-place path (§10 item 24) resolves on demand. Each family carries
-  `ended_by` (§8.3 *Ended unions*, #122).
+  `ended_by` (§8.3 *Ended unions*, #122). Each person carries
+  `married_surname` / `maiden_surname` — the surname of their first `married`
+  (resp. `maiden`, else `birth`) `person_name` row, or null
+  (`person_surname_variant`); `expand_relatives` carries the same.
 
 ### 8.5 Realtime
 

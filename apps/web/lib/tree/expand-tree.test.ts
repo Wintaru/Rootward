@@ -27,6 +27,8 @@ function person(
     nickname: null,
     sex: "male",
     is_living: false,
+    married_surname: null,
+    maiden_surname: null,
     generation: 0,
     birth_year: null,
     death_year: null,

@@ -19,6 +19,8 @@ function card(
     sex: "male",
     givenName: "Samuel",
     surname: "Ashby",
+    marriedSurname: "",
+    maidenSurname: "",
     nickname: "",
     birthYear: 1830,
     deathYear: 1901,
@@ -46,6 +48,95 @@ describe("displayName", () => {
     expect(
       displayName(card({ givenName: " ", surname: "", nickname: "" })),
     ).toBe("Unknown");
+  });
+
+  describe("married name with the birth name in parentheses", () => {
+    it("married variant on record: primary surname is the birth name", () => {
+      expect(
+        displayName(
+          card({
+            givenName: "Temperance",
+            surname: "Blackwood",
+            marriedSurname: "Ashby",
+          }),
+        ),
+      ).toBe("Temperance Ashby (Blackwood)");
+    });
+
+    it("maiden variant on record: primary surname is the married name", () => {
+      expect(
+        displayName(
+          card({
+            givenName: "Temperance",
+            surname: "Ashby",
+            maidenSurname: "Blackwood",
+          }),
+        ),
+      ).toBe("Temperance Ashby (Blackwood)");
+    });
+
+    it("both variants on record: the primary surname is ignored", () => {
+      expect(
+        displayName(
+          card({
+            givenName: "Temperance",
+            surname: "Hart",
+            marriedSurname: "Ashby",
+            maidenSurname: "Blackwood",
+          }),
+        ),
+      ).toBe("Temperance Ashby (Blackwood)");
+    });
+
+    it("drops the parenthetical when it would repeat the surname", () => {
+      expect(
+        displayName(
+          card({
+            givenName: "Temperance",
+            surname: "ashby",
+            marriedSurname: "Ashby",
+          }),
+        ),
+      ).toBe("Temperance Ashby");
+    });
+
+    it("keeps an accented spelling beside its anglicised form", () => {
+      expect(
+        displayName(
+          card({
+            givenName: "Anna",
+            surname: "Müller",
+            marriedSurname: "Muller",
+          }),
+        ),
+      ).toBe("Anna Muller (Müller)");
+    });
+
+    it("uses a lone maiden variant as the surname when the primary is empty", () => {
+      expect(
+        displayName(
+          card({
+            givenName: "Temperance",
+            surname: "",
+            maidenSurname: "Blackwood",
+          }),
+        ),
+      ).toBe("Temperance Blackwood");
+    });
+
+    it("keys on the name records, not on sex", () => {
+      expect(
+        displayName(
+          card({
+            gender: "M",
+            sex: "male",
+            givenName: "Walter",
+            surname: "Gray",
+            marriedSurname: "Ashby",
+          }),
+        ),
+      ).toBe("Walter Ashby (Gray)");
+    });
   });
 });
 

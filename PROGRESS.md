@@ -23,7 +23,12 @@ suite on the shared local stack carries four state-only failures
 every Appearance pick writes an `audit_log` row and bumps
 `account.updated_at` (review advisory from #80).
 Bug issues #120 and #121 stay open and may be taken between phase items
-when Josh asks. **Next session:** whichever of those Josh picks, or the
+when Josh asks. Ad-hoc (no issue, Josh's request, 2026-09-20): the tree card
+shows `Given Married (Maiden)` for anyone with a `married` or `maiden` /
+`birth` `person_name` row — `married_surname` / `maiden_surname` on both
+tree RPCs (migration `20260920210000`), composed in
+`lib/tree/person-card.ts`. Tree only; the profile, People list, and search
+still show the primary name. **Next session:** whichever of those Josh picks, or the
 next milestone.
 
 **Issue #81 — Contrast audit: done, staged on branch

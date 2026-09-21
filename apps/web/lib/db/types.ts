@@ -58,6 +58,15 @@ export interface NeighborhoodPerson {
   nickname: string | null;
   sex: Sex | null;
   is_living: boolean | null;
+  /**
+   * The surname of this person's `married` (resp. `maiden` / `birth`)
+   * `person_name` variant, or null when none is recorded — the tree card
+   * composes "Given Married (Maiden)" from these and `surname`
+   * (`lib/tree/person-card.ts`). Null does not mean the person never married:
+   * it means no such name row exists.
+   */
+  married_surname: string | null;
+  maiden_surname: string | null;
   generation: number;
   birth_year: number | null;
   death_year: number | null;

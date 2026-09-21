@@ -35,7 +35,16 @@ export interface FamilyChartPersonData {
   /** The real value, drives the blue / orange / grey card tint. */
   readonly sex: CardSex;
   readonly givenName: string;
+  /** The primary surname — the one on the `person` row. */
   readonly surname: string;
+  /**
+   * The `married` / `maiden` name-variant surnames, empty when none is
+   * recorded. `displayName` (`person-card.ts`) composes "Given Married
+   * (Maiden)" from these and {@link surname}; see it for which one the
+   * primary surname stands in for.
+   */
+  readonly marriedSurname: string;
+  readonly maidenSurname: string;
   readonly nickname: string;
   readonly birthYear: number | null;
   readonly deathYear: number | null;
@@ -162,6 +171,8 @@ function toPersonData(
     sex: cardSex(person.sex),
     givenName: person.given_name ?? "",
     surname: person.surname ?? "",
+    marriedSurname: person.married_surname ?? "",
+    maidenSurname: person.maiden_surname ?? "",
     nickname: person.nickname ?? "",
     birthYear: person.birth_year,
     deathYear: person.death_year,

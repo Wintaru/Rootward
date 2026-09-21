@@ -65,6 +65,8 @@ function person(
     nickname: null,
     sex: null,
     is_living: deathYear === null,
+    married_surname: null,
+    maiden_surname: null,
     generation,
     can_expand_up: false,
     can_expand_down: false,

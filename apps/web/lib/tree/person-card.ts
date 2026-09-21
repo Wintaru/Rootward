@@ -137,16 +137,65 @@ function profileButtonHtml(personId: string): string {
   );
 }
 
-/** Given + surname, falling back to the nickname, then a placeholder. */
+/**
+ * Given + surname, falling back to the nickname, then a placeholder.
+ *
+ * A person with a married-name record reads `Given Married (Maiden)` — the
+ * name they went by, then the one they were born with, the way a printed
+ * pedigree writes a wife. Which stored field plays which part depends on
+ * where the record-keeper put the primary name ({@link surnameParts}):
+ *
+ * - primary = birth name, `person_name` holds `married` → `Blackwood` becomes
+ *   `Ashby (Blackwood)`;
+ * - primary = married name, `person_name` holds `maiden` / `birth` →
+ *   `Ashby` becomes `Ashby (Blackwood)`;
+ * - both variants recorded → the variants are used and the primary surname is
+ *   ignored;
+ * - neither → the primary surname alone.
+ *
+ * The parenthetical is dropped when it would repeat the shown surname (a
+ * `married` row that merely restates the birth name). The rule keys on the
+ * name records, not on sex — a husband who took his wife's name reads the
+ * same way.
+ */
 export function displayName(person: FamilyChartPersonData): string {
-  const full = [person.givenName, person.surname]
-    .map((part) => part.trim())
+  const { shown, born } = surnameParts(person);
+  const full = [person.givenName.trim(), shown, born === "" ? "" : `(${born})`]
     .filter((part) => part.length > 0)
     .join(" ");
   if (full.length > 0) {
     return full;
   }
   return person.nickname.trim() || "Unknown";
+}
+
+/**
+ * The surname the card shows and the birth surname it parenthesises (empty
+ * when there is none to show). See {@link displayName} for the cases.
+ */
+function surnameParts(person: FamilyChartPersonData): {
+  readonly shown: string;
+  readonly born: string;
+} {
+  const primary = person.surname.trim();
+  const married = person.marriedSurname.trim();
+  const maiden = person.maidenSurname.trim();
+
+  // The primary surname stands in for whichever variant is not recorded.
+  const shown = married !== "" ? married : primary;
+  const born = maiden !== "" ? maiden : married !== "" ? primary : "";
+
+  if (shown === "") {
+    // Only a maiden variant is recorded: it is the one surname there is.
+    return { shown: born, born: "" };
+  }
+  return sameSurname(shown, born) ? { shown, born: "" } : { shown, born };
+}
+
+/** Case-insensitive, but `Müller` and `Muller` stay distinct — an anglicised
+ * spelling beside the original is a real genealogy case worth showing. */
+function sameSurname(a: string, b: string): boolean {
+  return a.localeCompare(b, undefined, { sensitivity: "accent" }) === 0;
 }
 
 /**
