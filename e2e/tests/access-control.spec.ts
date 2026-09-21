@@ -137,11 +137,23 @@ test.describe("a viewer", () => {
     });
   }
 
-  test("is refused /settings", async ({ viewerPage }) => {
+  test("can open /settings for the Appearance tab only", async ({
+    viewerPage,
+  }) => {
     await viewerPage.goto("/settings");
     await expect(
-      viewerPage.getByText(/needs? administrator access/i),
+      viewerPage.getByRole("heading", { level: 1, name: "Appearance" }),
     ).toBeVisible();
+    await expect(viewerPage.getByRole("link", { name: "Tree" })).toHaveCount(0);
+  });
+
+  test("is refused the Tree and Roles tabs", async ({ viewerPage }) => {
+    for (const tab of ["tree", "roles"]) {
+      await viewerPage.goto(`/settings?tab=${tab}`);
+      await expect(
+        viewerPage.getByText(/needs? administrator access/i),
+      ).toBeVisible();
+    }
   });
 
   test("is refused the edit view", async ({ viewerPage }) => {
@@ -197,8 +209,8 @@ test.describe("a moderator", () => {
     });
   }
 
-  test("is refused /settings", async ({ moderatorPage }) => {
-    await moderatorPage.goto("/settings");
+  test("is refused the Tree tab", async ({ moderatorPage }) => {
+    await moderatorPage.goto("/settings?tab=tree");
     await expect(
       moderatorPage.getByText(/needs? administrator access/i),
     ).toBeVisible();
@@ -232,13 +244,18 @@ test.describe("a moderator", () => {
 });
 
 test.describe("an admin", () => {
-  test("can open /settings", async ({ adminPage }) => {
+  test("can open every /settings tab", async ({ adminPage }) => {
     await adminPage.goto("/settings");
     await expect(
-      adminPage.getByRole("heading", { level: 1, name: "Settings" }),
+      adminPage.getByRole("heading", { level: 1, name: "Appearance" }),
     ).toBeVisible();
+    await adminPage.getByRole("link", { name: "Tree" }).click();
     await expect(
       adminPage.getByRole("heading", { name: "Tree settings" }),
+    ).toBeVisible();
+    await adminPage.getByRole("link", { name: "Roles" }).click();
+    await expect(
+      adminPage.getByRole("heading", { name: "Accounts" }),
     ).toBeVisible();
   });
 

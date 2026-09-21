@@ -57,7 +57,8 @@ test.describe("every control has a name", () => {
     { path: `/tree/${fixtureIds.grandfather}`, role: "viewer" },
     { path: "/moderation", role: "moderator" },
     { path: "/import", role: "moderator" },
-    { path: "/settings", role: "admin" },
+    { path: "/settings", role: "viewer" },
+    { path: "/settings?tab=tree", role: "admin" },
   ] as const;
 
   for (const route of ROUTES) {

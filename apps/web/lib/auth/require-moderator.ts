@@ -7,6 +7,7 @@ import {
   type ImportAccess,
   isActiveAdmin,
   isActiveModerator,
+  isApproved,
 } from "./access";
 
 /**
@@ -146,23 +147,45 @@ export async function resolveModerationAccess(): Promise<ModerationAccess> {
     : gate;
 }
 
-/** Outcome of resolving `/settings` access — admin-only (SPEC §8.1, §9.4). */
+/** Outcome of resolving `/settings` access (SPEC §8.1, §9.4, #80). Any
+ * approved member may open the route for the Appearance tab; `isAdmin`
+ * gates the Tree and Roles tabs and every tree-wide action. */
 export type SettingsAccess =
   | { readonly kind: "unauthenticated" }
   | { readonly kind: "forbidden" }
-  | { readonly kind: "allowed"; readonly userId: string };
+  | {
+      readonly kind: "allowed";
+      readonly userId: string;
+      readonly isAdmin: boolean;
+    };
 
-/** Resolve whether the current request may use `/settings`. Admin, not just
- * moderator+ — role management and tree settings are the top of the role
- * ladder (decision 18), so this checks `isActiveAdmin` directly rather than
- * building on {@link resolveModeratorGate}. */
+/** Resolve whether the current request may use `/settings`. Approved, not
+ * admin: the Appearance tab is every member's (#80). The admin gate — role
+ * management and tree settings are the top of the role ladder (decision
+ * 18) — is `isAdmin` on the result, checked per tab and per action with
+ * {@link isSettingsAdmin}. */
 export async function resolveSettingsAccess(): Promise<SettingsAccess> {
   const session = await loadSessionAccount("resolveSettingsAccess");
   if (session.kind === "unauthenticated") {
     return { kind: "unauthenticated" };
   }
-  if (!isActiveAdmin(session.account)) {
+  if (!isApproved(session.account)) {
     return { kind: "forbidden" };
   }
-  return { kind: "allowed", userId: session.userId };
+  return {
+    kind: "allowed",
+    userId: session.userId,
+    isAdmin: isActiveAdmin(session.account),
+  };
+}
+
+/** Narrow a settings access result to the admin case — the gate on every
+ * tree-wide `/settings` action and on the Tree / Roles tabs. */
+export function isSettingsAdmin(access: SettingsAccess): access is Extract<
+  SettingsAccess,
+  { kind: "allowed" }
+> & {
+  readonly isAdmin: true;
+} {
+  return access.kind === "allowed" && access.isAdmin;
 }

@@ -86,7 +86,7 @@ function NonEmptyTreeNotice({
       </p>
       {isAdmin && (
         <Link
-          href="/settings"
+          href="/settings?tab=tree"
           className={buttonVariants({ variant: "outline", className: "w-fit" })}
         >
           Go to Settings to wipe the tree

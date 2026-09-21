@@ -14,11 +14,90 @@ chrome", and WAYFINDER decision **38** (the issues say 37 — that number was
 taken by hosted multi-tenancy the day after they were filed). Order is one
 session each: #74 (docs, done) → #75 (token contract, done) → #76 (themes
 A, done) → #77 (themes B, done) → #78 (tree on tokens, done) → #79 (chrome
-on tokens, done) → #80 → #81. **Next session: #80** — the picker. Every
-surface now reads the tokens and chassis switches; nothing lets a member
-choose yet.
+on tokens, done) → #80 (the picker, done) → #81. **Next session: #81** —
+the contrast audit, last in the phase. Two open notes for it: the Heirloom
+display face (Cormorant Garamond) wants `font-weight: 500` on display text
+(flagged in #79, not yet applied), and the pgTAP suite on the shared local
+stack carries four state-only failures (`seed_smoke`, the three bucket
+tests) that only a `pnpm dev:fresh` clears.
 Bug issues #120 and #121 stay open and may be taken between phase items
 when Josh asks.
+
+**Issue #80 — Settings › Appearance (per-member theme + mode picker): done,
+staged on branch `feat/appearance-picker`, issue closed.** SPEC §8.1
+`/settings`, §4.6, §5, WAYFINDER decision 38.
+
+- **Migration `20260920184900_account_appearance.sql`**: `account.theme`
+  (text, default `flexoki`, CHECK = the eight ids) and `account.color_mode`
+  (`system | light | dark`, default `system`), plus `set_appearance(theme,
+mode)` — a SECURITY DEFINER RPC that updates exactly those two columns on
+  `auth.uid()`'s row. RLS is row-level, so "own row, these columns only"
+  cannot be a policy; a column grant is out because `authenticated` needs
+  the full UPDATE for the admin flows; a BEFORE UPDATE guard trigger would
+  have to exempt every service-role writer. `account_update` stays
+  `is_admin()`, so a viewer's direct `update account set theme` is still 0
+  rows. pgTAP `account_appearance_test.sql` (16 assertions) covers the RPC,
+  both CHECKs, the direct-update denials, the admin path, and anon.
+  `appearance-parity.test.ts` reads the _newest_ definition of each CHECK
+  across every migration and compares it to `THEME_IDS` / `COLOR_MODES`,
+  so a ninth theme's migration keeps the guard valid.
+- **Preference resolution**: `resolveThemePreference(readCookie, stored)` —
+  the account wins when a session exists (`getCurrentAccount` now selects
+  `theme, color_mode`, no extra round trip), else the cookies.
+  `appearanceCookies` + `APPEARANCE_COOKIE_OPTIONS` (one year, `Lax`,
+  `httpOnly`, not `secure` — a LAN self-host may be plain HTTP) are written
+  by `/auth/callback` on sign-in and by `saveAppearanceAction` on save.
+- **`<html data-mode>` + the pre-paint script always ships** with constant
+  content and owns `.dark` for every mode; the server `className` never
+  carries it. Review caught why that matters: a cookie write inside a
+  server action makes Next re-render the whole route (layout included), so
+  a server-owned `dark` class would be diffed away after a Dark → System
+  pick on a dark-scheme device, and the script does not run again. This
+  also removes the #79 note about a React error when the conditional
+  `<head><script>` flipped — verified live: switch to System, sign out, no
+  console error.
+- **`/settings` is tabbed** (`?tab=appearance|tree|roles`,
+  `lib/settings/tabs.ts`): Appearance for every approved member (default
+  tab), Tree (tree settings + wipe) and Roles behind `isSettingsAdmin`,
+  per tab. `resolveSettingsAccess` now allows any approved member and
+  carries `isAdmin`; the five admin actions gate on `isSettingsAdmin`. A
+  non-admin sees only the Appearance tab; a direct hit on a gated tab
+  renders `SettingsTabForbidden` under the tab bar. Only the active tab's
+  data is fetched. **Three tabs, not the canvas's four**: nothing exists to
+  put behind "Privacy" until decision 31's per-person privacy UI, and
+  splitting the one-save tree-settings form across tabs would be a new save
+  path pulled forward.
+- **Picker**: `components/theme/ThemeCard.tsx` (light/dark mini preview
+  from `registry.preview`, `color-mix` for the muted bars), `ThemePicker`
+  and `ColorModeControl` (custom radiogroups, one tab stop, arrow keys via
+  `lib/ui/roving-radio.ts`; no `disabled` while saving — a disabled focused
+  button drops focus), `appearance.css`. `AppearancePanel` applies a pick
+  to `<html>` at once (`lib/theme/apply.ts`, testable through a `ThemeRoot`
+  interface), then saves; a failed save reverts to the last confirmed
+  preference and shows the error in a `role="status"` line. Saves run one
+  at a time (the newest pick waits while one is in flight — the route
+  re-render each save triggers must land in order), and a re-pick of the
+  current value is a no-op. Review advisories left open for #81 or later:
+  every pick still fires `write_audit_log` and `set_updated_at` on
+  `account`, so a member who changes theme jumps to the top of the Roles
+  roster (`listAllAccounts` orders by `updated_at`); the callback's
+  appearance read is one extra `account` round trip per sign-in.
+- **Chip menu** gains "Appearance" for approved members; the import
+  page's "Go to Settings to wipe the tree" link points at `?tab=tree`.
+- **E2E**: new `appearance.spec.ts` (serial — one viewer account; the real
+  sign-out test uses a throwaway account, because revoking the shared
+  viewer session poisons every later spec in the run — learned the hard way
+  with 26 `ERR_TOO_MANY_REDIRECTS` failures). `access-control`,
+  `settings`, `keyboard-a11y`, `responsive`, `import-export`,
+  `destructive/wipe-and-import` updated for the tabs. `app` project 432
+  green (the `settings` project run pulls it in), `mobile` responsive
+  green.
+- Verify gate green: typecheck, lint, format, build, **867** vitest;
+  migration applied with `supabase migration up --local`, types regenerated
+  (`pnpm gen:types`, 12-line diff). Live-checked in the browser: pick →
+  attributes flip → hard reload keeps it; System mode under an emulated
+  dark device renders `.dark` on load; `/login` keeps the last member's
+  theme after sign-out; phone width reflows the grid to one column.
 
 **Issue #79 — Global chrome on tokens (wordmark, nav variants, account
 chip, sections, controls): done, staged on branch `feat/chrome-on-tokens`,

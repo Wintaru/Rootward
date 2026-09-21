@@ -33,7 +33,7 @@ const MODERATOR_ROUTES = [
   `/person/${fixtureIds.grandfather}/edit`,
 ];
 
-const ADMIN_ROUTES = ["/settings"];
+const ADMIN_ROUTES = ["/settings", "/settings?tab=tree", "/settings?tab=roles"];
 
 /**
  * The page must not scroll sideways. The tree view is the documented

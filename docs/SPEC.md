@@ -327,6 +327,8 @@ Republican are stored raw with `date_phrase` set, no conversion.
 | `person_id` | uuid → person, nullable, unique | The linked node (decision 14: at most one). |
 | `status` | enum `account_status` | `active · pending · suspended`. `pending` = signed in but not yet approved/linked. |
 | `display_name` | text | From auth profile; shown in Presence and audit. |
+| `theme` | text, CHECK = the registry's `THEME_IDS` | Default `flexoki`. Per-member (decision 38, #80); `appearance-parity.test.ts` holds the CHECK to `THEME_IDS`. |
+| `color_mode` | text, CHECK `system · light · dark` | Default `system`. Per-member (#80). |
 | `created_at / updated_at` | timestamptz | |
 
 **`tree_settings`** — singleton (CHECK `id = 1`). Decision 20.
@@ -553,7 +555,11 @@ post-MVP feature.
 - `access_request`: the caller INSERTs a `pending` row for their **own**
   `account_id` and reads their own; `is_moderator()` reads and resolves all.
 - `account`: caller reads own row; `is_moderator()` reads all; `is_admin()` is the
-  only writer (UPDATE). No client INSERT (the row is created by the post-sign-in
+  only writer (UPDATE). The one exception is the member's own `theme` /
+  `color_mode` (#80), written through the SECURITY DEFINER
+  `set_appearance(theme, mode)` RPC — it touches exactly those two columns on
+  `auth.uid()`'s row, so a viewer still cannot UPDATE their own row directly
+  (`account_appearance_test.sql`). No client INSERT (the row is created by the post-sign-in
   trigger, #17) and no client DELETE (it goes away with its `auth.users` row).
   The `id` / `role` columns are further guarded in the invite and
   role-management flows, not by a column policy.
@@ -728,7 +734,7 @@ rejected file (size, MIME) stays reference-only and is reported in
 | `/person/new` (or a header action) | Create a person: given name, surname, sex — all optional — then redirect to the edit view (#55) | moderator+ |
 | `/moderation` | Notification queue, access requests, claims. `?invite=<personId>` preselects the invite form (#63) | moderator+ |
 | `/import` | **Import / Export.** Upload GEDCOM, job status. Blocked with a clear message when the tree is not empty (#60). Export: start a `manual_gedcom` `export_job`, poll it, download through the signed URL; list past export jobs (#54) | moderator+ |
-| `/settings` | Tabbed in Phase 10 (#80): **Appearance** (theme + mode, every approved member) \| Tree \| Roles \| Privacy. Tree settings + role management. Root person picked by name (#53). **Wipe tree** with a backup export first (#60). The admin gate applies per tab, not per route | approved (Appearance) · admin (the rest) |
+| `/settings` | Tabbed (#80, `?tab=`): **Appearance** (theme + mode, every approved member, the default tab) \| **Tree** (tree settings, root person picked by name (#53), **Wipe tree** with a backup export first (#60)) \| **Roles** (role management). The admin gate applies per tab, not per route: a non-admin sees only the Appearance tab and a direct hit on a gated tab renders the refusal in place. The canvas's fourth tab, Privacy, arrives with decision 31's per-person privacy UI (post-MVP) — nothing exists to put behind it yet | approved (Appearance) · admin (the rest) |
 
 **Global chrome (#50):** the header renders on every authed route. It carries
 **Home**, a person search box (#62), **My record** (when `account.person_id` is
@@ -746,8 +752,8 @@ Header 64px on `var(--card)` with a bottom border. Left: the **wordmark** —
 `resolveHeaderNav` links, styled by `data-nav` (`underline`, `pill`, `caps`).
 Right: the bell, then an **account chip** — an initials disc in
 `var(--rw-accent-2)` and the first name, `rounded-pill`, bordered — whose menu
-holds **My record** (when linked), **Appearance** (`/settings` — arrives
-with the Appearance tab in #80), and **Sign out** (the sign-out form moved
+holds **My record** (when linked), **Appearance** (`/settings`, any
+approved member, #80), and **Sign out** (the sign-out form moved
 into the menu in #79; the item is a `menuitem`, and the e2e `signOut`
 helper opens the chip first). The nav stays role-gated as above; below
 `sm` the header wraps and the nav collapses into the **Menu** button. On the tree, the black depth-stepper overlay top-left is replaced by a
@@ -758,7 +764,15 @@ inputs use the shadcn `button` / `input` components pointed at
 `var(--rw-radius-control)` (`<select>` / `<textarea>` share `inputClass`,
 the `Input`'s twin); links are `var(--primary)`, hover
 `var(--rw-accent-2)`. Which theme draws all of this is a per-member choice
-(§10 Phase 10).
+(§10 Phase 10): `account.theme` / `account.color_mode` win when a session
+exists, the `rw-theme` / `rw-mode` cookies (mirrored on sign-in and on every
+save, one year, `SameSite=Lax`) carry the last member's pick to the signed-out
+`/login` page. `<html>` carries `data-mode`; the pre-paint script always
+ships and owns `.dark` for every mode (the server never puts it in
+`className`, so the route re-render a save's cookie write triggers cannot
+strip it); the picker writes the same `<html>` attributes client-side
+(`lib/theme/apply.ts`) so a pick shows before its save lands, and saves run
+one at a time.
 
 ### 8.2 Tree view — decisions 23, 28
 
@@ -1144,14 +1158,17 @@ contract, #81 goes last because it measures what the others drew.
   global link colour. *Depends on #75; lands after #78 so the two do not
   fight over `layout.tsx`.*
 - **#80** Settings › Appearance (§8.1 `/settings`): migration adds
-  `accounts.theme` (CHECK = the registry's `ThemeId` list, sync test) and
-  `accounts.color_mode` (`system | light | dark`); own-row RLS update
-  limited to those two columns, allow/deny test; `rw-theme` / `rw-mode`
-  cookies set on sign-in and on save; tabbed `/settings` with Appearance
-  first and open to every approved member; theme cards drawn from
-  `registry.preview` (radio semantics), a System | Light | Dark segmented
-  control, optimistic apply with revert on failure; "Appearance" in the
-  account-chip menu. *Depends on #75, #76, #77, #79.*
+  `account.theme` (CHECK = the registry's `ThemeId` list, sync test reads
+  the newest constraint across the migrations) and `account.color_mode`
+  (`system | light | dark`); the member's own write is the
+  `set_appearance(theme, mode)` SECURITY DEFINER RPC (RLS is row-level, so
+  "these two columns only" cannot be a policy — see §5), allow/deny test;
+  `rw-theme` / `rw-mode` cookies set on sign-in and on save; tabbed
+  `/settings` (`?tab=`) with Appearance first and open to every approved
+  member, Tree and Roles behind the admin gate per tab; theme cards drawn
+  from `registry.preview` (radio semantics, arrow keys), a System | Light |
+  Dark segmented control, optimistic apply with revert on failure;
+  "Appearance" in the account-chip menu. *Depends on #75, #76, #77, #79.*
 - **#81** Contrast audit: `scripts/contrast-audit.mjs` reads the theme
   files and checks the pairs the UI draws (text 4.5:1, non-text 3:1, focus
   ring 3:1 on `card` and `background`) for every theme × mode; wired into

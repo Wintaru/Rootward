@@ -29,6 +29,9 @@ deployment, one tree.
 - **Moderation and roles.** Viewers read, moderators edit, one admin configures.
 - **Live collaborative editing.** See who else is editing a profile; a
   version check stops two editors from overwriting each other.
+- **Eight themes, each light and dark.** Every member picks their own under
+  Settings › Appearance. The pick follows them to the sign-in page on that
+  device and never changes the tree for anyone else.
 
 ## Tech
 

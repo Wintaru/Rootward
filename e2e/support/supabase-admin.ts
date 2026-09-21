@@ -157,6 +157,8 @@ export async function setAccountState(
     role: AccountRole;
     status: AccountStatus;
     person_id: string | null;
+    theme: string;
+    color_mode: string;
   }>,
 ): Promise<void> {
   const { error } = await admin.from("account").update(patch).eq("id", userId);

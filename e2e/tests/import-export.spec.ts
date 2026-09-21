@@ -48,7 +48,7 @@ test.describe("the import panel", () => {
     await adminPage.goto("/import");
     await expect(adminPage.getByText(/Wipe the tree first/)).toBeVisible();
     await adminPage.getByRole("link", { name: /Go to Settings/ }).click();
-    await expect(adminPage).toHaveURL(/\/settings$/);
+    await expect(adminPage).toHaveURL(/\/settings\?tab=tree$/);
   });
 
   test("offers no file picker while the tree is blocked", async ({

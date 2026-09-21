@@ -46,7 +46,7 @@ test.beforeAll(async () => {
 test("an admin wipes the tree, after a backup export", async ({
   adminPage,
 }) => {
-  await adminPage.goto("/settings");
+  await adminPage.goto("/settings?tab=tree");
   const section = adminPage.locator("section").filter({ hasText: "Wipe tree" });
   await expect(section).toBeVisible();
 

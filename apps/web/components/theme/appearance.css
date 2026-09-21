@@ -1,0 +1,209 @@
+/*
+ * The Appearance picker (SPEC §8.1 `/settings`, decision 38, #80): theme
+ * cards with a light/dark mini preview, and the mode segmented control. The
+ * card chrome draws on the *current* theme's tokens; the preview inside is
+ * inline-styled from `registry.preview`, so it shows the candidate theme
+ * without that theme's CSS being loaded.
+ */
+
+/* Theme cards — a radiogroup laid out as a grid that reflows by width. */
+.rw-theme-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 14px;
+}
+
+.rw-theme-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) + 4px);
+  background-color: var(--card);
+  color: var(--card-foreground);
+  text-align: left;
+  cursor: pointer;
+  /* The selected state grows the border to 2px; keep the box from moving
+   * by paying the extra pixel as a transparent outline instead. */
+  outline: 1px solid transparent;
+  outline-offset: -1px;
+}
+
+.rw-theme-card:hover {
+  border-color: var(--muted-foreground);
+}
+
+.rw-theme-card[aria-checked="true"] {
+  border-color: var(--primary);
+  outline-color: var(--primary);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--primary) 13%, transparent);
+}
+
+.rw-theme-card:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+/* The two-pane preview: light on the left, dark on the right. */
+.rw-theme-card__preview {
+  display: flex;
+  height: 96px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.rw-theme-pane {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.rw-theme-pane__bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 14px;
+  padding: 0 8px;
+  border-bottom: 1px solid;
+}
+
+.rw-theme-pane__bar > span {
+  height: 3px;
+  border-radius: 2px;
+}
+
+.rw-theme-pane__bar > span:first-child {
+  width: 22px;
+  height: 4px;
+}
+
+.rw-theme-pane__bar > span:not(:first-child) {
+  width: 12px;
+}
+
+.rw-theme-pane__stage {
+  flex: 1 1 auto;
+  display: grid;
+  place-items: center;
+  padding: 8px;
+}
+
+/* The mini person card: a `female` avatar and two text bars. */
+.rw-theme-pane__card {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 84px;
+  max-width: 100%;
+  padding: 6px;
+  border: 1px solid;
+  border-radius: 4px;
+}
+
+.rw-theme-pane__avatar {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+}
+
+.rw-theme-pane__lines {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.rw-theme-pane__lines > span {
+  display: block;
+  height: 3px;
+  border-radius: 2px;
+}
+
+.rw-theme-pane__lines > span:first-child {
+  width: 40px;
+  height: 4px;
+}
+
+.rw-theme-pane__lines > span:last-child {
+  width: 26px;
+}
+
+/* Label row: name + display face on the left, three swatches on the right. */
+.rw-theme-card__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 2px;
+}
+
+.rw-theme-card__label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.rw-theme-card__name {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.rw-theme-card__face {
+  font-size: 11px;
+  color: var(--muted-foreground);
+}
+
+.rw-theme-card__dots {
+  display: flex;
+  flex: none;
+  gap: 4px;
+}
+
+.rw-theme-card__dots > span {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+}
+
+/* Mode — System | Light | Dark on a `--secondary` track; the selected
+ * segment lifts onto `--card` with the theme's shadow. */
+.rw-segmented {
+  display: inline-flex;
+  gap: 2px;
+  width: fit-content;
+  padding: 3px;
+  border-radius: calc(var(--rw-radius-control) + 2px);
+  background-color: var(--secondary);
+}
+
+.rw-segmented__option {
+  padding: 8px 18px;
+  border-radius: var(--rw-radius-control);
+  color: var(--muted-foreground);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.rw-segmented__option:hover {
+  color: var(--foreground);
+}
+
+.rw-segmented__option[aria-checked="true"] {
+  background-color: var(--card);
+  color: var(--card-foreground);
+  box-shadow: var(--rw-shadow);
+}
+
+.rw-segmented__option:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}

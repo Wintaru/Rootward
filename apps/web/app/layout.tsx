@@ -9,7 +9,7 @@ import { MobileNavMenu } from "@/components/layout/MobileNavMenu";
 import { PersonSearchBox } from "@/components/layout/PersonSearchBox";
 import { Wordmark } from "@/components/layout/Wordmark";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
-import { isActiveModerator } from "@/lib/auth/access";
+import { isActiveModerator, isApproved } from "@/lib/auth/access";
 import { chipIdentity } from "@/lib/auth/account-chip";
 import { getCurrentAccount } from "@/lib/auth/current-account";
 import { resolveHeaderNav } from "@/lib/auth/header-nav";
@@ -36,7 +36,8 @@ export const metadata: Metadata = {
  * (#62 — gated on the same "at least one nav link" signal `resolveHeaderNav`
  * already computes, rather than a second approval check), the notification
  * bell for a moderator+ (SPEC §8.5: "moderators subscribe app-wide"), and the
- * account chip, whose menu holds "My record" and the sign-out form. A
+ * account chip, whose menu holds "My record", "Appearance" (any approved
+ * member, #80), and the sign-out form. A
  * signed-out visitor gets no header at all, no layout shift — they can reach
  * only `/login` and the `/auth/*` handlers.
  *
@@ -112,6 +113,9 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
               )}
               <AccountChip
                 identity={chipIdentity(current.displayName, current.email)}
+                appearanceHref={
+                  isApproved(current.account) ? "/settings" : null
+                }
                 myRecordHref={
                   current.personId === null
                     ? null

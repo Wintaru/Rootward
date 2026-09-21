@@ -1,8 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 
-import { resolveSettingsAccess } from "@/lib/auth/require-moderator";
+import {
+  isSettingsAdmin,
+  resolveSettingsAccess,
+} from "@/lib/auth/require-moderator";
 import {
   changeAccountRole,
   getAllMediaStoragePaths,
@@ -12,6 +16,7 @@ import {
   removeMediaStorageObjects,
   searchPersons,
   setAccountStatus,
+  setAppearance,
   updateTreeSettings,
   wipeTree,
 } from "@/lib/db";
@@ -20,6 +25,13 @@ import {
   validateTreeSettingsForm,
 } from "@/lib/settings/tree-settings-form";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import {
+  APPEARANCE_COOKIE_OPTIONS,
+  appearanceCookies,
+  isColorMode,
+  type ThemePreference,
+} from "@/lib/theme/preference";
+import { isThemeId } from "@/lib/theme/registry";
 
 /** Shared result shape for every `/settings` action. */
 export type SettingsActionResult =
@@ -33,7 +45,7 @@ export async function saveTreeSettingsAction(
   raw: RawTreeSettingsInput,
 ): Promise<SettingsActionResult> {
   const access = await resolveSettingsAccess();
-  if (access.kind !== "allowed") {
+  if (!isSettingsAdmin(access)) {
     return { ok: false, error: "You do not have permission to do that." };
   }
 
@@ -64,7 +76,7 @@ export async function searchSettingsPersons(
   query: string,
 ): Promise<readonly PersonSearchOption[]> {
   const access = await resolveSettingsAccess();
-  if (access.kind !== "allowed") {
+  if (!isSettingsAdmin(access)) {
     return [];
   }
   const server = await createSupabaseServerClient();
@@ -80,7 +92,7 @@ export async function changeAccountRoleAction(
   role: string,
 ): Promise<SettingsActionResult> {
   const access = await resolveSettingsAccess();
-  if (access.kind !== "allowed") {
+  if (!isSettingsAdmin(access)) {
     return { ok: false, error: "You do not have permission to do that." };
   }
   if (accountId === access.userId) {
@@ -106,7 +118,7 @@ export async function setAccountStatusAction(
   status: "active" | "suspended",
 ): Promise<SettingsActionResult> {
   const access = await resolveSettingsAccess();
-  if (access.kind !== "allowed") {
+  if (!isSettingsAdmin(access)) {
     return { ok: false, error: "You do not have permission to do that." };
   }
   if (accountId === access.userId) {
@@ -138,7 +150,7 @@ export async function setAccountStatusAction(
  */
 export async function wipeTreeAction(): Promise<SettingsActionResult> {
   const access = await resolveSettingsAccess();
-  if (access.kind !== "allowed") {
+  if (!isSettingsAdmin(access)) {
     return { ok: false, error: "You do not have permission to do that." };
   }
 
@@ -163,5 +175,45 @@ export async function wipeTreeAction(): Promise<SettingsActionResult> {
   revalidatePath("/settings");
   revalidatePath("/import");
   revalidatePath("/tree");
+  return { ok: true };
+}
+
+/**
+ * Save the caller's own theme + mode (SPEC §8.1 `/settings` Appearance,
+ * decision 38, #80) — any approved member, their own row only. The write is
+ * the `set_appearance` RPC (the one client path to those two columns), and
+ * the two `rw-theme` / `rw-mode` cookies are re-mirrored so the signed-out
+ * login page on this device follows the pick. Nothing is revalidated
+ * explicitly, but a cookie write in a server action makes Next re-render
+ * the route anyway — the layout then re-reads the row it just saved, so the
+ * response agrees with what the client applied optimistically.
+ */
+export async function saveAppearanceAction(raw: {
+  readonly theme: unknown;
+  readonly mode: unknown;
+}): Promise<SettingsActionResult> {
+  const access = await resolveSettingsAccess();
+  if (access.kind !== "allowed") {
+    return { ok: false, error: "You do not have permission to do that." };
+  }
+  if (!isThemeId(raw.theme) || !isColorMode(raw.mode)) {
+    return { ok: false, error: "Choose a theme and a mode from the list." };
+  }
+  const preference: ThemePreference = { theme: raw.theme, mode: raw.mode };
+
+  const server = await createSupabaseServerClient();
+  try {
+    await setAppearance(server, preference);
+  } catch (error: unknown) {
+    console.error(
+      `saveAppearanceAction: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    return { ok: false, error: "Your choice could not be saved. Try again." };
+  }
+
+  const cookieStore = await cookies();
+  for (const cookie of appearanceCookies(preference)) {
+    cookieStore.set(cookie.name, cookie.value, APPEARANCE_COOKIE_OPTIONS);
+  }
   return { ok: true };
 }

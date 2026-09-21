@@ -8,8 +8,10 @@ import {
 } from "../support/supabase-admin";
 
 /**
- * `/settings` — admin only (SPEC §8.1, §9.4, §10 item 37). Two surfaces: the
- * singleton `tree_settings` row and the account roster.
+ * `/settings` (SPEC §8.1, §9.4, §10 item 37). Since #80 the route is tabbed
+ * — Appearance (every approved member) | Tree | Roles — and the admin gate
+ * applies per tab. The two admin surfaces here: the singleton
+ * `tree_settings` row (`?tab=tree`) and the account roster (`?tab=roles`).
  *
  * Settings are global, so these run serially and put every value back. The
  * destructive third surface, Wipe tree, lives in `tests/destructive/`.
@@ -34,7 +36,7 @@ test.describe("tree settings", () => {
   });
 
   test("shows the current values", async ({ adminPage }) => {
-    await adminPage.goto("/settings");
+    await adminPage.goto("/settings?tab=tree");
     await expect(
       adminPage.getByRole("heading", { name: "Tree settings" }),
     ).toBeVisible();
@@ -49,7 +51,7 @@ test.describe("tree settings", () => {
   });
 
   test("converts the upload limit to MB as a hint", async ({ adminPage }) => {
-    await adminPage.goto("/settings");
+    await adminPage.goto("/settings?tab=tree");
     await adminPage.getByLabel("Maximum upload size (bytes)").fill("5242880");
     await expect(adminPage.getByText("≈ 5.0 MB")).toBeVisible();
   });
@@ -57,13 +59,13 @@ test.describe("tree settings", () => {
   test("hides the MB hint for a value that is not a size", async ({
     adminPage,
   }) => {
-    await adminPage.goto("/settings");
+    await adminPage.goto("/settings?tab=tree");
     await adminPage.getByLabel("Maximum upload size (bytes)").fill("abc");
     await expect(adminPage.getByText(/≈ .* MB/)).toHaveCount(0);
   });
 
   test("saves a changed tree name and puts it back", async ({ adminPage }) => {
-    await adminPage.goto("/settings");
+    await adminPage.goto("/settings?tab=tree");
     const field = adminPage.getByLabel("Tree name");
     const original = (await field.inputValue()) || "The Ashby Family (demo)";
 
@@ -82,7 +84,7 @@ test.describe("tree settings", () => {
   });
 
   test("refuses a non-numeric generation depth", async ({ adminPage }) => {
-    await adminPage.goto("/settings");
+    await adminPage.goto("/settings?tab=tree");
     await adminPage.getByLabel("Default generations up").fill("not-a-number");
     await adminPage.getByRole("button", { name: "Save settings" }).click();
     await expect(alerts(adminPage).first()).toBeVisible();
@@ -90,14 +92,14 @@ test.describe("tree settings", () => {
   });
 
   test("refuses a negative living threshold", async ({ adminPage }) => {
-    await adminPage.goto("/settings");
+    await adminPage.goto("/settings?tab=tree");
     await adminPage.getByLabel("Living-person threshold (years)").fill("-10");
     await adminPage.getByRole("button", { name: "Save settings" }).click();
     await expect(alerts(adminPage).first()).toBeVisible();
   });
 
   test("picks a default root person by name (#53)", async ({ adminPage }) => {
-    await adminPage.goto("/settings");
+    await adminPage.goto("/settings?tab=tree");
     // The picker is a labelled search input; its matches are buttons. It
     // returns 8 rows sorted by surname, so searching the shared surname
     // leaves which 8 arbitrary — the given name is the stable handle.
@@ -110,7 +112,7 @@ test.describe("tree settings", () => {
   test("saves the tree description and reads it back", async ({
     adminPage,
   }) => {
-    await adminPage.goto("/settings");
+    await adminPage.goto("/settings?tab=tree");
     const field = adminPage.getByLabel("Tree description");
     await field.fill("A description typed by the end-to-end suite.");
     await adminPage.getByRole("button", { name: "Save settings" }).click();
@@ -123,7 +125,7 @@ test.describe("tree settings", () => {
   });
 
   test("saves the allowed media types list", async ({ adminPage }) => {
-    await adminPage.goto("/settings");
+    await adminPage.goto("/settings?tab=tree");
     await adminPage
       .getByLabel(/Allowed media types/)
       .fill("image/png\nimage/jpeg");
@@ -137,7 +139,7 @@ test.describe("tree settings", () => {
   });
 
   test("saves both generation depths", async ({ adminPage }) => {
-    await adminPage.goto("/settings");
+    await adminPage.goto("/settings?tab=tree");
     await adminPage.getByLabel("Default generations up").fill("5");
     await adminPage.getByLabel("Default generations down").fill("4");
     await adminPage.getByRole("button", { name: "Save settings" }).click();
@@ -155,7 +157,7 @@ test.describe("tree settings", () => {
   test("toggles the EXIF GPS stripping box and reads it back", async ({
     adminPage,
   }) => {
-    await adminPage.goto("/settings");
+    await adminPage.goto("/settings?tab=tree");
     const box = adminPage.getByLabel(/Strip GPS location/);
     const before = await box.isChecked();
 
@@ -172,7 +174,7 @@ test.describe("tree settings", () => {
   test("sets a default root person and clears it again", async ({
     adminPage,
   }) => {
-    await adminPage.goto("/settings");
+    await adminPage.goto("/settings?tab=tree");
     // The given name, for the reason given on the picker test above.
     await adminPage.getByLabel(/Choose a (different )?person/).fill("Gideon");
     await adminPage
@@ -195,7 +197,7 @@ test.describe("tree settings", () => {
   });
 
   test("toggles self-signup and puts it back", async ({ adminPage }) => {
-    await adminPage.goto("/settings");
+    await adminPage.goto("/settings?tab=tree");
     const box = adminPage.getByLabel(/Allow self-signup/);
     const before = await box.isChecked();
 
@@ -226,7 +228,7 @@ test.describe("the wipe-tree gate", () => {
   test("keeps the button dead until the phrase is exact", async ({
     adminPage,
   }) => {
-    await adminPage.goto("/settings");
+    await adminPage.goto("/settings?tab=tree");
     const wipe = adminPage.getByRole("button", { name: "Wipe tree" });
     const confirm = adminPage.getByLabel('Type "WIPE" to confirm');
     await expect(wipe).toBeDisabled();
@@ -247,7 +249,7 @@ test.describe("the wipe-tree gate", () => {
   test("offers to skip the automatic backup, and says what that means", async ({
     adminPage,
   }) => {
-    await adminPage.goto("/settings");
+    await adminPage.goto("/settings?tab=tree");
     const skip = adminPage.getByLabel(/Skip the automatic backup/);
     await expect(skip).not.toBeChecked();
     await expect(
@@ -266,11 +268,14 @@ test.describe("the wipe-tree gate", () => {
   });
 
   test("is not offered to a moderator at all", async ({ moderatorPage }) => {
-    await moderatorPage.goto("/settings");
+    await moderatorPage.goto("/settings?tab=tree");
     // Anchored on the refusal the page actually renders: an expired session
     // redirects to /login, where "no Wipe tree button" is true but tells us
     // nothing.
-    await expect(moderatorPage).toHaveURL(/\/settings$/);
+    await expect(moderatorPage).toHaveURL(/\/settings\?tab=tree$/);
+    await expect(
+      moderatorPage.getByText(/needs? administrator access/i),
+    ).toBeVisible();
     await expect(
       moderatorPage.getByRole("button", { name: "Wipe tree" }),
     ).toHaveCount(0);
@@ -279,7 +284,7 @@ test.describe("the wipe-tree gate", () => {
 
 test.describe("role management", () => {
   test("lists every account", async ({ adminPage }) => {
-    await adminPage.goto("/settings");
+    await adminPage.goto("/settings?tab=roles");
     await expect(
       adminPage.getByRole("heading", { name: "Accounts" }),
     ).toBeVisible();
@@ -290,7 +295,7 @@ test.describe("role management", () => {
   test("marks the signed-in admin's own row and locks it", async ({
     adminPage,
   }) => {
-    await adminPage.goto("/settings");
+    await adminPage.goto("/settings?tab=roles");
     const ownRow = adminPage.locator("li").filter({ hasText: "(you)" });
     await expect(ownRow).toHaveCount(1);
     await expect(ownRow.getByRole("combobox")).toBeDisabled();
@@ -302,7 +307,7 @@ test.describe("role management", () => {
   test("shows the person a claimed account is linked to", async ({
     adminPage,
   }) => {
-    await adminPage.goto("/settings");
+    await adminPage.goto("/settings?tab=roles");
     const row = adminPage.locator("li").filter({ hasText: "E2E Viewer" });
     await expect(row).toContainText("linked to");
     await expect(
@@ -334,7 +339,7 @@ test.describe("role management", () => {
       displayName: "E2E Role Target",
     });
 
-    await adminPage.goto("/settings");
+    await adminPage.goto("/settings?tab=roles");
     const row = adminPage.locator("li").filter({ hasText: "E2E Role Target" });
     await expect(row.getByRole("combobox")).toHaveValue("viewer");
 
@@ -358,7 +363,7 @@ test.describe("role management", () => {
       displayName: "E2E Status Target",
     });
 
-    await adminPage.goto("/settings");
+    await adminPage.goto("/settings?tab=roles");
     const row = adminPage
       .locator("li")
       .filter({ hasText: "E2E Status Target" });
