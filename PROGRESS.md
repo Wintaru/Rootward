@@ -63,7 +63,45 @@ are in `EXTERNAL-SETUP-HANDOFF.md` (local). **Branching for Phase 11
 `release_work` branch, not `origin/main`, and Josh merges each one back
 into it — `.trillian-repo.json` `git.baseBranch` is `release_work` for the
 duration. `release_work` has no remote yet, so use the local form
-`git switch -c <type>/<slug> release_work`. **Next session:** #128.
+`git switch -c <type>/<slug> release_work`. **Next session:** #109.
+
+**Issue #100 — pgTAP never runs as the `authenticator` role: done, staged
+on branch `test/pgtap-authenticator-role`, issue closed.** SPEC §5 Tests.
+
+- `supabase/tests/safeupdate_authenticator_test.sql`: `dblink` to the
+  server's own bridge address (`inet_server_addr()` — loopback is trusted
+  locally, and `dblink_connect` refuses a connection whose password went
+  unused; `LOAD 'safeupdate'` and a startup `session_preload_libraries`
+  are both denied to the non-superuser `postgres`) as `authenticator`
+  with the local default password. First two assertions prove the guard
+  is live (an unqualified DELETE and UPDATE both throw), then
+  `wipe_tree()` runs as an admin through that session over rows the
+  session inserted as `service_role`, rolled back remotely. The admin
+  fixture is committed around the test (the remote session cannot see
+  the test transaction, and neither `authenticator` nor `service_role`
+  may insert into `auth.users`): stale-cleanup, upsert (the `auth.users`
+  trigger already makes a pending account), and delete after `rollback`.
+  Verified: with the pre-#99 `wipe_tree` body swapped in, the test fails
+  with the exact production error (`DELETE requires a WHERE clause` from
+  `delete from public.note`); restored, it passes.
+  Review caught two things worth keeping in mind for this harness: the
+  `dblink_connect` now runs _before_ the fixture commit, so a `--linked`
+  run against a real project stops at the connect and never writes the
+  admin; and every remote call after the one assertion that can fail
+  passes `fail_on_error := false`, so an abort still reaches the cleanup
+  (verified: the failed run left no row).
+- `schema_guards_test.sql` gains two static guards over `pg_proc`
+  (`pg_temp.unfiltered_writes(verb)`, line comments stripped): no `public`
+  function body has a DELETE or an UPDATE without WHERE. Review caught the
+  first cut of the UPDATE guard as vacuous (`stmt[0]` on a 1-based
+  `regexp_matches` array is always NULL) — both are now verified to trip:
+  the old `wipe_tree` body for DELETE, a probe function for UPDATE. A
+  WHERE inside a subquery and dynamic SQL slip past; the dblink test is
+  the backstop.
+- Full `supabase test db` on the shared stack: the new file and
+  `schema_guards` pass; the state-only failures are now **five** — the
+  three bucket tests, `seed_smoke`, and `search_persons` test 6 ("bud"
+  matches Jozef Brennan in the 628-person demo tree) — all #109's.
 
 **Issue #124 — `gedcom-export` `manual_full`: GEDCOM plus every media
 file as a GedZip: done, staged on branch `feat/export-manual-full-gedzip`,

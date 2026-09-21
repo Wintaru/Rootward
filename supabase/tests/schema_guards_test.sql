@@ -6,7 +6,7 @@
 -- / RLS must fail here rather than ship a silent gap.
 
 begin;
-select plan(7);
+select plan(9);
 
 -- set_updated_at is the concurrency token; SPEC §4 fixes the list to the 15
 -- editable tables the edit view can send back.
@@ -85,6 +85,40 @@ select is(
          not like '%''' || label || '''%'),
   0,
   'note_is_visible handles every note_owner label'
+);
+
+-- safeupdate (#100): PostgREST's `authenticator` session rejects any DELETE
+-- or UPDATE with no WHERE, including one inside a function body, and pgTAP
+-- never runs under it. `safeupdate_authenticator_test.sql` exercises the one
+-- function built on unfiltered writes through a real such session; this
+-- pair is a lint that catches the next one at the source -- a statement
+-- with no WHERE anywhere in it, line comments stripped. A WHERE inside a
+-- subquery and dynamic SQL slip past it; the dblink test is the backstop.
+-- An intentional full-table write carries `where true` (see
+-- `20260914133629_wipe_tree_safeupdate.sql`).
+create function pg_temp.unfiltered_writes(p_verb text)
+returns setof text
+language sql
+as $$
+  select p.proname::text
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  cross join lateral regexp_matches(
+    regexp_replace(p.prosrc, '--[^\n]*', '', 'g'),
+    '\m' || p_verb || '\s+[^;]*;',
+    'gi'
+  ) as stmt
+  where n.nspname = 'public'
+    and stmt[1] !~* '\mwhere\M'
+$$;
+
+select is_empty(
+  $$ select * from pg_temp.unfiltered_writes('delete\s+from') $$,
+  'no public function body has a DELETE without a WHERE clause'
+);
+select is_empty(
+  $$ select * from pg_temp.unfiltered_writes('update') $$,
+  'no public function body has an UPDATE without a WHERE clause'
 );
 
 select * from finish();

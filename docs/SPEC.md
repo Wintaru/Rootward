@@ -575,8 +575,19 @@ post-MVP feature.
 `supabase/tests/rls_test.sql` (pgTAP) asserts both the allow and the deny path
 for every helper and every policy; `supabase/tests/schema_guards_test.sql` checks
 that RLS is on for every table and that the `set_updated_at` / `write_audit_log`
-trigger sets have not drifted. `supabase test db` runs both in the CI
-`migrations` job. This is the guard that stops a policy regression from shipping.
+trigger sets have not drifted, and that no `public` function body carries a
+DELETE or UPDATE without a WHERE clause. `supabase test db` runs every file in
+`supabase/tests` in the CI `migrations` job. This is the guard that stops a
+policy regression from shipping.
+
+pgTAP connects as `postgres`, not as the `authenticator` role PostgREST uses,
+so a bug that only shows under that role's session config is invisible to
+the suite — `safeupdate`, preloaded on `authenticator`, is the known case
+(#99, #100). `supabase/tests/safeupdate_authenticator_test.sql` opens a real
+`authenticator` connection through `dblink` and runs the unfiltered-write
+functions through it; its first assertions prove the guard is active on that
+session, so the test cannot pass vacuously. A new admin action that writes a
+whole table needs `where true` on each statement and a case in that file.
 
 ---
 
