@@ -1195,6 +1195,39 @@ contract, #81 goes last because it measures what the others drew.
   `--primary`. `--rw-accent-2` left the text paths instead (link hover,
   chip disc) — see §8.1. *Last in Phase 10.*
 
+### Phase 11 — Release 1.0
+
+Milestone `Phase 11 — Release 1.0`, label `phase:11`. Filed 2026-09-21 from
+a release-readiness assessment (`RELEASE-1.0-HANDOFF.md`, local). Every
+feature phase is closed; this phase is **trust** work — proof the docs
+work, proof a backup restores the whole tree, and the bugs a family hits
+on day one. Order is one session each, groups in this sequence:
+
+- **Day-one bugs:** #108 EXIF orientation on derivatives · #125 no primary
+  photo when the file has no `_PRIM` · #120 primary pick leaves
+  `sort_order` stale · #121 hidden focus person renders a broken chart
+  instead of a 404.
+- **A backup that restores everything:** #126 `person.visibility` round
+  trip (a privacy regression today, not only data loss) · #124
+  `manual_full` export with media as a GedZip · #128 tested `pg_dump` +
+  bucket backup, restore, and self-host upgrade runbook.
+- **Both deploy paths run live from the docs alone:** #129 Vercel +
+  Supabase Cloud · #130 Docker Compose self-host. Each records its date
+  and CLI version in the guide. #130 also states the CLI-stack-as-production
+  limits plainly.
+- **RLS test gap:** #100 pgTAP as the `authenticator` role · #109 bucket
+  and seed tests on a non-empty stack. Then one full e2e run on a
+  `pnpm dev:fresh` stack, on record.
+- **Security once-over:** #132 audit findings (dev-only today), signed-URL
+  lifetimes, service-role paths, self-claim cap, headers.
+- **Release mechanics:** #131 `CHANGELOG.md`, version `1.0.0`, Upgrading
+  section, "what 1.0 promises", `docs/RELEASING.md`, tag `v1.0.0`. *Last
+  in Phase 11 — the tag lands after every other issue closes.*
+
+Out of 1.0 by choice: everything under Post-MVP below, hosted
+multi-tenancy (decision 37), #123 (tinted-surface contrast), and the
+tooling issues #47, #83, #85, #87, #88, #98, #102, #103.
+
 ### Post-MVP (separate milestone)
 - Scheduled backup (`scheduled_full` + `pg_cron` + retention) — decision 29.
 - Map view (`geocode-place`, MapLibre, `/map`) — decision 30.

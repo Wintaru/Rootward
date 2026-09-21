@@ -51,7 +51,14 @@ pgTAP test. Filed: #124 (`manual_full` export with media — needed before
 the round trip can compare photo bytes), #125 (no primary photo when the
 file has no `_PRIM`, as MacFamilyTree writes), #126 (visibility has no
 GEDCOM tag), #127 (e2e teardown restores a deleted root person).
-**Next session:** whichever of those Josh picks, or the next milestone.
+**Phase 11 — Release 1.0 is the next phase** (milestone of the same
+name, label `phase:11`, filed 2026-09-21; contract in `docs/SPEC.md` §10
+"Phase 11"). Thirteen issues in six groups: day-one bugs (#108 `ready`,
+#125, #120, #121), backup fidelity (#126, #124, #128), live deploys
+(#129, #130), the RLS test gap (#100, #109), a security once-over (#132),
+and release mechanics (#131, last). The external accounts Josh sets up on
+his side (Supabase project, Google OAuth client, SMTP, Vercel, a server)
+are in `EXTERNAL-SETUP-HANDOFF.md` (local). **Next session:** #108.
 
 **Issue #81 — Contrast audit: done, staged on branch
 `feat/contrast-audit`, issue closed.** SPEC §10 Phase 10, §8.1.
