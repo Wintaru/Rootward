@@ -22,6 +22,17 @@ export type {
   MatchedMediaFile,
   MediaFileIndex,
 } from "./gedzip.ts";
+export {
+  archiveEntryNames,
+  createGedZipStream,
+  GEDZIP_GEDCOM_ENTRY,
+  readStreamToBytes,
+} from "./gedzip-write.ts";
+export type {
+  ArchiveNameSource,
+  CreateGedZipOptions,
+  GedZipEntry,
+} from "./gedzip-write.ts";
 
 export {
   decodeMediaStorageKey,
