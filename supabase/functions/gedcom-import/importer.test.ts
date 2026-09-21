@@ -1,4 +1,4 @@
-import { assert, assertEquals } from "@std/assert";
+import { assert, assertEquals, assertExists } from "@std/assert";
 
 import {
   GEDCOM_551,
@@ -538,6 +538,69 @@ Deno.test(
 
     assertEquals(gw.readReadyMediaCalls.length, 0);
     assertEquals(gw.writtenObjects.size, 0);
+  },
+);
+
+/** One person, three `OBJE` pointers and no `_PRIM` anywhere -- the shape
+ * MacFamilyTree 11 (GEDCOM 7) writes -- behind a bare `OBJE` with neither
+ * pointer nor `FILE`, which the importer skips and which must not use up
+ * the primary. Plus a second person whose *second* link carries the tag,
+ * to show an explicit `_PRIM` still wins over file order, and a family
+ * with a link, which gets no primary at all. */
+const GEDCOM_NO_PRIM = `0 HEAD
+1 GEDC
+2 VERS 7.0
+0 @I1@ INDI
+1 NAME Jane /Doe/
+1 OBJE
+2 TITL nothing attached
+1 OBJE @O1@
+1 OBJE @O2@
+1 OBJE @O3@
+0 @I2@ INDI
+1 NAME Bob /Doe/
+1 OBJE @O1@
+1 OBJE @O2@
+2 _PRIM Y
+0 @F1@ FAM
+1 HUSB @I2@
+1 WIFE @I1@
+1 OBJE @O3@
+0 @O1@ OBJE
+1 FILE first.jpg
+0 @O2@ OBJE
+1 FILE second.jpg
+0 @O3@ OBJE
+1 FILE third.jpg
+0 TRLR
+`;
+
+Deno.test(
+  "no _PRIM in the file: the first OBJE link is the primary, an explicit _PRIM still wins (#125)",
+  async () => {
+    const gw = new FakeGateway({ gedcom: GEDCOM_NO_PRIM });
+
+    const outcome = await runToCompletion(gw);
+
+    assertEquals(outcome.status, "completed");
+    const people = gw.rows("person");
+    const jane = people.find((p) => p.gedcom_xref === "@I1@");
+    const bob = people.find((p) => p.gedcom_xref === "@I2@");
+    assertExists(jane);
+    assertExists(bob);
+    const links = gw.rows("media_link");
+    const primaryFor = (ownerId: unknown) =>
+      links
+        .filter((l) => l.owner_id === ownerId && l.is_primary === true)
+        .map((l) => l.sort_order);
+    // Jane's index 0 is the bare OBJE the importer skipped.
+    assertEquals(primaryFor(jane.id), [1]);
+    assertEquals(primaryFor(bob.id), [1]);
+    assertEquals(links.filter((l) => l.owner_id === jane.id).length, 3);
+    const family = gw.rows("family")[0];
+    assertExists(family);
+    assertEquals(primaryFor(family.id), []);
+    assertEquals(links.filter((l) => l.owner_id === family.id).length, 1);
   },
 );
 

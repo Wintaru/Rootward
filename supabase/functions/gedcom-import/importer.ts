@@ -980,6 +980,14 @@ async function buildAttachments(
     });
   }
 
+  // MacFamilyTree (GEDCOM 7) writes no `_PRIM` at all -- its `OBJE` pointers
+  // are just in order, first = the portrait -- so a person with no marked
+  // primary gets the first link that actually attaches as one (#125). An
+  // explicit `_PRIM Y` anywhere in the list still wins. People only: the
+  // primary is the profile / tree-card portrait, and a family's or event's
+  // first attachment has no such role.
+  const defaultFirstToPrimary = spec.ownerType === "person" &&
+    !spec.mediaLinks.some((link) => link.is_primary);
   let primaryTaken = false;
   for (const [j, link] of spec.mediaLinks.entries()) {
     let mediaId: string;
@@ -1010,7 +1018,8 @@ async function buildAttachments(
     } else {
       continue;
     }
-    const isPrimary = link.is_primary && !primaryTaken;
+    const isPrimary = !primaryTaken &&
+      (link.is_primary || defaultFirstToPrimary);
     if (isPrimary) {
       primaryTaken = true;
     }

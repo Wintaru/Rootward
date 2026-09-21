@@ -58,7 +58,29 @@ name, label `phase:11`, filed 2026-09-21; contract in `docs/SPEC.md` §10
 (#129, #130), the RLS test gap (#100, #109), a security once-over (#132),
 and release mechanics (#131, last). The external accounts Josh sets up on
 his side (Supabase project, Google OAuth client, SMTP, Vercel, a server)
-are in `EXTERNAL-SETUP-HANDOFF.md` (local). **Next session:** #125.
+are in `EXTERNAL-SETUP-HANDOFF.md` (local). **Branching for Phase 11
+(Josh, 2026-09-21):** every Phase 11 branch is cut from the local
+`release_work` branch, not `origin/main`, and Josh merges each one back
+into it — `.trillian-repo.json` `git.baseBranch` is `release_work` for the
+duration. `release_work` has no remote yet, so use the local form
+`git switch -c <type>/<slug> release_work`. **Next session:** #120.
+
+**Issue #125 — GEDCOM import: no primary photo without `_PRIM`: done,
+staged on branch `fix/gedcom-primary-photo-no-prim`, issue closed.**
+
+- `importer.ts` media-link builder: a **person** whose `OBJE` links carry
+  no `_PRIM` gets the first link that actually attaches as `is_primary`
+  (MacFamilyTree 11 / GEDCOM 7 writes no `_PRIM` — the pointers are in
+  order, first = the portrait). An explicit `_PRIM Y` anywhere still wins.
+  People only: family / event / source owners get no defaulted primary —
+  the first cut applied it to every owner and the demo-tree round-trip
+  test caught 164 extra primaries on families. A skipped bare `OBJE` (no
+  pointer, no `FILE`) does not consume the primary.
+- Test: `GEDCOM_NO_PRIM` fixture in `importer.test.ts` (three-link person
+  behind a skipped bare `OBJE`, a person whose second link is `_PRIM Y`, a
+  family with a link). Fails on the old importer, passes on the new. Gate
+  green: typecheck, lint, format, build, 896 vitest, 72 Deno. Review: no
+  blocking findings.
 
 **Issue #108 — EXIF Orientation on derivatives: done, staged on branch
 `fix/exif-orientation`, issue closed.** SPEC §4.4 `rotation` / `crop_*`.
