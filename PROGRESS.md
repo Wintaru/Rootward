@@ -63,7 +63,28 @@ are in `EXTERNAL-SETUP-HANDOFF.md` (local). **Branching for Phase 11
 `release_work` branch, not `origin/main`, and Josh merges each one back
 into it — `.trillian-repo.json` `git.baseBranch` is `release_work` for the
 duration. `release_work` has no remote yet, so use the local form
-`git switch -c <type>/<slug> release_work`. **Next session:** #109.
+`git switch -c <type>/<slug> release_work`. **Next session:** #132.
+
+**Issue #109 — pgTAP bucket and seed tests assume an empty local database:
+done, staged on branch `test/pgtap-state-independent`, issue closed.**
+SPEC §5 Tests.
+
+- The three bucket tests count only their fixture object (renamed to
+  `pgtap-fixture.*` / `staging/pgtap-fixture.jpg`, names no real upload
+  produces); the deny assertions were already "sees nothing". The
+  `search_persons` helper filters results to the file's `65000000-…` ids.
+  `seed_smoke_test.sql` gates on the seed's root person (Cornelius Ashby's
+  fixed id, which only `seed.sql` writes — `tree_name` survives a wipe, so
+  it is not a usable signal) through psql `\gset` / `\if`, skipping all
+  12 with a message otherwise; its two exact counts are scoped to seed ids
+  so e2e fixtures alongside the seed do not fail it. Verified both
+  branches in a rolled-back transaction: absent → 12 SKIPs; a stub root
+  row → the real assertions run and fail honestly.
+- Review's point, applied: pg_prove counts a skip as a pass, so CI gains a
+  "Check the seed loaded" step before `supabase test db` (asserts the
+  Cornelius row) — there the seed must load and the smoke test must run.
+- **Full `supabase test db` on the shared stack: 22 files, 380 tests,
+  PASS** — the local suite is a usable gate again.
 
 **Issue #100 — pgTAP never runs as the `authenticator` role: done, staged
 on branch `test/pgtap-authenticator-role`, issue closed.** SPEC §5 Tests.

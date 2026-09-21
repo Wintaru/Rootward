@@ -46,7 +46,10 @@ insert into public.account (id, role, status) values
 on conflict (id) do update set role = excluded.role, status = excluded.status;
 
 -- A pre-existing object so the SELECT-deny assertions target a real row.
-insert into storage.objects (bucket_id, name) values ('exports', 'seed.ged');
+-- A name no real export produces, so this cannot collide with a shared
+-- stack's objects (#109).
+insert into storage.objects (bucket_id, name)
+values ('exports', 'pgtap-fixture.ged');
 
 select is(
   (select public from storage.buckets where id = 'exports'),
@@ -58,8 +61,11 @@ set local role authenticated;
 
 -- Moderator: can see and write export objects.
 select pg_temp.act_as('a0000000-0000-0000-0000-0000000000e1');
+-- Scoped to the fixture: a shared stack has other objects here, and the
+-- deny assertions below already prove nobody else sees any of them.
 select is(
-  (select count(*)::int from storage.objects where bucket_id = 'exports'),
+  (select count(*)::int from storage.objects
+   where bucket_id = 'exports' and name = 'pgtap-fixture.ged'),
   1,
   'moderator sees the exports object'
 );

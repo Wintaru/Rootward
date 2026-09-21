@@ -103,6 +103,15 @@ jobs:
       - name: Lint schema
         run: supabase db lint --local --level warning --fail-on error
 
+      # seed_smoke_test.sql skips itself when the seed is absent (#109) so
+      # the suite is usable on a shared local stack -- and pg_prove counts a
+      # skip as a pass. CI is where the seed must actually load, so prove it
+      # here, or the smoke test could retire silently.
+      - name: Check the seed loaded
+        run: |
+          db_url="$(supabase status -o env | sed -n 's/^DB_URL=//p' | tr -d '"')"
+          psql "$db_url" -tAc "select 1 from public.person where id = 'd0000000-0000-4000-8000-000000000001'" | grep -qx 1
+
       # pgTAP suite in supabase/tests: RLS allow/deny for every §5 policy plus
       # the shared-trigger coverage guards (SPEC §5, issue #9).
       - name: Run database tests

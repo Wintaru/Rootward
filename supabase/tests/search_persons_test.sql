@@ -21,6 +21,8 @@ begin
 end;
 $$;
 
+-- Only this file's own fixtures count (#109): a shared local stack holds
+-- whatever tree was last imported, and the demo tree has a "Bud" of its own.
 create function pg_temp.found(p_words text[])
 returns text[]
 language sql
@@ -29,7 +31,8 @@ as $$
     array_agg(coalesce(given_name, '') || '|' || coalesce(surname, '')
               order by surname nulls last, given_name nulls last),
     '{}'::text[])
-  from public.search_persons(p_words);
+  from public.search_persons(p_words)
+  where id::text like '65000000-%';
 $$;
 
 -- ---------------------------------------------------------------------------

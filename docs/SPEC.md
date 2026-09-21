@@ -589,6 +589,14 @@ functions through it; its first assertions prove the guard is active on that
 session, so the test cannot pass vacuously. A new admin action that writes a
 whole table needs `where true` on each statement and a case in that file.
 
+Every file must pass on a shared local stack that holds any tree (#109): an
+exact count (`is(…, n)`) is scoped to the file's own fixture ids or names; a
+whole-table or whole-bucket count is fine only as a deny (`= 0`) or a lower
+bound (`>=`); fixture objects get names no real upload produces.
+`seed_smoke_test.sql` is the one seed-dependent file; it skips itself unless
+the seed's own root person is present, and CI checks that row before the
+suite so the skip can never go green there.
+
 ---
 
 ## 6. GEDCOM mapping (`packages/gedcom`)
