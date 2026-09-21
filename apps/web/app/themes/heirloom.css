@@ -2,6 +2,9 @@
  * Heirloom — archival and editorial: paper, ink, and hairlines. Original
  * Rootward palette. Values generated from the redesign token file (#77);
  * do not retune by eye. Contract: `app/globals.css`, #75.
+ * Contrast audit (#81, `scripts/contrast-audit.mjs`): the values below
+ * step lightness only, hue held, against the upstream palette:
+ *   light --muted-foreground: #7b7060 → #746959
  */
 [data-theme="heirloom"] {
   --font-display:
@@ -22,7 +25,7 @@
   --secondary: #eae1cd;
   --secondary-foreground: #2b241a;
   --muted: #eae1cd;
-  --muted-foreground: #7b7060;
+  --muted-foreground: #746959;
   --accent: #eae1cd;
   --accent-foreground: #2b241a;
   --border: #d9ccb2;

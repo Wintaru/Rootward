@@ -2,6 +2,11 @@
  * Hearth — modern and tactile: soft stone, terracotta, rounded. Original
  * Rootward palette. Values generated from the redesign token file (#77);
  * do not retune by eye. Contract: `app/globals.css`, #75.
+ * Contrast audit (#81, `scripts/contrast-audit.mjs`): the values below
+ * step lightness only, hue held, against the upstream palette:
+ *   light --muted-foreground: #7d6f64 → #796b60
+ *   light --primary: #c4633f → #b0512d
+ *   light --ring: #c4633f → #b0512d
  */
 [data-theme="hearth"] {
   --font-display:
@@ -17,17 +22,17 @@
   --card-foreground: #241c16;
   --popover: #ffffff;
   --popover-foreground: #241c16;
-  --primary: #c4633f;
+  --primary: #b0512d;
   --primary-foreground: #ffffff;
   --secondary: #efe7de;
   --secondary-foreground: #241c16;
   --muted: #efe7de;
-  --muted-foreground: #7d6f64;
+  --muted-foreground: #796b60;
   --accent: #efe7de;
   --accent-foreground: #241c16;
   --border: #e6dbd0;
   --input: #e6dbd0;
-  --ring: #c4633f;
+  --ring: #b0512d;
   --rw-accent-2: #e5b98a;
   --rw-male: #3f7f79;
   --rw-female: #c4633f;

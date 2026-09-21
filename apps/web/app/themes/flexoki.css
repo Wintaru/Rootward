@@ -9,6 +9,11 @@
  * the import order. When the default changes, move the `:where()` pair to
  * the new default's file and the `preload` flag in `lib/theme/fonts.ts` to
  * its faces — `registry.test.ts` checks both.
+ * Contrast audit (#81, `scripts/contrast-audit.mjs`): the values below
+ * step lightness only, hue held, against the upstream palette:
+ *   light --muted-foreground: #6f6e69 → #6c6b66
+ *   light --primary: #bc5215 → #b54c09
+ *   light --ring: #bc5215 → #b54c09
  */
 :where(:root),
 [data-theme="flexoki"] {
@@ -24,17 +29,17 @@
   --card-foreground: #100f0f;
   --popover: #fffcf0;
   --popover-foreground: #100f0f;
-  --primary: #bc5215;
+  --primary: #b54c09;
   --primary-foreground: #fffcf0;
   --secondary: #e6e4d9;
   --secondary-foreground: #100f0f;
   --muted: #e6e4d9;
-  --muted-foreground: #6f6e69;
+  --muted-foreground: #6c6b66;
   --accent: #e6e4d9;
   --accent-foreground: #100f0f;
   --border: #dad8ce;
   --input: #dad8ce;
-  --ring: #bc5215;
+  --ring: #b54c09;
   --rw-accent-2: #ad8301;
   --rw-male: #205ea6;
   --rw-female: #a02f6f;

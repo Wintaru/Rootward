@@ -143,7 +143,13 @@
   a {
     color: var(--primary);
   }
-  a:hover {
-    color: var(--rw-accent-2);
+  /* Hover keeps the link colour and adds the underline: `--rw-accent-2`
+   * (the #79 hover colour) fails 4.5:1 as text on every light theme (#81),
+   * and a hover that lowers contrast was the wrong pattern regardless.
+   * Unclassed links only — a link with a class (button-styled, a list row,
+   * a tab, a menu item) draws its own hover. */
+  a:not([class]):hover {
+    text-decoration: underline;
+    text-underline-offset: 2px;
   }
 }

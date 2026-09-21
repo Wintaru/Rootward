@@ -2,6 +2,12 @@
  * Orchard — botanical and calm: linen, sage, amber, organic lines. Original
  * Rootward palette. Values generated from the redesign token file (#77);
  * do not retune by eye. Contract: `app/globals.css`, #75.
+ * Contrast audit (#81, `scripts/contrast-audit.mjs`): the values below
+ * step lightness only, hue held, against the upstream palette:
+ *   light --muted-foreground: #6c735f → #666d59
+ *   light --primary: #5c7a52 → #56744c
+ *   light --ring: #5c7a52 → #56744c
+ *   light --rw-female: #c8873a → #c18133
  */
 [data-theme="orchard"] {
   --font-display:
@@ -17,20 +23,20 @@
   --card-foreground: #232a1f;
   --popover: #faf9f2;
   --popover-foreground: #232a1f;
-  --primary: #5c7a52;
+  --primary: #56744c;
   --primary-foreground: #faf9f2;
   --secondary: #e8e5d6;
   --secondary-foreground: #232a1f;
   --muted: #e8e5d6;
-  --muted-foreground: #6c735f;
+  --muted-foreground: #666d59;
   --accent: #e8e5d6;
   --accent-foreground: #232a1f;
   --border: #d7d3bf;
   --input: #d7d3bf;
-  --ring: #5c7a52;
+  --ring: #56744c;
   --rw-accent-2: #d29a3a;
   --rw-male: #5f7f96;
-  --rw-female: #c8873a;
+  --rw-female: #c18133;
   --rw-neutral: #8b8f7e;
   --rw-band: rgba(35, 42, 31, 0.04);
   --rw-link: rgba(92, 122, 82, 0.5);

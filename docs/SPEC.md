@@ -751,7 +751,9 @@ Header 64px on `var(--card)` with a bottom border. Left: the **wordmark** —
 `subtitle` — the tree name as a small-caps label). Centre: the
 `resolveHeaderNav` links, styled by `data-nav` (`underline`, `pill`, `caps`).
 Right: the bell, then an **account chip** — an initials disc in
-`var(--rw-accent-2)` and the first name, `rounded-pill`, bordered — whose menu
+`var(--primary)` / `var(--primary-foreground)` (the canvas drew it in
+`--rw-accent-2`; that pair fails AA as text on every light theme, #81) and
+the first name, `rounded-pill`, bordered — whose menu
 holds **My record** (when linked), **Appearance** (`/settings`, any
 approved member, #80), and **Sign out** (the sign-out form moved
 into the menu in #79; the item is a `menuitem`, and the e2e `signOut`
@@ -762,8 +764,10 @@ SHOWN", two steppers (26px, `var(--rw-radius-control)`), and a "Reset to
 defaults" link shown only when off the defaults. Section cards, buttons, and
 inputs use the shadcn `button` / `input` components pointed at
 `var(--rw-radius-control)` (`<select>` / `<textarea>` share `inputClass`,
-the `Input`'s twin); links are `var(--primary)`, hover
-`var(--rw-accent-2)`. Which theme draws all of this is a per-member choice
+the `Input`'s twin); links are `var(--primary)`, hover adds an underline
+(the #79 hover colour `--rw-accent-2` failed AA, #81 — the token stays in
+the contract for non-text use, nothing reads it today). Which theme draws
+all of this is a per-member choice
 (§10 Phase 10): `account.theme` / `account.color_mode` win when a session
 exists, the `rw-theme` / `rw-mode` cookies (mirrored on sign-in and on every
 save, one year, `SameSite=Lax`) carry the last member's pick to the signed-out
@@ -1170,10 +1174,15 @@ contract, #81 goes last because it measures what the others drew.
   Dark segmented control, optimistic apply with revert on failure;
   "Appearance" in the account-chip menu. *Depends on #75, #76, #77, #79.*
 - **#81** Contrast audit: `scripts/contrast-audit.mjs` reads the theme
-  files and checks the pairs the UI draws (text 4.5:1, non-text 3:1, focus
-  ring 3:1 on `card` and `background`) for every theme × mode; wired into
-  `pnpm test`; failures fixed by adjusting the failing token alone, noted in
-  the file header. *Last in Phase 10.*
+  files and checks the pairs the UI draws (text 4.5:1 — body, card, muted,
+  primary button, pill/segmented, links on card and page; non-text 3:1 —
+  the three sex dots and the focus ring on `card` and `background`) for
+  every theme × mode; `lib/theme/contrast-audit.test.ts` runs the same
+  function under `pnpm test`, no exemptions. Failures were fixed by
+  stepping the failing token's lightness alone (hue held), each noted in
+  the theme file's header against the upstream value; `--ring` follows
+  `--primary`. `--rw-accent-2` left the text paths instead (link hover,
+  chip disc) — see §8.1. *Last in Phase 10.*
 
 ### Post-MVP (separate milestone)
 - Scheduled backup (`scheduled_full` + `pg_cron` + retention) — decision 29.

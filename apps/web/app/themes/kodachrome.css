@@ -3,6 +3,11 @@
  * Original Rootward palette, after 1960s colour prints. Values generated
  * from the redesign token file (#77); do not retune by eye. Contract:
  * `app/globals.css`, #75.
+ * Contrast audit (#81, `scripts/contrast-audit.mjs`): the values below
+ * step lightness only, hue held, against the upstream palette:
+ *   light --muted-foreground: #7d6a55 → #74614d
+ *   light --primary: #c8552d → #b03f13
+ *   light --ring: #c8552d → #b03f13
  */
 [data-theme="kodachrome"] {
   --font-display:
@@ -18,17 +23,17 @@
   --card-foreground: #2f2419;
   --popover: #fbf4e6;
   --popover-foreground: #2f2419;
-  --primary: #c8552d;
+  --primary: #b03f13;
   --primary-foreground: #fbf4e6;
   --secondary: #e6d7bb;
   --secondary-foreground: #2f2419;
   --muted: #e6d7bb;
-  --muted-foreground: #7d6a55;
+  --muted-foreground: #74614d;
   --accent: #e6d7bb;
   --accent-foreground: #2f2419;
   --border: #d6c4a4;
   --input: #d6c4a4;
-  --ring: #c8552d;
+  --ring: #b03f13;
   --rw-accent-2: #d9a520;
   --rw-male: #2f6f73;
   --rw-female: #b8443f;

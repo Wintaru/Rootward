@@ -2,6 +2,9 @@
  * Gruvbox — retro groove. Palette: Gruvbox (github.com/morhetz/gruvbox),
  * MIT, by Pavel Pertsev. Values generated from the redesign token file
  * (#76); do not retune by eye. Contract: `app/globals.css`, #75.
+ * Contrast audit (#81, `scripts/contrast-audit.mjs`): the values below
+ * step lightness only, hue held, against the upstream palette:
+ *   light --muted-foreground: #7c6f64 → #76695e
  */
 [data-theme="gruvbox"] {
   --font-display: var(--font-zilla-slab), Georgia, "Times New Roman", serif;
@@ -21,7 +24,7 @@
   --secondary: #ebdbb2;
   --secondary-foreground: #3c3836;
   --muted: #ebdbb2;
-  --muted-foreground: #7c6f64;
+  --muted-foreground: #76695e;
   --accent: #ebdbb2;
   --accent-foreground: #3c3836;
   --border: #d5c4a1;

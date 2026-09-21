@@ -14,14 +14,56 @@ chrome", and WAYFINDER decision **38** (the issues say 37 — that number was
 taken by hosted multi-tenancy the day after they were filed). Order is one
 session each: #74 (docs, done) → #75 (token contract, done) → #76 (themes
 A, done) → #77 (themes B, done) → #78 (tree on tokens, done) → #79 (chrome
-on tokens, done) → #80 (the picker, done) → #81. **Next session: #81** —
-the contrast audit, last in the phase. Two open notes for it: the Heirloom
-display face (Cormorant Garamond) wants `font-weight: 500` on display text
-(flagged in #79, not yet applied), and the pgTAP suite on the shared local
-stack carries four state-only failures (`seed_smoke`, the three bucket
-tests) that only a `pnpm dev:fresh` clears.
+on tokens, done) → #80 (the picker, done) → #81 (contrast audit, done).
+**Phase 10 is complete.** Open notes carried forward: the Heirloom display
+face (Cormorant Garamond) wants `font-weight: 500` on display text (flagged
+in #79, not applied — a legibility call, not a contrast one); the pgTAP
+suite on the shared local stack carries four state-only failures
+(`seed_smoke`, the three bucket tests) that only a `pnpm dev:fresh` clears;
+every Appearance pick writes an `audit_log` row and bumps
+`account.updated_at` (review advisory from #80).
 Bug issues #120 and #121 stay open and may be taken between phase items
-when Josh asks.
+when Josh asks. **Next session:** whichever of those Josh picks, or the
+next milestone.
+
+**Issue #81 — Contrast audit: done, staged on branch
+`feat/contrast-audit`, issue closed.** SPEC §10 Phase 10, §8.1.
+
+- `scripts/contrast-audit.mjs` (pure Node, no dependencies): reads every
+  `app/themes/*.css`, parses the light and `.dark` blocks, and checks 14
+  pairs per theme × mode — text at 4.5:1 (body, card, muted on card and
+  page, primary button, pill/segmented, links on card and page) and
+  non-text at 3:1 (the three sex dots, the focus ring on card and page).
+  Prints failures (or `--all`) and exits non-zero. `lib/theme/
+contrast-audit.test.ts` runs the same function under Vitest, so `pnpm
+test` is the gate; a ninth theme file is audited without touching the
+  test.
+- First run: **36 of 224 pairs failed**, all but two in light modes —
+  Everforest light worst (its lime `--primary` #8da101 was 2.7:1 as a
+  button and as a link). Fixed by stepping each failing token's OKLCH
+  lightness alone, hue held (chroma too, except where sRGB cannot hold it
+  at the new lightness — Everforest's `--primary` lost some), until every
+  pair it takes part in
+  cleared its minimum with a 0.05 margin; `--ring` follows `--primary`
+  where the theme sets them equal. 27 values across the eight files, each
+  listed in that file's header against the upstream value. The registry
+  `preview` hexes followed (the drift test enforces it).
+- `--rw-accent-2` fails 4.5:1 as text on every light theme (Hearth's gold
+  1.8:1); reaching AA would turn every gold brown, the hue change the issue
+  forbids. It left the text paths instead: link hover keeps `--primary` and
+  adds an underline, the chip initials disc draws on `--primary` /
+  `--primary-foreground`. The token stays in the contract; nothing reads
+  it today.
+- Review found pairs the UI draws that the issue's list left out, and some
+  fail today: text on the tinted surfaces (`--foreground` on `--accent` —
+  Everforest light 4.29; `--muted-foreground` on `--accent` / `--muted` /
+  `--secondary` — every light theme 3.9–4.3) and the sex colours on the
+  avatar's `--secondary` disc (`--rw-neutral` 2.6–2.9 on every light
+  theme). Out of this diff's scope: filed as **#123** rather than widened
+  here. Until it lands, the audit's "every pair" is the 14 pairs in
+  `CHECKS`. The global link hover underline is scoped to unclassed links so
+  tabs, list rows, and menu items keep their own hover.
+- Verify gate green: typecheck, lint, format, build, **870** vitest.
 
 **Issue #80 — Settings › Appearance (per-member theme + mode picker): done,
 staged on branch `feat/appearance-picker`, issue closed.** SPEC §8.1
