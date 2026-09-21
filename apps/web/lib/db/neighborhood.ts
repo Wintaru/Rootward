@@ -36,9 +36,12 @@ export const MAX_GENERATIONS = 10;
  * One round trip — the recursion runs in Postgres (`get_neighborhood`), and RLS
  * decides what the caller sees, so a hidden branch never reaches the client.
  *
- * An empty `persons` array means nothing was visible — the focus person does not
- * exist, or the caller may not see it. The caller decides whether that is a 404
- * or a 403.
+ * The focus is absent from `persons` when it does not exist or RLS hides it —
+ * check for the focus, not for an empty array. Empty is only the special case
+ * where no relative is visible either: `family_is_visible` passes on any
+ * visible partner or child, so a hidden person with a visible spouse comes
+ * back as the spouse and no focus (#121). The caller decides whether an
+ * absent focus is a 404 or a 403.
  *
  * Pass the client from `lib/supabase` for the current context (browser client
  * for a Client Component, server client for a Server Component).

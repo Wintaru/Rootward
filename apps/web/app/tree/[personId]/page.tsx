@@ -63,9 +63,17 @@ export default async function TreePage({
     depth.down,
   );
 
-  // Empty means the focus person does not exist or RLS hides them — a 404 to
-  // the caller either way (never leak which).
-  if (neighborhood.persons.length === 0) {
+  // A focus person who does not exist, or whom RLS hides, is a 404 to the
+  // caller either way (never leak which). The check is "focus in the
+  // payload", not "payload empty": `get_neighborhood` seeds its walk with
+  // the focus id before RLS filters `person`, and `family_is_visible` passes
+  // on any visible partner or child, so a hidden person with a visible
+  // spouse comes back as their relatives and no focus (#121) — a chart with
+  // no main card.
+  const focus = neighborhood.persons.find(
+    (person) => person.id === neighborhood.focus_id,
+  );
+  if (focus === undefined) {
     notFound();
   }
 
@@ -82,14 +90,8 @@ export default async function TreePage({
   // The chart is a canvas of cards with no page heading of its own, and this
   // is where `/` lands — so the first screen most visits announce would be
   // untitled (#119). Name the page for a screen reader or reader mode;
-  // visually the focus card already says it. The bare fallback is the
-  // hidden-focus-with-visible-relatives case (#121), not dead code.
-  const focus = neighborhood.persons.find(
-    (person) => person.id === neighborhood.focus_id,
-  );
-  const heading = focus
-    ? `Family tree of ${personSearchLabel(focus)}`
-    : "Family tree";
+  // visually the focus card already says it.
+  const heading = `Family tree of ${personSearchLabel(focus)}`;
 
   return (
     <main className="flex flex-1 flex-col">

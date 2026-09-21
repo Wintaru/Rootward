@@ -63,7 +63,26 @@ are in `EXTERNAL-SETUP-HANDOFF.md` (local). **Branching for Phase 11
 `release_work` branch, not `origin/main`, and Josh merges each one back
 into it — `.trillian-repo.json` `git.baseBranch` is `release_work` for the
 duration. `release_work` has no remote yet, so use the local form
-`git switch -c <type>/<slug> release_work`. **Next session:** #121.
+`git switch -c <type>/<slug> release_work`. **Next session:** #126.
+
+**Issue #121 — Tree: hidden focus person with visible relatives renders a
+chart with no main card: done, staged on branch
+`fix/tree-hidden-focus-404`, issue closed.**
+
+- `app/tree/[personId]/page.tsx` now 404s when the focus is absent from
+  `persons` (the `persons.length === 0` check was a strict subset —
+  `focus_id` is always the route id). The #119 heading fallback is gone
+  with it. `getNeighborhood`'s doc no longer advertises "empty means not
+  visible" — a hidden partner with a visible spouse returns the spouse and
+  no focus, so callers must check for the focus.
+- E2E: `rls-visibility.spec.ts` gained "cannot reach the tree centred on a
+  hidden person whose partner is visible" — scratch hidden person +
+  visible spouse in one family, viewer expects 404. Ran live: 200 on the
+  old page, 404 on the new; `rls-visibility`, `tree`, `tree-controls` 55
+  green. The fixture's restricted people are children only, so
+  `family_child` RLS empties their neighborhood and the existing per-fixture
+  tree tests never reached this path. Gate green: typecheck, lint, format,
+  build, 896 vitest. Review: no blocking findings.
 
 **Issue #120 — Media section: primary pick leaves `sort_order` stale:
 done, staged on branch `fix/media-primary-sort-order`, issue closed.**

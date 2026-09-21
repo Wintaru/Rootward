@@ -3,6 +3,8 @@ import {
   fixtureNames,
   FIXTURE_SURNAME,
 } from "../support/fixture-data";
+import { scratchPersons } from "../support/scratch";
+import { admin } from "../support/supabase-admin";
 import { expect, test } from "../support/test";
 
 /**
@@ -61,6 +63,40 @@ test.describe("a viewer", () => {
       await expect(viewerPage.getByText(person.name)).toHaveCount(0);
     });
   }
+
+  test("cannot reach the tree centred on a hidden person whose partner is visible (#121)", async ({
+    viewerPage,
+  }) => {
+    // The fixture's restricted people are children only, so `family_child`
+    // RLS empties their whole neighborhood and the 404 above comes for free.
+    // A hidden *partner* is the real case: `family_is_visible` passes on
+    // the visible spouse, so the payload carries the spouse but not the
+    // focus -- the page must still answer 404, not draw a chart with no
+    // main card.
+    const scratch = scratchPersons();
+    try {
+      const hidden = await scratch.create("Hiddenly", "female");
+      const spouse = await scratch.create("Spousely", "male");
+      const hide = await admin
+        .from("person")
+        .update({ visibility: "hidden" })
+        .eq("id", hidden);
+      expect(hide.error).toBeNull();
+      const union = await admin.from("family").insert({
+        id: crypto.randomUUID(),
+        partner1_id: hidden,
+        partner2_id: spouse,
+        relationship_type: "married",
+      });
+      expect(union.error).toBeNull();
+
+      const response = await viewerPage.goto(`/tree/${hidden}`);
+      expect(response?.status()).toBe(404);
+      await expect(viewerPage.getByText("Hiddenly")).toHaveCount(0);
+    } finally {
+      await scratch.remove();
+    }
+  });
 
   test("sees an unknown person id exactly as it sees a hidden one", async ({
     viewerPage,
