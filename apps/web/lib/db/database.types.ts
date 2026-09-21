@@ -65,30 +65,36 @@ export type Database = {
       }
       account: {
         Row: {
+          color_mode: string
           created_at: string
           display_name: string | null
           id: string
           person_id: string | null
           role: Database["public"]["Enums"]["account_role"]
           status: Database["public"]["Enums"]["account_status"]
+          theme: string
           updated_at: string
         }
         Insert: {
+          color_mode?: string
           created_at?: string
           display_name?: string | null
           id: string
           person_id?: string | null
           role?: Database["public"]["Enums"]["account_role"]
           status?: Database["public"]["Enums"]["account_status"]
+          theme?: string
           updated_at?: string
         }
         Update: {
+          color_mode?: string
           created_at?: string
           display_name?: string | null
           id?: string
           person_id?: string | null
           role?: Database["public"]["Enums"]["account_role"]
           status?: Database["public"]["Enums"]["account_status"]
+          theme?: string
           updated_at?: string
         }
         Relationships: [
@@ -1390,12 +1396,14 @@ export type Database = {
       auth_account: {
         Args: never
         Returns: {
+          color_mode: string
           created_at: string
           display_name: string | null
           id: string
           person_id: string | null
           role: Database["public"]["Enums"]["account_role"]
           status: Database["public"]["Enums"]["account_status"]
+          theme: string
           updated_at: string
         }
         SetofOptions: {
@@ -1486,6 +1494,10 @@ export type Database = {
           isOneToOne: false
           isSetofReturn: true
         }
+      }
+      set_appearance: {
+        Args: { p_color_mode: string; p_theme: string }
+        Returns: undefined
       }
       wipe_tree: { Args: never; Returns: undefined }
     }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  appearanceCookies,
   isColorMode,
   MODE_COOKIE,
   resolveThemePreference,
@@ -39,6 +40,35 @@ describe("resolveThemePreference", () => {
         reader({ [THEME_COOKIE]: "flexoki", [MODE_COOKIE]: "auto" }),
       ),
     ).toEqual({ theme: "flexoki", mode: "system" });
+  });
+});
+
+describe("resolveThemePreference with an account row", () => {
+  it("lets the account win over the cookies", () => {
+    expect(
+      resolveThemePreference(
+        reader({ [THEME_COOKIE]: "gruvbox", [MODE_COOKIE]: "light" }),
+        { theme: "hearth", colorMode: "dark" },
+      ),
+    ).toEqual({ theme: "hearth", mode: "dark" });
+  });
+
+  it("falls back per field when the row holds a value the registry no longer knows", () => {
+    expect(
+      resolveThemePreference(reader({ [THEME_COOKIE]: "gruvbox" }), {
+        theme: "retired-theme",
+        colorMode: "dark",
+      }),
+    ).toEqual({ theme: DEFAULT_THEME, mode: "dark" });
+  });
+});
+
+describe("appearanceCookies", () => {
+  it("mirrors the preference into the two cookies", () => {
+    expect(appearanceCookies({ theme: "orchard", mode: "system" })).toEqual([
+      { name: THEME_COOKIE, value: "orchard" },
+      { name: MODE_COOKIE, value: "system" },
+    ]);
   });
 });
 
