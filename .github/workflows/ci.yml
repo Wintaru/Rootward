@@ -98,6 +98,33 @@ jobs:
       - name: Start local stack
         run: supabase start
 
+      # The committed apps/web/lib/db/database.types.ts is derived from the
+      # migrations. Regenerate it against the fresh schema and fail if it drifts
+      # (issue #10) — the typed data layer must match what the database returns.
+      #
+      # Placed immediately after `supabase start`, and the position is
+      # load-bearing. The types come from the migrations alone, so the first
+      # moment the schema exists is the honest moment to check them, and
+      # nothing that runs later can reach the check. Running it last meant any
+      # step that left an object in `public` surfaced as type drift: a
+      # `create extension dblink` in `safeupdate_authenticator_test.sql` swept
+      # the whole dblink function set into the generated types and failed here,
+      # pointing at the types file instead of at the test. Everything that
+      # touches the database now runs after this step, so nothing else can
+      # reach it -- which is the property worth having, independently of
+      # whether any given later step actually leaks.
+      #
+      # The trade-off is that drift now stops the job before the seed check and
+      # the pgTAP suite, so a red build reports one problem instead of two.
+      # That is the right way round: this check is fast, drift is a
+      # `pnpm gen:types` away from fixed, and `verify` and `functions` run as
+      # separate jobs so their signal is unaffected.
+      - name: Check generated types are current
+        run: |
+          supabase gen types typescript --local --schema public \
+            > apps/web/lib/db/database.types.ts
+          git diff --exit-code apps/web/lib/db/database.types.ts
+
       # `db lint` runs plpgsql_check over the resulting schema. --fail-on error
       # is what gives the step teeth; warnings still print.
       - name: Lint schema
@@ -116,15 +143,6 @@ jobs:
       # the shared-trigger coverage guards (SPEC §5, issue #9).
       - name: Run database tests
         run: supabase test db
-
-      # The committed apps/web/lib/db/database.types.ts is derived from the
-      # migrations. Regenerate it against the fresh schema and fail if it drifts
-      # (issue #10) — the typed data layer must match what the database returns.
-      - name: Check generated types are current
-        run: |
-          supabase gen types typescript --local --schema public \
-            > apps/web/lib/db/database.types.ts
-          git diff --exit-code apps/web/lib/db/database.types.ts
 
       - name: Stop
         if: always()

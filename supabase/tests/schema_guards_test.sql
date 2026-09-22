@@ -6,7 +6,7 @@
 -- / RLS must fail here rather than ship a silent gap.
 
 begin;
-select plan(13);
+select plan(14);
 
 -- set_updated_at is the concurrency token; SPEC §4 fixes the list to the 15
 -- editable tables the edit view can send back.
@@ -54,6 +54,22 @@ select is(
      )),
   0,
   'every public table has at least one RLS policy'
+);
+
+-- No extension is installed into `public`. Two reasons. `public` is
+-- PostgREST-exposed, so an extension there publishes its functions over the
+-- API -- dblink's default grants reach `anon`. And `database.types.ts` is
+-- generated from `public`, so an extension there becomes type drift. CI used
+-- to catch the second case incidentally, by generating types after this suite
+-- ran; it now generates them first, which is a better diagnostic but removes
+-- that accidental signal. This assertion is the deliberate replacement.
+select is(
+  (select count(*)::int
+   from pg_extension e
+   join pg_namespace n on n.oid = e.extnamespace
+   where n.nspname = 'public'),
+  0,
+  'no extension is installed into the public schema'
 );
 
 -- Table and sequence privileges (migration 20260922090000). RLS only filters

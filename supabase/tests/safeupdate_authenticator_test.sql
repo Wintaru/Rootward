@@ -24,12 +24,18 @@
 -- cleanup. A leftover row would be an `auth.users` row with no email and no
 -- credentials -- nothing can sign in as it.
 
--- `with schema extensions` matters: the default lands dblink in `public`, and
--- CI generates `database.types.ts` from the public schema *after* running this
--- suite (.github/workflows/ci.yml). A dblink in public puts the whole dblink
--- function set and a composite type into the generated types, and the drift
--- check then fails. `pg_trgm` is installed the same way in
+-- `with schema extensions` matters, and the reason stands on its own: `public`
+-- is PostgREST-exposed (`supabase/config.toml`), and dblink's default grants
+-- give `anon` EXECUTE on `dblink_exec` -- an outbound-connection primitive
+-- reachable over the API. `pg_trgm` is installed the same way in
 -- `20260831154954_onboarding_match.sql`.
+--
+-- It also used to be what kept CI green: a dblink in `public` swept the whole
+-- dblink function set into the generated types and failed the drift check.
+-- That is no longer the mechanism -- `.github/workflows/ci.yml` now generates
+-- types before anything else runs -- so nothing in CI catches a regression
+-- here. The `schema_guards_test.sql` assertion that no extension lives in
+-- `public` is what replaced it. Do not drop the clause below.
 create extension if not exists dblink with schema extensions;
 -- `if not exists` is a no-op once the extension exists in *any* schema, so a
 -- stack that ran an earlier version of this file keeps its dblink in `public`

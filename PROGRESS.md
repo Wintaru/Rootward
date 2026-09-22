@@ -4093,9 +4093,13 @@ gedcom-export/`.
   `supabase/tests/` pgTAP suite; `schema_guards_test.sql` will fail CI if a new
   genealogy table skips `set_updated_at` / `write_audit_log` / RLS.
 - CI (`.github/workflows/ci.yml`): `verify` job = install + typecheck + lint +
-  format:check + test; `migrations` job = `supabase start`, `supabase db lint`,
-  `supabase test db` (pgTAP), then a generated-types drift check (regenerate
-  `apps/web/lib/db/database.types.ts`, `git diff --exit-code`). No `build` step —
+  format:check + test; `migrations` job = `supabase start`, the generated-types
+  drift check (regenerate `apps/web/lib/db/database.types.ts`,
+  `git diff --exit-code`), `supabase db lint`, a seed check, then
+  `supabase test db` (pgTAP). The types check runs first on purpose: types come
+  from the migrations alone, so nothing that runs later can leak an object into
+  `public` and surface as type drift.
+  No `build` step —
   SPEC §10 item 3 and WAYFINDER 32 list it out; add it later if wanted. Runs on
   PRs to `main` and pushes to `main`.
 - The data layer (#10): every Supabase query goes through `apps/web/lib/db` — no
