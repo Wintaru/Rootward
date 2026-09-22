@@ -41,43 +41,43 @@ with the `vercel` and `supabase` CLIs before trusting it.
 
 ## Next action
 
-**#128 is part done.** `docs/deploy/backup-restore.md` is new and covers
-backup, restore, and upgrade. Every command in it was run against a
-throwaway stack loaded with the 628-person demo tree, not written from the
-documentation. All 26 tables matched exactly after a restore, and a stop and
-start cycle kept the data.
+**#49 is done** (branch `fix/access-request-duplicate-pending`, two commits).
+The moderator queue could hold a notification nobody was able to clear. A
+partial unique index now allows one open request per account, the resolve
+trigger matches by account the way its other arm always did, and a one-time
+backfill releases anything the old code already stranded. A refused second
+submission is reported to the person as "already open" rather than as success,
+because the text they wrote is not stored. Filed #135 (four other sites
+open-code SQLSTATE `23505`).
 
-The rehearsal found three commands that would have shipped broken, and one
-silent failure worth knowing: after a database-only restore the tree looks
-complete and every photo returns HTTP 500, because the database holds the
-list of photos and not the photos.
+Take **#127** next, then **#103**, then **#47**. All three are local and need
+no deploy.
 
-**#128 stays open for one thing.** Every command ran with `--local`. The
-Cloud variants differ by `--linked`, but Cloud runs a different Postgres
-build, storage backend, and permission set — the same class of difference
-that produced two of the three faults. Josh has offered a production
-`pg_dump`, which closes the gap without writing anything to the live tree.
-Restore it locally and compare.
+**#128 is part done.** `docs/deploy/backup-restore.md` covers backup, restore
+and upgrade, and every command in it was run against a throwaway stack loaded
+with the 628-person demo tree. It stays open for one thing: every command ran
+with `--local`, and the Cloud variants differ by `--linked` against a different
+Postgres build, storage backend and permission set. Josh has offered a
+production `pg_dump` — restore it locally and compare. That writes nothing to
+the live tree. Filed #134 (the `imports` bucket is never reclaimed).
 
-After that: **#49**, **#127**, **#103**, **#47** (all local, no deploy
-needed), then **#130** (blocked on Josh provisioning a Linux server), then
-**#131** last. **#129** stays parked — see below.
+**#129 is parked.** Its deploy is live and verified, but the issue's acceptance
+test — import the 628-person demo tree, then wipe — cannot run there.
+`donner.rootward.family` holds Josh's real family tree, and `wipe_tree()`
+(migration `20260914133629`) deletes every row of `note`, `person`, `family`,
+`source`, `media`, `repository`, and `place` with no scope at all. The parking
+comment on the issue has the detail.
 
-**#129 is parked.** Its deploy is live and verified, but the issue's
-acceptance test — import the 628-person demo tree, then wipe — cannot run
-there. `donner.rootward.family` now holds Josh's real family tree, and
-`wipe_tree()` (migration `20260914133629`) deletes every row of `note`,
-`person`, `family`, `source`, `media`, `repository`, and `place` with no
-scope at all. The parking comment on the issue has the detail.
+Then **#130** (blocked on Josh provisioning a Linux server), and **#131** last.
 
 **Standing rule: no test writes genealogy data to a deploy that holds a real
 tree.** Tests run against the local stack. A live journey test needs a
 throwaway Supabase project. That decision is what #129 is blocked on.
 
-**Never reset the shared local stack to make room for a test.** The restore
-rehearsal used `trillian-resource supabase acquire --fresh`, which gives a
-clean stack on its own port block, and released it with `--stop` afterwards.
-Use that instead of `pnpm dev:fresh`.
+**Never reset the shared local stack to make room for a test.** Use
+`trillian-resource supabase acquire --fresh` for a clean stack on its own port
+block, and release it with `--stop`. Applying a new migration to the shared
+stack with `supabase migration up --local` is additive and fine.
 
 ## Conventions this phase
 
@@ -128,9 +128,7 @@ issue, not a blocker.
 Josh's call. `docs/SPEC.md` §10 listed #47 and #103 as out of 1.0 until this
 date — that line is now reversed there.
 
-- **#49** — the auto-resolve trigger can miss a second pending
-  `access_request` for the same account. A real correctness defect in
-  shipped code.
+- **#49** — done, see above.
 - **#127** — the destructive e2e teardown restores a `tree_settings` root
   person the wipe deleted.
 - **#103** — no single source of truth for the pinned Supabase CLI version.
