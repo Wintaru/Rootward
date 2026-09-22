@@ -43,12 +43,19 @@
 
 -- --- 1. collapse any existing duplicates ----------------------------------
 
--- Held for the rest of the migration. Without it a client can commit a second
--- pending row between the collapse's snapshot and the index build's own lock,
--- which fails the build and rolls the whole migration back. Nothing is lost,
--- but the deploy fails for no good reason. SHARE blocks writers and allows
--- readers, which is what the index build takes anyway.
-lock table public.access_request in share mode;
+-- No `lock table` here, deliberately. A SHARE lock would close the window
+-- between the collapse below and the index build -- a client committing a
+-- second pending row in between fails the build and rolls the migration back.
+-- But `supabase start` replays migrations with autocommit, one statement per
+-- transaction, and `LOCK TABLE` outside a transaction block is an error
+-- (25P01). It would work under `supabase db push`, which wraps the file, and
+-- fail every local stack and every CI run.
+--
+-- Wrapping this file in an explicit `begin`/`commit` would buy the lock back,
+-- and no other migration here does that. The window it protects is a client
+-- writing to `access_request` during a schema migration, and the cost of
+-- losing that race is a failed migration that succeeds on a re-run. Not worth
+-- diverging for.
 
 alter table public.access_request
   disable trigger resolve_notifications_on_access_request_decided;
