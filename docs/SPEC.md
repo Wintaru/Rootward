@@ -1242,7 +1242,19 @@ on day one. Order is one session each, groups in this sequence:
 - **Both deploy paths run live from the docs alone:** #129 Vercel +
   Supabase Cloud · #130 Docker Compose self-host. Each records its date
   and CLI version in the guide. #130 also states the CLI-stack-as-production
-  limits plainly.
+  limits plainly. **#129 is parked (2026-09-22).** Its deploy is verified
+  and serving, but `donner.rootward.family` now holds Josh's real family
+  tree, and `wipe_tree()` deletes every genealogy row with no scope — so
+  the demo-import and export journeys cannot run there and cannot be
+  cleaned up afterwards. They run on the local stack until a throwaway
+  project exists. Guide corrections and the auth configuration are
+  unaffected and still in scope.
+- **Correctness and tooling pulled into 1.0 (2026-09-22):** #49 the
+  auto-resolve trigger misses a second pending `access_request` · #127 the
+  destructive e2e teardown restores a root person the wipe deleted · #103
+  one source of truth for the pinned Supabase CLI version, which the three
+  deploy issues each record · #47 type-aware lint and strict flags for
+  `apps/web`.
 - **RLS test gap:** #100 pgTAP as the `authenticator` role · #109 bucket
   and seed tests on a non-empty stack. Then one full e2e run on a
   `pnpm dev:fresh` stack, on record.
@@ -1253,8 +1265,18 @@ on day one. Order is one session each, groups in this sequence:
   in Phase 11 — the tag lands after every other issue closes.*
 
 Out of 1.0 by choice: everything under Post-MVP below, hosted
-multi-tenancy (decision 37), #123 (tinted-surface contrast), and the
-tooling issues #47, #83, #85, #87, #88, #98, #102, #103.
+multi-tenancy (decision 37), #123 (tinted-surface contrast), #133 (CSP
+nonces), and the tooling issues #83, #85, #87, #88, #98, #102. Continuous
+deployment is also out: Vercel already redeploys the web app on push, and
+automating `supabase db push` against production is not safe until #128
+proves a restore. #47 and #103 were on this list until 2026-09-22 — they
+are now in the phase, one line above.
+
+**Note on live testing (2026-09-22).** No acceptance test writes genealogy
+data to a deploy that holds a real family's tree. `wipe_tree()` is
+all-or-nothing, so there is no way to undo a demo import on a populated
+instance. Test against the local stack, or against a throwaway project that
+gets deleted afterwards.
 
 ### Post-MVP (separate milestone)
 - Scheduled backup (`scheduled_full` + `pg_cron` + retention) — decision 29.
