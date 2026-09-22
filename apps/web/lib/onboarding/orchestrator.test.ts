@@ -174,9 +174,19 @@ describe("request access", () => {
   it("submitted → requesting → requested", () => {
     const state = run(makeInitialOnboardingState(false), [
       { type: "request_submitted" },
-      { type: "request_succeeded" },
+      { type: "request_succeeded", outcome: "filed" },
     ]);
     expect(state).toEqual({ status: "requested", reason: "self" });
+  });
+
+  it("an already-open request lands on its own reason, not plain success", () => {
+    // The row the person just submitted was refused by the one-pending index
+    // (issue #49), so the UI must not claim their text reached a moderator.
+    const state = run(makeInitialOnboardingState(false), [
+      { type: "request_submitted" },
+      { type: "request_succeeded", outcome: "already_open" },
+    ]);
+    expect(state).toEqual({ status: "requested", reason: "already_open" });
   });
 
   it("a failure returns to the form with the error", () => {

@@ -414,7 +414,21 @@ function RequestAccessForm({
   );
 }
 
-function RequestedCard({ reason }: { reason: "self" | "rate_limited" }) {
+function RequestedCard({
+  reason,
+}: {
+  reason: "self" | "rate_limited" | "already_open";
+}) {
+  if (reason === "already_open") {
+    // The text they just wrote was not stored — only one open request per
+    // account (issue #49) — so do not imply it reached anyone.
+    return (
+      <Card
+        title="You already have a request waiting"
+        description="An administrator has your earlier request and will get back to you. Anything you just wrote here was not added to it — mention it to them directly if it matters."
+      />
+    );
+  }
   return (
     <Card
       title="Request sent"

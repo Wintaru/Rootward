@@ -130,14 +130,14 @@ export function useOnboarding(
       dispatch({ type: "request_submitted" });
       void run(async () => {
         try {
-          await submitAccessRequest(supabase, {
+          const outcome = await submitAccessRequest(supabase, {
             accountId,
             name: values.name,
             birthMonth: values.birthMonth,
             birthYear: values.birthYear,
             message: values.message,
           });
-          dispatch({ type: "request_succeeded" });
+          dispatch({ type: "request_succeeded", outcome });
         } catch (error: unknown) {
           dispatch({ type: "request_failed", message: messageOf(error) });
         }

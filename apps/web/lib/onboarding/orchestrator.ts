@@ -48,7 +48,7 @@ export type OnboardingState =
     }
   | {
       readonly status: "requested";
-      readonly reason: "self" | "rate_limited";
+      readonly reason: "self" | "rate_limited" | "already_open";
     };
 
 export type OnboardingAction =
@@ -64,7 +64,14 @@ export type OnboardingAction =
   | { readonly type: "request_access_chosen" }
   | { readonly type: "restart" }
   | { readonly type: "request_submitted" }
-  | { readonly type: "request_succeeded" }
+  | {
+      readonly type: "request_succeeded";
+      // `already_open` means the account already had an open request, so the
+      // text just submitted was not stored (issue #49). The person still has a
+      // request with a moderator, but telling them this one was received would
+      // be untrue.
+      readonly outcome: "filed" | "already_open";
+    }
   | { readonly type: "request_failed"; readonly message: string };
 
 /**
@@ -155,7 +162,10 @@ export function onboardingReducer(
 
     case "request_succeeded":
       return state.status === "requesting"
-        ? { status: "requested", reason: "self" }
+        ? {
+            status: "requested",
+            reason: action.outcome === "already_open" ? "already_open" : "self",
+          }
         : state;
 
     case "request_failed":

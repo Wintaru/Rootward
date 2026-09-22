@@ -10,6 +10,12 @@
 
 import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
 
+import {
+  ACCESS_REQUEST_ONE_PENDING_PER_ACCOUNT,
+  isUniqueViolationOn,
+  SQLSTATE_UNIQUE_VIOLATION,
+} from "@rootward/shared";
+
 import type {
   AccessRequestInput,
   AccountRow,
@@ -20,9 +26,6 @@ import type {
   NotificationType,
   SearchInput,
 } from "./matcher.ts";
-
-/** Postgres unique-violation SQLSTATE — a lost race to claim the same node. */
-const UNIQUE_VIOLATION = "23505";
 
 interface FamilyPartners {
   partner1_id: string | null;
@@ -230,7 +233,7 @@ export function createMatchGateway(supabase: SupabaseClient): MatchGateway {
         .eq("status", "pending")
         .select("id");
       if (error !== null) {
-        if (error.code === UNIQUE_VIOLATION) return "conflict";
+        if (error.code === SQLSTATE_UNIQUE_VIOLATION) return "conflict";
         throw new Error(`linkAccount ${accountId}: ${error.message}`);
       }
       return (data ?? []).length > 0 ? "linked" : "conflict";
@@ -256,9 +259,15 @@ export function createMatchGateway(supabase: SupabaseClient): MatchGateway {
         submitted_birth_year: input.submittedBirthYear,
         message: input.message,
       });
-      if (error !== null) {
-        throw new Error(`createAccessRequest: ${error.message}`);
+      if (error === null) return;
+      // `hasOpenAccessRequest` above is a check-then-insert, so two concurrent
+      // calls can both pass the check. The partial unique index from issue #49
+      // is what actually decides, and losing that race means the request the
+      // caller wanted already exists.
+      if (isUniqueViolationOn(error, ACCESS_REQUEST_ONE_PENDING_PER_ACCOUNT)) {
+        return;
       }
+      throw new Error(`createAccessRequest: ${error.message}`);
     },
 
     async createNotification(

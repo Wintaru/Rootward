@@ -1,5 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import {
+  ACCESS_REQUEST_ONE_PENDING_PER_ACCOUNT,
+  isUniqueViolationOn,
+} from "@rootward/shared";
+
 import type { Database } from "./database.types";
 
 type Db = SupabaseClient<Database>;
@@ -163,14 +168,30 @@ export interface AccessRequestInput {
   readonly message: string;
 }
 
+/** What became of a submission (SPEC §9.3, issue #49). */
+export type AccessRequestOutcome = "filed" | "already_open";
+
 /**
  * File a `pending` access_request for the caller's own account (SPEC §9.3). The
  * `notify_access_requested` trigger raises the moderator notification.
+ *
+ * An account may hold only one open request (issue #49), so a second
+ * submission collides on that index. It does not throw: the person does have a
+ * request on file, which is what they wanted. It returns `already_open`
+ * instead of `filed`, because the row they just wrote was NOT stored and the
+ * caller must not tell them it was.
+ *
+ * That case is reachable without anyone doing anything odd. The self-claim cap
+ * files an automatic request on the person's behalf (`onboarding-match`'s
+ * `routeToAccessRequest`), so someone who comes back later and writes a real
+ * explanation is submitting their second request, not their first. Only a
+ * moderator may update the row (`access_request_update` is `is_moderator()`),
+ * so the new text cannot be merged in here.
  */
 export async function submitAccessRequest(
   client: Db,
   input: AccessRequestInput,
-): Promise<void> {
+): Promise<AccessRequestOutcome> {
   const row: AccessRequestInsert = {
     account_id: input.accountId,
     submitted_name: input.name.trim() === "" ? null : input.name.trim(),
@@ -179,7 +200,9 @@ export async function submitAccessRequest(
     message: input.message.trim() === "" ? null : input.message.trim(),
   };
   const { error } = await client.from("access_request").insert(row);
-  if (error !== null) {
-    throw new Error(`submitAccessRequest: ${error.message}`);
+  if (error === null) return "filed";
+  if (isUniqueViolationOn(error, ACCESS_REQUEST_ONE_PENDING_PER_ACCOUNT)) {
+    return "already_open";
   }
+  throw new Error(`submitAccessRequest: ${error.message}`);
 }

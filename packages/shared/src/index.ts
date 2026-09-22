@@ -7,6 +7,11 @@
  */
 
 export {
+  ACCESS_REQUEST_ONE_PENDING_PER_ACCOUNT,
+  SQLSTATE_UNIQUE_VIOLATION,
+  isUniqueViolationOn,
+} from "./db-constraints.ts";
+export {
   CALENDARS,
   GENEALOGY_DATE_KINDS,
   formatGenealogyDate,
