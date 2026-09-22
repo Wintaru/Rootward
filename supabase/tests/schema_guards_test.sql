@@ -6,7 +6,7 @@
 -- / RLS must fail here rather than ship a silent gap.
 
 begin;
-select plan(9);
+select plan(13);
 
 -- set_updated_at is the concurrency token; SPEC §4 fixes the list to the 15
 -- editable tables the edit view can send back.
@@ -54,6 +54,82 @@ select is(
      )),
   0,
   'every public table has at least one RLS policy'
+);
+
+-- Table and sequence privileges (migration 20260922090000). RLS only filters
+-- rows a role is already permitted to touch: with no GRANT, Postgres refuses at
+-- the table level and PostgREST answers 42501 before any policy runs. The local
+-- stack ships blanket grants on `public` and a fresh Supabase Cloud project
+-- ships none, so a table added without a grant works locally and is unreadable
+-- in production -- which is exactly how sign-in broke on the first hosted
+-- deploy.
+--
+-- These join pg_class and test by oid. Reading `pg_tables` and rebuilding the
+-- name is wrong: the planner may evaluate has_table_privilege before the
+-- schemaname filter, and `auth.instances` then resolves as `public.instances`
+-- and raises.
+select is(
+  (select count(*)::int
+   from pg_class c
+   join pg_namespace n on n.oid = c.relnamespace
+   where n.nspname = 'public' and c.relkind in ('r', 'p')
+     and not (
+       has_table_privilege('authenticated', c.oid, 'SELECT')
+       and has_table_privilege('authenticated', c.oid, 'INSERT')
+       and has_table_privilege('authenticated', c.oid, 'UPDATE')
+       and has_table_privilege('authenticated', c.oid, 'DELETE')
+     )),
+  0,
+  'every public table grants select/insert/update/delete to authenticated'
+);
+
+select is(
+  (select count(*)::int
+   from pg_class c
+   join pg_namespace n on n.oid = c.relnamespace
+   where n.nspname = 'public' and c.relkind in ('r', 'p')
+     and not (
+       has_table_privilege('service_role', c.oid, 'SELECT')
+       and has_table_privilege('service_role', c.oid, 'INSERT')
+       and has_table_privilege('service_role', c.oid, 'UPDATE')
+       and has_table_privilege('service_role', c.oid, 'DELETE')
+     )),
+  0,
+  'every public table grants select/insert/update/delete to service_role'
+);
+
+-- anon holds nothing at all. Asserted by reading the ACL rather than by
+-- negating a list of verbs: the local template grants `all`, which is more than
+-- the four DML verbs (TRUNCATE, REFERENCES, TRIGGER and, on PG17, MAINTAIN),
+-- and a verb list would have to track whatever Postgres adds next. `acldefault`
+-- stands in for a NULL relacl, which means "owner's defaults only".
+select is(
+  (select count(*)::int
+   from pg_class c
+   join pg_namespace n on n.oid = c.relnamespace
+   cross join lateral aclexplode(
+     coalesce(c.relacl, acldefault('r', c.relowner))
+   ) a
+   where n.nspname = 'public' and c.relkind in ('r', 'p')
+     and a.grantee = 'anon'::regrole),
+  0,
+  'anon holds no privilege on any public table'
+);
+
+-- Sequences have no RLS, so a grant is the only control. anon with USAGE on
+-- `audit_log_id_seq` could setval() the counter backwards and make every later
+-- audited write fail on a primary-key collision.
+select is(
+  (select count(*)::int
+   from pg_class c
+   join pg_namespace n on n.oid = c.relnamespace
+   cross join lateral aclexplode(
+     coalesce(c.relacl, acldefault('S', c.relowner))
+   ) a
+   where n.nspname = 'public' and c.relkind = 'S'
+     and a.grantee = 'anon'::regrole),
+  0,
+  'anon holds no privilege on any public sequence'
 );
 
 -- The polymorphic visibility helpers switch on an owner_type enum with a bare

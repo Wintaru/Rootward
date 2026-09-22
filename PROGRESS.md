@@ -67,6 +67,27 @@ duration. `release_work` has no remote yet, so use the local form
 half: the `pg_dump` + bucket backup and restore against the local stack;
 the "run it on a real deploy" confirmation waits for #129/#130).
 
+**Ad-hoc (no issue, found during the #129 live deploy, 2026-09-22): the
+migrations never granted table privileges.** Every migration granted
+`execute` on functions and nothing on tables. Invisible locally — the CLI's
+`public` schema ships blanket grants — but a fresh Supabase Cloud project
+ships none, so the first hosted deploy could not read a row: the
+`ADMIN_EMAIL` bootstrap in `/auth/callback` failed with 42501 on `account`
+and took sign-in down, and `/auth/auth-code-error` then 500'd on the same
+denial from `getCurrentAccount`. Migration `20260922090000` grants
+select/insert/update/delete on all public tables to `authenticated` and
+`service_role` (nothing TRUNCATEs — `wipe_tree` uses DELETE), grants
+usage/select on sequences, revokes **all** from `anon`, and sets
+`alter default privileges` so the next table inherits instead of reopening
+the hole. `anon` is bare deliberately: no policy targets it, nothing reads
+as anon, and it is a second lock behind RLS — so `rls_test.sql`'s two
+unauthenticated assertions now use `throws_ok(..., '42501')`, which proves
+denial rather than emptiness. `schema_guards_test.sql` gained four guards
+that read the ACL with `aclexplode` instead of negating a verb list; review
+showed a verb list silently missed anon keeping TRUNCATE, REFERENCES,
+TRIGGER and MAINTAIN from the template's `grant all`, and TRUNCATE is the
+one write verb RLS never sees. Applied to the hosted project.
+
 **Issue #132 — security once-over: done, staged on branch
 `chore/security-once-over`, issue closed.** Findings are on the issue, one
 per bullet. Two code changes: `vitest` 3.2.7 → 4.1.11 in both workspaces

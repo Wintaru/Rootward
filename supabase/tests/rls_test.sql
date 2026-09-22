@@ -450,14 +450,28 @@ select pg_temp.act_as('a0000000-0000-0000-0000-000000000001');  -- admin
 select cmp_ok((select count(*)::int from public.audit_log), '>=', 1,
   'audit_log SELECT: an admin reads the trail');
 
--- anon: the policies are `to authenticated`, so nothing matches.
+-- anon: refused at the grant, before RLS is consulted. Migration
+-- 20260922090000 leaves anon with no privilege on any public table, so the
+-- read raises 42501 rather than returning an empty set. Asserting the throw
+-- rather than the emptiness is the stronger claim: an empty result would also
+-- be produced by a policy that merely happens to match nothing, whereas this
+-- proves the grant denies it outright. The policies are `to authenticated`,
+-- so anon is refused twice over.
 set local role postgres;
 set local role anon;
 select pg_temp.act_as_anon();
-select is((select count(*)::int from public.person), 0,
-  'person SELECT: an unauthenticated caller sees nothing');
-select is((select count(*)::int from public.tree_settings), 0,
-  'tree_settings SELECT: an unauthenticated caller sees nothing');
+select throws_ok(
+  $$ select count(*) from public.person $$,
+  '42501',
+  null,
+  'person SELECT: an unauthenticated caller is refused at the grant'
+);
+select throws_ok(
+  $$ select count(*) from public.tree_settings $$,
+  '42501',
+  null,
+  'tree_settings SELECT: an unauthenticated caller is refused at the grant'
+);
 set local role postgres;
 set local role authenticated;
 
