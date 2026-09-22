@@ -45,4 +45,20 @@ test.describe("smoke", () => {
       adminPage.getByRole("link", { name: fixtureNames.grandfather }),
     ).toBeVisible();
   });
+
+  // The security headers live in `next.config.ts` (#132) and never fail a
+  // typecheck or a unit test, so a refactor that drops one is caught here.
+  test("every response carries the security headers", async ({ anonPage }) => {
+    const response = await anonPage.goto("/login");
+    expect(response).not.toBeNull();
+    const headers = response?.headers() ?? {};
+    expect(headers["strict-transport-security"]).toContain("max-age=");
+    expect(headers["content-security-policy"]).toContain(
+      "frame-ancestors 'none'",
+    );
+    expect(headers["x-frame-options"]).toBe("DENY");
+    expect(headers["x-content-type-options"]).toBe("nosniff");
+    expect(headers["referrer-policy"]).toBe("strict-origin-when-cross-origin");
+    expect(headers["permissions-policy"]).toContain("camera=()");
+  });
 });

@@ -1,6 +1,29 @@
 import type { NextConfig } from "next";
 import path from "node:path";
 
+const SECURITY_HEADERS: { key: string; value: string }[] = [
+  {
+    key: "Strict-Transport-Security",
+    value: "max-age=63072000; includeSubDomains",
+  },
+  {
+    key: "Content-Security-Policy",
+    value: [
+      "frame-ancestors 'none'",
+      "object-src 'none'",
+      "base-uri 'self'",
+      "form-action 'self'",
+    ].join("; "),
+  },
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "X-Frame-Options", value: "DENY" },
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  {
+    key: "Permissions-Policy",
+    value: "camera=(), microphone=(), geolocation=(), payment=()",
+  },
+];
+
 const nextConfig: NextConfig = {
   // `@rootward/shared`, `@rootward/gedcom`, and `@rootward/media` are
   // workspace packages consumed from source (their `tsconfig.json` path
@@ -66,6 +89,23 @@ const nextConfig: NextConfig = {
   // without this every fresh `pnpm dev` follow-along loads a half-hydrated
   // page with no visible error beyond a console warning.
   allowedDevOrigins: ["127.0.0.1"],
+  // Security headers on every response (#132), set here so both deploy
+  // paths get them -- Vercel sets a bare HSTS and none of the rest, the
+  // self-host Caddyfile sets nothing. HSTS is a no-op over plain HTTP, so a
+  // LAN self-host without TLS is unaffected. The CSP deliberately has no
+  // `script-src` / `style-src`: the theme pre-paint script in `layout.tsx`
+  // is inline and Next's own chunks would need per-request nonces through
+  // middleware -- a 1.x item. What is here still closes clickjacking
+  // (`frame-ancestors`), plugin content, base-tag hijack, and off-site
+  // form posts.
+  headers() {
+    return Promise.resolve([
+      {
+        source: "/(.*)",
+        headers: SECURITY_HEADERS,
+      },
+    ]);
+  },
 };
 
 export default nextConfig;

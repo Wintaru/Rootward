@@ -54,3 +54,5 @@ e2e/playwright-report/
 docs/reference/rootward-demo/media/
 docs/reference/rootward-demo/media-manifest.json
 docs/reference/rootward-demo/rootward-demo.gdz
+.vercel
+.env*

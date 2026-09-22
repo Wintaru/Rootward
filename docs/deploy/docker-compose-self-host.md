@@ -135,9 +135,18 @@ tree.example.com {
 }
 
 api.tree.example.com {
+  header Strict-Transport-Security "max-age=63072000; includeSubDomains"
   reverse_proxy 127.0.0.1:57321
 }
 ```
+
+The web app sets its own security headers (HSTS, a frame-blocking CSP,
+`nosniff`, and the rest — see `apps/web/next.config.ts`), so the first
+block needs none. The API hostname is the Supabase gateway, which sets no
+HSTS of its own, so the second block adds it. HSTS carries
+`includeSubDomains`, so host the app on a subdomain (`tree.example.com`),
+not the apex — an apex deploy would force HTTPS for two years on every
+other host under the domain, including a plain-HTTP NAS or printer page.
 
 Run Caddy on the server (as its own package, or its own container) and
 point both DNS records at the server's public IP. Caddy gets and renews the

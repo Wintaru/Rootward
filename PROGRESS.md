@@ -63,7 +63,28 @@ are in `EXTERNAL-SETUP-HANDOFF.md` (local). **Branching for Phase 11
 `release_work` branch, not `origin/main`, and Josh merges each one back
 into it — `.trillian-repo.json` `git.baseBranch` is `release_work` for the
 duration. `release_work` has no remote yet, so use the local form
-`git switch -c <type>/<slug> release_work`. **Next session:** #132.
+`git switch -c <type>/<slug> release_work`. **Next session:** #128 (local
+half: the `pg_dump` + bucket backup and restore against the local stack;
+the "run it on a real deploy" confirmation waits for #129/#130).
+
+**Issue #132 — security once-over: done, staged on branch
+`chore/security-once-over`, issue closed.** Findings are on the issue, one
+per bullet. Two code changes: `vitest` 3.2.7 → 4.1.11 in both workspaces
+(patches the dev-only mocker path traversal; 912 tests unchanged; the two
+`qs` findings under the `shadcn` generator chain are accepted), and
+`apps/web/next.config.ts` gains `headers()` — HSTS, a CSP with
+`frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action
+'self'`, `nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`,
+`Permissions-Policy` — nothing was set anywhere before (Vercel adds a bare
+HSTS, the Caddyfile added none). Verified live and with `smoke`, `auth`,
+`appearance`, `keyboard-a11y` e2e; the smoke spec now asserts the headers
+so a config refactor cannot drop one silently. `script-src` / `style-src`
+need per-request nonces through middleware (the theme pre-paint script is
+inline) — filed as **#133** (1.x). The self-host Caddyfile gains HSTS on
+the API hostname and an apex-domain warning. Confirmed, no change: signed
+URLs are all 3600 s on per-request pages; the service-role key is read
+in two `server-only` files; the self-claim cap is 5 per account per 24 h,
+where a new account costs a verified email.
 
 **Issue #109 — pgTAP bucket and seed tests assume an empty local database:
 done, staged on branch `test/pgtap-state-independent`, issue closed.**
