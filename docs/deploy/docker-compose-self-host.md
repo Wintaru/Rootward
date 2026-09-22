@@ -179,6 +179,6 @@ default.
 
 ## Backups
 
-Scheduled, automatic backups are a post-MVP feature (decision 29). Until
-then, back up the Postgres data yourself, for example with `pg_dump`
-against the database port in `config.toml`, on a schedule you control.
+See [`backup-restore.md`](backup-restore.md). It gives a tested procedure
+for a backup, a restore, and an upgrade, and it explains why a database
+backup on its own leaves every photo broken.

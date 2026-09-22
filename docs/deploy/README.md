@@ -97,5 +97,13 @@ it is safe to leave `ADMIN_EMAIL` set after the first admin exists.
 - Invite the rest of the family from `/moderation` (issue #20), or let them
   sign up and self-claim their place in the tree (issue #19).
 
+## Keep the tree safe
+
+Read [`backup-restore.md`](backup-restore.md) before you invite the family.
+It covers a backup, a restore onto an empty stack, and an upgrade. Each
+procedure was run against a real stack. The page also explains the one
+mistake that matters most: a database backup on its own restores the list
+of photos, not the photos.
+
 See [`docs/reference/`](../reference) for the demo GEDCOM used in
 development, and [`../SPEC.md`](../SPEC.md) for how each piece works.
