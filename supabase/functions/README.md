@@ -13,12 +13,12 @@ verify gate and CI both run the Deno checks.
 
 Run from `supabase/functions/`:
 
-| Command                         | What it does                                                                            |
-| ------------------------------- | --------------------------------------------------------------------------------------- |
-| `deno fmt` / `deno fmt --check` | Format (Prettier ignores this tree).                                                    |
-| `deno lint`                     | Lint.                                                                                   |
-| `deno task check`               | `deno check gedcom-import/` — typecheck, including the imported `@rootward/*` packages. |
-| `deno task test`                | Run the `*_test.ts` / `*.test.ts` suites.                                               |
+| Command                         | What it does                                                                                                |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `deno fmt` / `deno fmt --check` | Format (Prettier ignores this tree).                                                                        |
+| `deno lint`                     | Lint.                                                                                                       |
+| `deno task check`               | `deno check` over every function and `_shared/` — typecheck, including the imported `@rootward/*` packages. |
+| `deno task test`                | Run the `*_test.ts` / `*.test.ts` suites.                                                                   |
 
 CI runs all four in the `functions` job (`.github/workflows/ci.yml`).
 
@@ -53,6 +53,11 @@ testable without the edge runtime:
 - `gateway.ts` — the gateway backed by a service-role `supabase-js` client.
 - `index.ts` — the `Deno.serve` shell: auth, the time budget, self-reinvoke.
 - `*.test.ts` — drives the engine with an in-memory fake gateway.
+
+`_shared/` holds what every shell needs and none should copy. Today that is
+`cors.ts`: the response headers plus the preflight answer. A new function
+imports it rather than writing its own — `_shared/cors.test.ts` fails when an
+`index.ts` declares a CORS header of its own.
 
 ## `gedcom-import` (issue #14)
 

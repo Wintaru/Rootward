@@ -12,6 +12,7 @@
 
 import { createClient } from "@supabase/supabase-js";
 
+import { CORS_HEADERS, corsPreflightResponse } from "../_shared/cors.ts";
 import { createSupabaseGateway } from "./gateway.ts";
 import { runImport } from "./importer.ts";
 
@@ -22,12 +23,6 @@ declare const EdgeRuntime:
 /** Stop and yield the invocation after this long, well inside the wall limit. */
 const BUDGET_MS = 20_000;
 const BATCH_SIZE = 100;
-
-const CORS_HEADERS: Record<string, string> = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -46,7 +41,7 @@ function requireEnv(name: string): string {
 
 Deno.serve(async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: CORS_HEADERS });
+    return corsPreflightResponse(req);
   }
   if (req.method !== "POST") {
     return json({ error: "POST only" }, 405);

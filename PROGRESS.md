@@ -4093,7 +4093,11 @@ gedcom-export/`.
   `supabase/tests/` pgTAP suite; `schema_guards_test.sql` will fail CI if a new
   genealogy table skips `set_updated_at` / `write_audit_log` / RLS.
 - CI (`.github/workflows/ci.yml`): `verify` job = install + typecheck + lint +
-  format:check + test; `migrations` job = `supabase start`, the generated-types
+  format:check + test; `functions` job runs `deno fmt --check`, `deno lint`,
+  then `deno task check` / `deno task test` — the tasks, not a second copy of
+  their directory list. It used to restate the paths, and did fall behind:
+  while `_shared/media-pipeline.ts` existed (#101), `deno.json` listed
+  `_shared/` and CI did not, so CI never typechecked it. `migrations` job = `supabase start`, the generated-types
   drift check (regenerate `apps/web/lib/db/database.types.ts`,
   `git diff --exit-code`), `supabase db lint`, a seed check, then
   `supabase test db` (pgTAP). The types check runs first on purpose: types come
@@ -4128,3 +4132,14 @@ format:check / build / test` all run from the repo root.
 - The build spec was reviewed on 2026-08-30; two spec defects were fixed in place
   (`event.sort_key` generated-column rule, RLS coverage of family-owned rows).
 - `docs/SPEC.md` §11 now holds only decide-in-issue items (no blockers).
+- Edge function CORS lives in `supabase/functions/_shared/cors.ts`, not in each
+  shell. The preflight echoes `Access-Control-Request-Headers` back rather than
+  naming an allow-list, because the header set belongs to `supabase-js` --
+  `X-Client-Info` comes from its default global headers, `apikey` and
+  `Authorization` from its constructor. A literal list drifts on an SDK upgrade
+  and the failure is invisible outside a browser in production, which is how
+  every one of the four functions shipped unreachable from the app on the first
+  hosted deploy (2026-09-22). `_shared/cors.test.ts` fails when an `index.ts`
+  grows a CORS header of its own or answers OPTIONS without the helper. A CORS
+  change only reaches production through `supabase functions deploy` -- it is
+  not covered by the Vercel deploy.

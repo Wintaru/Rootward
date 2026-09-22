@@ -15,14 +15,9 @@
 import { createClient } from "@supabase/supabase-js";
 import { createExifTools, createImageCodec } from "@rootward/media";
 
+import { CORS_HEADERS, corsPreflightResponse } from "../_shared/cors.ts";
 import { createSupabaseGateway } from "./gateway.ts";
 import { MEDIA_OWNERS, type MediaOwner, runMediaProcess } from "./processor.ts";
-
-const CORS_HEADERS: Record<string, string> = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -41,7 +36,7 @@ function requireEnv(name: string): string {
 
 Deno.serve(async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: CORS_HEADERS });
+    return corsPreflightResponse(req);
   }
   if (req.method !== "POST") {
     return json({ error: "POST only" }, 405);

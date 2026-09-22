@@ -19,6 +19,7 @@
   },
   "lint": {
     "include": [
+      "_shared/",
       "gedcom-import/",
       "gedcom-export/",
       "onboarding-match/",
@@ -27,7 +28,7 @@
     "rules": { "tags": ["recommended"] }
   },
   "tasks": {
-    "check": "deno check gedcom-import/ gedcom-export/ onboarding-match/ media-process/",
-    "test": "deno test --allow-read gedcom-import/ gedcom-export/ onboarding-match/ media-process/"
+    "check": "deno check _shared/ gedcom-import/ gedcom-export/ onboarding-match/ media-process/",
+    "test": "deno test --allow-read _shared/ gedcom-import/ gedcom-export/ onboarding-match/ media-process/"
   }
 }

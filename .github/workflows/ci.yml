@@ -70,10 +70,13 @@ jobs:
         run: deno fmt --check
       - name: Lint
         run: deno lint
+      # Through the `deno.json` tasks, not a restatement of their paths: the
+      # directory list already lives there, and a copy here is a copy CI reads
+      # and nothing else checks. Adding `_shared/` had to touch both.
       - name: Typecheck
-        run: deno check gedcom-import/ gedcom-export/ onboarding-match/ media-process/
+        run: deno task check
       - name: Test
-        run: deno test --allow-read
+        run: deno task test
 
   migrations:
     name: migration check / db tests
