@@ -392,6 +392,12 @@ the genealogy + account tables.
 | `resolved_by` | uuid, nullable | |
 | `resolved_at` | timestamptz | |
 
+Partial unique index: one `pending` row per `account_id` (issue #49). The
+moderator queue raises one notification per account, so a second open request
+could never be seen and its approval used to strand the first one's
+notification. A collision is reported to the requester as "already open", not
+as a failure.
+
 **`claim_attempt`** — decision 24 rate limiting
 
 | Column | Type | Notes |

@@ -6,7 +6,7 @@
 -- / RLS must fail here rather than ship a silent gap.
 
 begin;
-select plan(14);
+select plan(15);
 
 -- set_updated_at is the concurrency token; SPEC §4 fixes the list to the 15
 -- editable tables the edit view can send back.
@@ -211,6 +211,17 @@ select is_empty(
 select is_empty(
   $$ select * from pg_temp.unfiltered_writes('update') $$,
   'no public function body has an UPDATE without a WHERE clause'
+);
+
+-- Constraint names the application matches on by name. A unique violation
+-- reaches the client as SQLSTATE 23505 plus a message naming the constraint,
+-- and `packages/shared/src/db-constraints.ts` reads that name to tell an
+-- expected collision from a real failure. Renaming an index without updating
+-- that file turns a handled case into a 500, so the name is a contract and
+-- belongs in the same guard file as the other single-source-of-truth sets.
+select has_index(
+  'public', 'access_request', 'access_request_one_pending_per_account',
+  'ACCESS_REQUEST_ONE_PENDING_PER_ACCOUNT in db-constraints.ts still names a real index'
 );
 
 select * from finish();

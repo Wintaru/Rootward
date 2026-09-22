@@ -3,12 +3,13 @@
 --
 -- Verifies the trigger is SECURITY DEFINER, that a caller inserting their own
 -- pending access_request (RLS access_request_insert) raises exactly one
--- 'access_requested' notification with the right payload, that a second request
--- for the same account does not stack another unresolved row, and that a fresh
--- request after the first is resolved raises a new one.
+-- 'access_requested' notification with the right payload, that the account
+-- cannot open a second request while one is pending (issue #49's partial
+-- unique index), and that a fresh request after the previous one was decided
+-- raises a new notification.
 
 begin;
-select plan(9);
+select plan(10);
 
 create function pg_temp.act_as(p_uid uuid)
 returns void
@@ -88,12 +89,21 @@ select isnt(
   null,
   'the notification payload links back to the access_request row');
 
--- --- dedup: a second open request does not stack a notification --------
+-- --- one open request, so one open notification -------------------------
+
+-- The trigger still carries its own dedup as defence in depth, but since
+-- issue #49 the partial unique index refuses the second pending row outright,
+-- so the trigger never gets a second chance to fire. The guarantee the queue
+-- depends on is unchanged: one open notification per account.
 
 set local role authenticated;
 select pg_temp.act_as('d9000000-0000-0000-0000-0000000000f1');
-insert into public.access_request (account_id, submitted_name)
-values ('d9000000-0000-0000-0000-0000000000f1', 'Ada again');
+select throws_ok(
+  $$insert into public.access_request (account_id, submitted_name)
+    values ('d9000000-0000-0000-0000-0000000000f1', 'Ada again')$$,
+  '23505',
+  null,
+  'a second open access_request for the same account is refused');
 set local role postgres;
 
 select is(
@@ -103,14 +113,14 @@ select is(
      and resolved_at is null
      and payload ->> 'account_id' = 'd9000000-0000-0000-0000-0000000000f1'),
   1,
-  'a second access_request for the same account does not stack a notification');
+  'the account still has exactly one open access_requested notification');
 
--- Resolve the open one, then a new request raises a fresh notification.
-update public.notification
-set resolved_at = now(),
-    resolved_by = 'd9000000-0000-0000-0000-00000000ad01'
-where type = 'access_requested'
-  and payload ->> 'account_id' = 'd9000000-0000-0000-0000-0000000000f1';
+-- Decide the open request. That resolves its notification through
+-- `resolve_access_request_notifications` and frees the account's slot, so the
+-- next request is a fresh one rather than a duplicate.
+update public.access_request
+set status = 'rejected', resolved_by = 'd9000000-0000-0000-0000-00000000ad01'
+where account_id = 'd9000000-0000-0000-0000-0000000000f1';
 
 set local role authenticated;
 select pg_temp.act_as('d9000000-0000-0000-0000-0000000000f1');
@@ -125,7 +135,7 @@ select is(
      and resolved_at is null
      and payload ->> 'account_id' = 'd9000000-0000-0000-0000-0000000000f1'),
   1,
-  'a new request after the first is resolved raises a fresh notification');
+  'a new request after the previous one was decided raises a fresh notification');
 
 select is(
   (select count(*)::int
