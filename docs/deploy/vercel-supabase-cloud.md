@@ -64,8 +64,15 @@ built-in rate limit (a few emails an hour) is enough.
 4. Deploy.
 
 `apps/web/next.config.ts` sets `output: "standalone"` for the Docker
-self-host path. Vercel uses its own build and tracing pipeline and ignores
-this setting, so it has no effect here.
+self-host path, and deliberately turns it off when the build runs on
+Vercel. Vercel does its own output file tracing, so it has no use for a
+standalone bundle. Leaving the setting on there also breaks the build:
+Next 16.3 stops writing `.next/next-server.js.nft.json` when a build
+adapter and standalone output are both active, and Vercel's adapter then
+fails with `ENOENT` for that file
+([vercel/next.js#96646](https://github.com/vercel/next.js/issues/96646)).
+That failure was observed on Next 16.3.3 on 2026-09-22. See the comment on
+the `output` key in `next.config.ts` for the current condition.
 
 ## 5. Add a custom domain (optional)
 

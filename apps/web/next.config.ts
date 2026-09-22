@@ -36,7 +36,25 @@ const nextConfig: NextConfig = {
   },
   // Docker self-host (issue #39): a minimal `.next/standalone` server, so the
   // production image does not need the whole `node_modules` tree.
-  output: "standalone",
+  //
+  // Off whenever `VERCEL` is set. Vercel builds through its own
+  // output-file-tracing adapter, and Next 16.3 skips writing
+  // `.next/next-server.js.nft.json` when an adapter and standalone output
+  // are both active -- the adapter then dies in `onBuildComplete` looking
+  // for that file (vercel/next.js#96646; hit here on 16.3.3, 2026-09-22).
+  // It is also correct independently of the bug: Vercel never serves the
+  // standalone bundle, so building one there is pure waste.
+  //
+  // `NEXT_ADAPTER_PATH` is the exact trigger -- it is what turns the
+  // adapter on -- but `VERCEL` is deliberately used instead. It is a
+  // documented system variable set on every Vercel build (production,
+  // preview and development), whereas the other is an undocumented
+  // internal that could be renamed or bypassed, and this guard can only
+  // ever be tested by a real cloud deploy. The cost of the looser signal
+  // is that a local `vercel build` also skips `.next/standalone`, which
+  // nothing consumes. A plain `next build` or `pnpm build` is unaffected
+  // and still writes `.next/standalone` for the Docker image.
+  output: process.env.VERCEL ? undefined : "standalone",
   // Trace from the pnpm workspace root, not `apps/web` — otherwise the
   // standalone bundle misses `packages/shared`, which Next transpiles from
   // source rather than from a built `dist/`.
