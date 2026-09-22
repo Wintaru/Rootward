@@ -24,7 +24,19 @@
 -- cleanup. A leftover row would be an `auth.users` row with no email and no
 -- credentials -- nothing can sign in as it.
 
-create extension if not exists dblink;
+-- `with schema extensions` matters: the default lands dblink in `public`, and
+-- CI generates `database.types.ts` from the public schema *after* running this
+-- suite (.github/workflows/ci.yml). A dblink in public puts the whole dblink
+-- function set and a composite type into the generated types, and the drift
+-- check then fails. `pg_trgm` is installed the same way in
+-- `20260831154954_onboarding_match.sql`.
+create extension if not exists dblink with schema extensions;
+-- `if not exists` is a no-op once the extension exists in *any* schema, so a
+-- stack that ran an earlier version of this file keeps its dblink in `public`
+-- and keeps regenerating polluted types. Relocate it. Idempotent, and worth
+-- doing on its own account: `public` is PostgREST-exposed, and dblink's
+-- default grants let anon reach `dblink_exec` there.
+alter extension dblink set schema extensions;
 select dblink_connect(
   'pgrst',
   format(
