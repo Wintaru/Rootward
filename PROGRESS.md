@@ -124,8 +124,11 @@ issue, not a blocker.
   Excluding it drops the dump to 14 MB and loses only the change history.
 - **The `imports` bucket is never reclaimed** — 234 MB of staging for 46 MB
   of live media, filed as #134.
-- **The local CLI is 2.117.0, the repo pins 2.116.0** in `package.json`
-  `gen:types` and in CI. That drift is #103.
+- **The repo pins Supabase CLI 2.116.0** in `scripts/supabase-cli-version.mjs`
+  (the source) with two literals guarded against it by
+  `pnpm check:cli-version` (#103). The CLI on a developer's PATH may be
+  newer — 2.117.0 here — which is fine, because every types regeneration
+  goes through the pinned version.
 - **A CD proposal already exists** in `SUPABASE-CD-PROPOSAL.md` (untracked)
   and recommends CD inside Phase 11. This file says after 1.0. The
   disagreement is ordering, not merit, and it is Josh's to settle.
