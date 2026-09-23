@@ -1,3 +1,5 @@
+import { parseEmailOtpType } from "./email-otp-type";
+
 /**
  * The proxy's redirect decision, as a pure function so it unit-tests without a
  * request or a Supabase client. Mirrors the reducer pattern the `/import` flow
@@ -9,12 +11,42 @@
  * actually belong (tree vs. onboarding).
  */
 
+/** The one route that redeems a sign-in link (SPEC §9.1). */
+export const AUTH_CALLBACK_PATH = "/auth/callback";
+
 /**
  * Every route reachable without a session — the exhaustive list, not a prefix,
  * so a future `/auth/*` route is gated by default rather than public by
  * accident. SPEC §8.1 / decision 35.
  */
-const PUBLIC_PATHS = ["/login", "/auth/callback", "/auth/auth-code-error"];
+const PUBLIC_PATHS = ["/login", AUTH_CALLBACK_PATH, "/auth/auth-code-error"];
+
+/**
+ * Whether this request is an emailed sign-in link that landed on the wrong
+ * path, and must be forwarded to `/auth/callback` with its query intact.
+ *
+ * GoTrue, not Rootward, decides the link's host and path: it validates the
+ * `redirect_to` the app asked for against the project's redirect allow-list,
+ * and silently substitutes the bare Site URL when the check fails. A
+ * deployment that sets Site URL but forgets to allow-list
+ * `<site>/auth/callback` therefore mails links to `https://<site>?token_hash=…`.
+ * Without this, the visitor lands on `/`, gets gated to `/login`, and the
+ * one-time token is spent — the exact failure this whole flow exists to fix,
+ * back again through a config slip. Verified against the local stack: an
+ * allow-listed `redirect_to` survives, anything else becomes the bare origin.
+ */
+export function needsEmailOtpForwarding(
+  pathname: string,
+  params: URLSearchParams,
+): boolean {
+  if (pathname === AUTH_CALLBACK_PATH) {
+    return false;
+  }
+  return (
+    params.get("token_hash") !== null &&
+    parseEmailOtpType(params.get("type")) !== null
+  );
+}
 
 export interface ProxyRedirectInput {
   readonly hasSession: boolean;

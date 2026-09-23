@@ -1,6 +1,15 @@
+import { accountMenuTrigger } from "../support/auth";
 import { fixtureIds } from "../support/fixture-data";
-import { mailboxMark, waitForMessage } from "../support/mailpit";
-import { admin } from "../support/supabase-admin";
+import {
+  mailboxMark,
+  waitForAuthLink,
+  waitForMessage,
+} from "../support/mailpit";
+import {
+  admin,
+  deleteTestUser,
+  findUserIdByEmail,
+} from "../support/supabase-admin";
 import { alerts, expect, test } from "../support/test";
 
 /**
@@ -61,10 +70,28 @@ test.describe("invite to claim", () => {
   // One address per test, so a failed cleanup cannot make the next test pass
   // or fail on the previous one's row.
   const email = "e2e-invitee@rootward.test";
-  const addressFor = (slug: string) => `e2e-invitee-${slug}@rootward.test`;
+
+  // A sent invitation creates an `auth.users` row, and an accepted one claims
+  // the target person. Both have to go at the end of the test, or the next
+  // test finds `loner` already claimed.
+  const invited = new Set<string>();
+  const addressFor = (slug: string) => {
+    const address = `e2e-invitee-${slug}@rootward.test`;
+    invited.add(address);
+    return address;
+  };
 
   test.afterEach(async () => {
     await admin.from("invitation").delete().like("email", "e2e-invitee%");
+    // Deleting the auth user cascades its `account` row, which releases the
+    // claim on the person. `allSettled`, so one address that will not delete
+    // does not abandon the rest and report the failure against the next test.
+    const swept = await Promise.allSettled([...invited].map(deleteTestUser));
+    invited.clear();
+    const failed = swept.filter((result) => result.status === "rejected");
+    expect(failed, `invitee cleanup failed: ${JSON.stringify(failed)}`).toEqual(
+      [],
+    );
   });
 
   test("refuses an empty email", async ({ moderatorPage }) => {
@@ -120,6 +147,50 @@ test.describe("invite to claim", () => {
 
     await moderatorPage.reload();
     await expect(moderatorPage.getByText(address)).toBeVisible();
+  });
+
+  test("an invitee can follow the emailed link and land signed in", async ({
+    moderatorPage,
+    anonPage,
+  }) => {
+    const address = addressFor("accepts");
+    const since = mailboxMark();
+    await moderatorPage.goto("/moderation");
+    await moderatorPage.getByLabel("Email address").fill(address);
+    await moderatorPage.getByLabel("Person ID").fill(fixtureIds.loner);
+    await moderatorPage
+      .getByRole("button", { name: "Send invitation" })
+      .click();
+    await expect(moderatorPage.getByText(/Invitation sent/)).toBeVisible();
+
+    // Regression: an invite is sent with the service role, so no browser holds
+    // a PKCE verifier for it. GoTrue's default template therefore returned the
+    // session in the URL fragment, which a server route cannot read, and every
+    // invitee landed on the error page holding a session they could not use.
+    await anonPage.goto(await waitForAuthLink(address, since));
+    await expect(anonPage).not.toHaveURL(/\/auth\/auth-code-error/);
+
+    // The session is real, not just a navigation that avoided the error page:
+    // a gated route opens, and the account chip needs a signed-in header.
+    await anonPage.goto("/tree");
+    await expect(anonPage).toHaveURL(/\/tree/);
+    await expect(accountMenuTrigger(anonPage)).toBeVisible();
+
+    // And §9.2 actually ran: accepting the invitation claims the person it
+    // named. `maybeAcceptInvitation` failures are swallowed in the callback so
+    // a broken link never blocks sign-in, which means only this can catch one.
+    const userId = await findUserIdByEmail(address);
+    expect(userId).not.toBeNull();
+    const { data: account } = await admin
+      .from("account")
+      .select("person_id, role, status")
+      .eq("id", userId ?? "")
+      .single();
+    expect(account).toMatchObject({
+      person_id: fixtureIds.loner,
+      role: "viewer",
+      status: "active",
+    });
   });
 
   test("clears the form after a successful send", async ({ moderatorPage }) => {

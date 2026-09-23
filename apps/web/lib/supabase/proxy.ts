@@ -1,12 +1,18 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-import { decideProxyRedirect } from "@/lib/auth/auth-redirect";
+import {
+  AUTH_CALLBACK_PATH,
+  decideProxyRedirect,
+  needsEmailOtpForwarding,
+} from "@/lib/auth/auth-redirect";
 
 import { supabaseAnonKey, supabaseUrl } from "./env";
 
 /**
  * Refresh the Auth session on every request and enforce the §8.1 access rule.
+ * It also rescues an emailed sign-in link that GoTrue addressed to the wrong
+ * path — see `needsEmailOtpForwarding`.
  *
  * Server Components cannot write cookies, so the proxy is the one place a
  * rotated refresh token can be persisted (Supabase SSR guide). It must:
@@ -20,6 +26,20 @@ import { supabaseAnonKey, supabaseUrl } from "./env";
 export async function updateSession(
   request: NextRequest,
 ): Promise<NextResponse> {
+  // Before anything else, and before the cost of a session refresh: an emailed
+  // sign-in link that GoTrue aimed at the wrong path still has to reach
+  // `/auth/callback`, query intact, or its one-time token is spent for nothing.
+  if (
+    needsEmailOtpForwarding(
+      request.nextUrl.pathname,
+      request.nextUrl.searchParams,
+    )
+  ) {
+    const url = request.nextUrl.clone();
+    url.pathname = AUTH_CALLBACK_PATH;
+    return NextResponse.redirect(url);
+  }
+
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(supabaseUrl(), supabaseAnonKey(), {

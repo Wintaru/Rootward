@@ -240,6 +240,8 @@ max_frequency = "1s"
 # Number of characters used in the email OTP.
 otp_length = 6
 # Number of seconds before the email OTP expires (defaults to 1 hour).
+# `supabase/templates/*.html` tell the reader "expires in one hour". Change
+# this and change that sentence in all three files.
 otp_expiry = 3600
 
 # Use a production-ready SMTP server
@@ -252,10 +254,26 @@ otp_expiry = 3600
 # admin_email = "admin@email.com"
 # sender_name = "Admin"
 
-# Uncomment to customize email template
-# [auth.email.template.invite]
-# subject = "You have been invited"
-# content_path = "./supabase/templates/invite.html"
+# Rootward mails its own templates rather than GoTrue's defaults. The default
+# templates link to `/auth/v1/verify`, which returns the session in the URL
+# fragment — a server route cannot read a fragment, so every invite died on
+# `/auth/auth-code-error`. These link to `/auth/callback` with a `token_hash`
+# instead. Each file stands alone because GoTrue templates have no partials.
+#
+# These settings apply to the local stack only. A hosted project keeps its
+# templates in the dashboard (Authentication -> Emails), which must be kept in
+# step by hand — see `docs/deploy/vercel-supabase-cloud.md`.
+[auth.email.template.invite]
+subject = "You have been invited to Rootward"
+content_path = "./supabase/templates/invite.html"
+
+[auth.email.template.magic_link]
+subject = "Your Rootward sign-in link"
+content_path = "./supabase/templates/magic_link.html"
+
+[auth.email.template.confirmation]
+subject = "Confirm your Rootward email"
+content_path = "./supabase/templates/confirmation.html"
 
 # Uncomment to customize notification email template
 # [auth.email.notification.password_changed]

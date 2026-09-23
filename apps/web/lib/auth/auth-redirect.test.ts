@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { decideProxyRedirect, resolveHomeDestination } from "./auth-redirect";
+import {
+  decideProxyRedirect,
+  needsEmailOtpForwarding,
+  resolveHomeDestination,
+} from "./auth-redirect";
 
 describe("decideProxyRedirect", () => {
   it("sends an unauthenticated visitor to /login from a gated route", () => {
@@ -83,5 +87,41 @@ describe("resolveHomeDestination", () => {
         rootPersonId: null,
       }),
     ).toBe("/tree");
+  });
+});
+
+describe("needsEmailOtpForwarding", () => {
+  const params = (query: string) => new URLSearchParams(query);
+
+  it("forwards an emailed link that landed on a gated path", () => {
+    // GoTrue mails this shape when `<site>/auth/callback` is missing from the
+    // project's redirect allow-list: the bare site origin, no path.
+    expect(
+      needsEmailOtpForwarding("/", params("token_hash=abc&type=invite")),
+    ).toBe(true);
+    expect(
+      needsEmailOtpForwarding("/tree", params("token_hash=abc&type=magiclink")),
+    ).toBe(true);
+  });
+
+  it("leaves the callback itself alone, so there is no redirect loop", () => {
+    expect(
+      needsEmailOtpForwarding(
+        "/auth/callback",
+        params("token_hash=abc&type=invite"),
+      ),
+    ).toBe(false);
+  });
+
+  it("ignores a request that is not an emailed sign-in link", () => {
+    expect(needsEmailOtpForwarding("/", params(""))).toBe(false);
+    expect(needsEmailOtpForwarding("/", params("token_hash=abc"))).toBe(false);
+    expect(needsEmailOtpForwarding("/", params("type=invite"))).toBe(false);
+  });
+
+  it("ignores a type this deployment never sends", () => {
+    expect(
+      needsEmailOtpForwarding("/", params("token_hash=abc&type=recovery")),
+    ).toBe(false);
   });
 });

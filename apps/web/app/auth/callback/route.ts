@@ -1,7 +1,9 @@
+import type { Session, User } from "@supabase/supabase-js";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { maybeAcceptInvitation } from "@/lib/auth/accept-invitation";
 import { maybeBootstrapAdmin } from "@/lib/auth/bootstrap-admin";
+import { parseEmailOtpType } from "@/lib/auth/email-otp-type";
 import { resolveRequestOrigin } from "@/lib/auth/request-origin";
 import { getAppearance } from "@/lib/db";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -12,11 +14,26 @@ import {
 } from "@/lib/theme/preference";
 
 /**
- * `/auth/callback` — the single return point for both sign-in methods
- * (SPEC §9.1). The browser client uses the PKCE flow, so a magic-link click and
- * a Google redirect both arrive here with `?code=`. Exchange it for a session,
- * run the `ADMIN_EMAIL` bootstrap and the invite-acceptance link (SPEC §9.2),
- * then send the visitor on.
+ * `/auth/callback` — the single return point for every sign-in method
+ * (SPEC §9.1). It accepts two shapes, because the two families of link carry
+ * their proof differently:
+ *
+ * - Google's redirect arrives with `?code=`, a PKCE authorization code the
+ *   browser client's stored verifier redeems.
+ * - An emailed link (magic link, signup confirmation, moderator invite)
+ *   arrives with `?token_hash=&type=`, which `verifyOtp` redeems server-side.
+ *
+ * The email shape is not a nicety. A moderator's invite is sent with the
+ * service role, so no `code_verifier` exists in any browser and GoTrue falls
+ * back to the implicit flow, which returns the session in the URL *fragment* —
+ * unreadable by a server route, so every invite died on the error page with a
+ * valid session attached. Supabase's `token_hash` templates
+ * (`supabase/templates/`) avoid the fragment entirely. They also free a magic
+ * link from the browser that asked for it, so a link opened in another browser
+ * or a private window now works.
+ *
+ * Either way: establish the session, run the `ADMIN_EMAIL` bootstrap and the
+ * invite-acceptance link (SPEC §9.2), then send the visitor on.
  *
  * Every redirect is built from the origin the visitor used (#110). The
  * session cookie the exchange just wrote is scoped to that host, so sending
@@ -36,6 +53,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       defaultProtocol: requestUrl.protocol === "https:" ? "https" : "http",
     }) ?? requestUrl.origin;
   const code = searchParams.get("code");
+  const tokenHash = searchParams.get("token_hash");
+  const otpType = parseEmailOtpType(searchParams.get("type"));
 
   // Only ever redirect within the app. Keep the redirect below as string
   // concatenation: `new URL(next, origin)` would resolve `//evil.example` to
@@ -43,22 +62,46 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const nextParam = searchParams.get("next");
   const next = nextParam && nextParam.startsWith("/") ? nextParam : "/";
 
-  if (code === null) {
-    return NextResponse.redirect(`${origin}/auth/auth-code-error`);
-  }
+  // A factory, not one shared response object: the success path below sets
+  // cookies on its own response, and a single shared error response would
+  // quietly carry anything a later branch set on it into the other returns.
+  const errorRedirect = () =>
+    NextResponse.redirect(`${origin}/auth/auth-code-error`);
 
   const supabase = await createSupabaseServerClient();
-  const { data, error } = await supabase.auth.exchangeCodeForSession(code);
-  if (error !== null || data.user === null) {
-    return NextResponse.redirect(`${origin}/auth/auth-code-error`);
+  let redeemed: { user: User | null; session: Session | null } | null = null;
+  if (code !== null) {
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+    if (error !== null) {
+      return errorRedirect();
+    }
+    redeemed = data;
+  } else if (tokenHash !== null && otpType !== null) {
+    const { data, error } = await supabase.auth.verifyOtp({
+      type: otpType,
+      token_hash: tokenHash,
+    });
+    if (error !== null) {
+      return errorRedirect();
+    }
+    redeemed = data;
+  }
+
+  // A user *and* a session. Everything below needs the session: the appearance
+  // read runs under RLS, and the final redirect is pointless without the
+  // cookie. A user with no session would bounce back to `/login` with the
+  // one-time token already spent.
+  const user = redeemed?.user ?? null;
+  if (user === null || redeemed?.session == null) {
+    return errorRedirect();
   }
 
   try {
-    await maybeBootstrapAdmin({ id: data.user.id, email: data.user.email });
+    await maybeBootstrapAdmin({ id: user.id, email: user.email });
   } catch {
     // The session is valid but the admin promotion failed. Send them to the
     // error page; the next full sign-in retries (the promote is idempotent).
-    return NextResponse.redirect(`${origin}/auth/auth-code-error`);
+    return errorRedirect();
   }
 
   try {
@@ -68,14 +111,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     // changed (they land on `/onboarding`) or the account link already
     // succeeded (they land on the tree) — the invitation row is reconciled from
     // the moderation queue. Do not block sign-in on it.
-    await maybeAcceptInvitation({ id: data.user.id, email: data.user.email });
+    await maybeAcceptInvitation({ id: user.id, email: user.email });
   } catch {
     // Fall through to the redirect below.
   }
 
   const response = NextResponse.redirect(`${origin}${next}`);
   try {
-    const stored = await getAppearance(supabase, data.user.id);
+    const stored = await getAppearance(supabase, user.id);
     if (stored !== null) {
       const preference = toThemePreference(stored.theme, stored.colorMode);
       for (const cookie of appearanceCookies(preference)) {

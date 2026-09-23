@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>You have been invited to Rootward</title>
+  </head>
+  <!--
+    Rootward's invitation email. Colours are the Flexoki light palette, the
+    default theme in `apps/web/lib/theme/registry.ts`.
+
+    The link deliberately does NOT use `{{ .ConfirmationURL }}`. That URL sends
+    the visitor through GoTrue's own `/auth/v1/verify`, which returns the
+    session in the URL fragment — a server route cannot read a fragment, so
+    `/auth/callback` saw nothing and bounced every visitor to the error page.
+    `{{ .TokenHash }}` instead lets the route redeem the link with `verifyOtp`.
+    See https://supabase.com/docs/guides/auth/auth-email-templates.
+
+    `{{ .RedirectTo }}` is the origin the visitor actually used, so a sign-in
+    started at `127.0.0.1` is not moved to `localhost`, where the session
+    cookie would not apply (BUG-001). It is never empty: GoTrue checks the
+    `redirect_to` the app asked for against the project's allow-list, and on a
+    failed check substitutes the bare Site URL — which has no `/auth/callback`
+    path. `needsEmailOtpForwarding` in `apps/web/lib/auth/auth-redirect.ts`
+    forwards that case rather than letting the visitor burn the token on a
+    gated page.
+
+    `.prettierignore` skips this directory: this is a Go template, and
+    rewrapping the visible link below would put spaces inside the address.
+  -->
+  <body style="margin: 0; padding: 0; background-color: #f2f0e5; color: #100f0f">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #f2f0e5">
+      <tr>
+        <td align="center" style="padding: 40px 16px">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 520px; background-color: #fffcf0; border: 1px solid #e6e4d9; border-radius: 10px">
+            <tr>
+              <td style="padding: 32px 32px 8px 32px">
+                <p style="margin: 0; font-family: Georgia, 'Times New Roman', serif; font-size: 15px; letter-spacing: 0.12em; text-transform: uppercase; color: #b54c09">Rootward</p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 32px 0 32px">
+                <h1 style="margin: 0; font-family: Georgia, 'Times New Roman', serif; font-size: 24px; line-height: 1.3; font-weight: 600; color: #100f0f">You have been invited to the family tree</h1>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 16px 32px 0 32px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 15px; line-height: 1.6; color: #575653">
+                <p style="margin: 0">Someone who keeps this family tree invited <strong style="color: #100f0f">{{ .Email }}</strong> to join it. Accept the invitation to see the tree and the record that belongs to you.</p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 24px 32px 0 32px">
+                <a href="{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=invite" style="display: inline-block; padding: 12px 24px; background-color: #b54c09; color: #fffcf0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 15px; font-weight: 600; text-decoration: none; border-radius: 6px">Accept the invitation</a>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 24px 32px 0 32px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 13px; line-height: 1.6; color: #878580">
+                <p style="margin: 0">If the button does not work, copy this address into your browser:</p>
+                <p style="margin: 8px 0 0 0; word-break: break-all"><a href="{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=invite" style="color: #b54c09">{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=invite</a></p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 24px 32px 0 32px">
+                <hr style="border: 0; border-top: 1px solid #e6e4d9; margin: 0" />
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 16px 32px 32px 32px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 13px; line-height: 1.6; color: #878580">
+                <p style="margin: 0">This link works once and expires in one hour. If you did not expect it, you can ignore this email.</p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

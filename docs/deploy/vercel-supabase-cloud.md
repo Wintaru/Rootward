@@ -39,17 +39,50 @@ Open **Authentication → URL Configuration** in the Supabase dashboard.
 - Set **Site URL** to your Vercel deploy's URL, for example
   `https://tree.example.com`. You can add this after step 5, once you know
   the final domain, and come back to update it.
-- Add `<your-app-url>/auth/callback` to **Redirect URLs**.
+- Add `<your-app-url>/auth/callback` to **Redirect URLs**, spelled exactly.
+  Supabase replaces a redirect it does not recognise with the bare Site URL,
+  so a mistake here sends every sign-in link to your home page instead of the
+  callback. The app forwards such a link rather than losing it, but the
+  allow-list entry is what makes the link correct in the first place.
 
 To turn on Google sign-in, open **Authentication → Sign In / Providers →
 Google**. Turn it on, then paste in the client ID and secret from the OAuth
 client you created in `README.md` step 1. Its authorized redirect URI must
 be `<your-supabase-url>/auth/v1/callback`, copied from this same page.
 
+### Email templates (required)
+
+A hosted project does not read `supabase/config.toml`, so it keeps GoTrue's
+default email templates. Those templates return the session in the URL
+fragment, which the server cannot read, so every invitation fails. Open
+**Authentication → Emails** and replace three templates with the files in
+`supabase/templates/`:
+
+| Dashboard template | File | Subject |
+| --- | --- | --- |
+| Invite user | `supabase/templates/invite.html` | You have been invited to Rootward |
+| Magic Link | `supabase/templates/magic_link.html` | Your Rootward sign-in link |
+| Confirm signup | `supabase/templates/confirmation.html` | Confirm your Rootward email |
+
+Paste each file's contents into the matching template body. Repeat this
+after you edit a template file, because nothing keeps the two in step.
+
+A hosted project turns **Confirm email** on by default, while
+`supabase/config.toml` keeps it off for local work. A first-time member on the
+hosted deployment therefore gets the Confirm signup template, which is why it
+is on the list above.
+
+### SMTP (required for real email)
+
 To send real magic-link and invitation emails, open **Project Settings →
 Auth → SMTP Settings**. Turn on **Enable Custom SMTP** and enter your
 provider's settings. Skip this only for a small trial where Supabase's
 built-in rate limit (a few emails an hour) is enough.
+
+Custom SMTP also controls the sender. Supabase's built-in sender is always
+`Supabase Auth <noreply@mail.app.supabase.io>` and you cannot change it. Set
+**Sender name** to `Rootward` and **Sender email** to an address on a domain
+you verified with your provider.
 
 ## 4. Deploy the web app to Vercel
 

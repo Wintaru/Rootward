@@ -15,8 +15,14 @@ type Status =
 const GENERIC_ERROR = "Something went wrong. Try again in a moment.";
 
 /**
- * Magic link + Google, no passwords (decision 11). Both flows use the browser
- * client's PKCE flow and return through `/auth/callback`.
+ * Magic link + Google, no passwords (decision 11). Both return through
+ * `/auth/callback`. Google uses the browser client's PKCE flow. The magic
+ * link does not: GoTrue mails a `token_hash` link that the server redeems
+ * (SPEC §9.1), so the link opens in any browser, not only this one.
+ *
+ * `emailRedirectTo` still matters — it is the `{{ .RedirectTo }}` the template
+ * builds its link from, which is how the visitor keeps the origin they
+ * started on.
  */
 export function LoginForm() {
   const emailId = useId();

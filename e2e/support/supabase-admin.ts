@@ -47,7 +47,9 @@ type UserSpec = {
   readonly personId?: string | null;
 };
 
-async function findUserIdByEmail(email: string): Promise<string | null> {
+/** The `auth.users` id for an address, or `null`. An `account` row is keyed
+ * by that id, so a test that checks an account has to resolve it first. */
+export async function findUserIdByEmail(email: string): Promise<string | null> {
   // `listUsers` is paginated; the local stack holds few users, but page
   // through anyway rather than assume the first page is everything.
   const target = email.toLowerCase();

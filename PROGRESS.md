@@ -41,6 +41,25 @@ with the `vercel` and `supabase` CLIs before trusting it.
 
 ## Next action
 
+**Production bug, fixed on branch `fix/email-link-token-hash`, not yet
+verified end to end.** Josh's invitation link landed on
+`/auth/auth-code-error`. A moderator's invite is sent with the service role,
+so no browser holds a PKCE verifier and GoTrue returns the session in the URL
+fragment, which a server route cannot read. `/auth/callback` now also accepts
+`token_hash` + `type`, and `supabase/templates/` holds the three email
+templates that send it. Two steps remain, and both need Josh:
+
+1. Paste the three templates into the hosted project's dashboard
+   (**Authentication -> Emails**). Until then production invites still fail.
+2. Restart the local stack, then run the new e2e test
+   (`invite to claim` -> "an invitee can follow the emailed link"). GoTrue
+   reads `config.toml` templates only at start, so that test fails against a
+   stack started before this branch.
+
+The route itself is verified against the live local stack: a minted invite
+token redeems into a session, and a bad token, an unsupported `type`, an
+empty query, and a bogus code all reach the error page.
+
 **#127 is done** (branch `fix/e2e-teardown-stale-root`). The destructive
 teardown wrote a deleted person's id back into `tree_settings` and the foreign
 key refused it, failing the run after every test had passed. The restore now

@@ -24,3 +24,8 @@ apps/web/CLAUDE.md
 
 # Deno edge functions — `deno fmt` / `deno lint` own this tree (see supabase/functions/deno.json)
 supabase/functions/
+
+# GoTrue email templates — Go `text/template`, not plain HTML. Prettier rewraps
+# the visible fallback URL across lines, and HTML turns those breaks into
+# spaces, so the address a reader copies is no longer the address.
+supabase/templates/

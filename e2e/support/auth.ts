@@ -7,9 +7,10 @@ import { mailboxMark, waitForAuthLink } from "./mailpit";
  * magic link at `/login`, then follow the link GoTrue mails to Mailpit
  * (SPEC §9.1, decision 11 — magic link and Google, no passwords).
  *
- * The browser client uses the PKCE flow, so the code verifier lives in this
- * context's own storage. The link therefore has to be followed in the same
- * `page` that asked for it — which is also what a real person does.
+ * The link is followed in the same `page` that asked for it, which is what a
+ * real person does. It no longer has to be: the magic-link template mails a
+ * `token_hash` the server redeems (SPEC §9.1), so the link works in any
+ * browser. `auth.spec.ts` owns that guarantee.
  */
 export async function signInWithMagicLink(
   page: Page,

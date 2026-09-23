@@ -974,9 +974,20 @@ Influential Persons, DNA, Stories, ToDos, Numbering System — decision 21.)
 
 ### 9.1 Sign-in (decision 11)
 
-Supabase Auth, magic link + Google, no passwords. The browser client uses the
-PKCE flow, so both methods return through one route handler, `/auth/callback`,
-which exchanges the code for a session.
+Supabase Auth, magic link + Google, no passwords. Both methods return through
+one route handler, `/auth/callback`, which accepts two shapes. Google arrives
+with a PKCE `code`, and the browser client's stored verifier redeems it. An
+emailed link arrives with `token_hash` and `type`, and the route redeems it
+with `verifyOtp`.
+
+The email shape needs Rootward's own templates in `supabase/templates/`. A
+moderator sends an invitation with the service role, so no browser holds a
+code verifier for it. GoTrue's default template answers that with the implicit
+flow, which returns the session in the URL fragment. A server route cannot
+read a fragment, so every invitee reached `/auth/auth-code-error` with a valid
+session attached. A `token_hash` link has no fragment. It also frees a magic
+link from the browser that asked for it, so a link opens in a private window
+or on another device.
 
 A Postgres trigger on `auth.users` insert (`on_auth_user_created`) creates the
 matching `account` row (`role = viewer`, `status = pending`, `display_name` from

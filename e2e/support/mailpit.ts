@@ -79,18 +79,21 @@ export async function waitForMessage(
 }
 
 /**
- * Pull the confirmation URL out of a GoTrue mail. The default templates put a
- * `.../auth/v1/verify?token=…&type=…&redirect_to=…` link in both parts; the
- * HTML part is the one a real click would follow.
+ * Pull the sign-in URL out of a GoTrue mail. Rootward's templates
+ * (`supabase/templates/`) link straight to `/auth/callback?token_hash=…`, so
+ * that is the shape to expect. GoTrue's own default templates link to
+ * `.../auth/v1/verify?token=…` instead, and both are matched here: a hosted
+ * project whose dashboard templates have not been updated yet still produces
+ * a followable link, and this helper does not quietly find nothing.
  */
 export function extractAuthLink(message: MailpitMessage): string {
   const source = `${message.HTML}\n${message.Text}`;
   const match = source.match(
-    /https?:\/\/[^\s"'<>]*\/auth\/v1\/verify[^\s"'<>]*/,
+    /https?:\/\/[^\s"'<>]*\/auth\/(?:v1\/verify|callback)\?[^\s"'<>]*/,
   );
   if (match === null) {
     throw new Error(
-      `No /auth/v1/verify link in the message. Body was:\n${message.Text.slice(0, 500)}`,
+      `No /auth/callback or /auth/v1/verify link in the message. Body was:\n${message.Text.slice(0, 500)}`,
     );
   }
   // Mail bodies are HTML-escaped; the query separators must be unescaped
