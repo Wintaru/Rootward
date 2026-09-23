@@ -41,17 +41,14 @@ with the `vercel` and `supabase` CLIs before trusting it.
 
 ## Next action
 
-**#49 is done** (branch `fix/access-request-duplicate-pending`, two commits).
-The moderator queue could hold a notification nobody was able to clear. A
-partial unique index now allows one open request per account, the resolve
-trigger matches by account the way its other arm always did, and a one-time
-backfill releases anything the old code already stranded. A refused second
-submission is reported to the person as "already open" rather than as success,
-because the text they wrote is not stored. Filed #135 (four other sites
-open-code SQLSTATE `23505`).
+**#127 is done** (branch `fix/e2e-teardown-stale-root`). The destructive
+teardown wrote a deleted person's id back into `tree_settings` and the foreign
+key refused it, failing the run after every test had passed. The restore now
+writes `null` when that person is gone. Correction to the issue: it re-arms on
+every re-seed, because `seed.sql` sets a default root — not once ever.
 
-Take **#127** next, then **#103**, then **#47**. All three are local and need
-no deploy.
+Take **#103** next (one source for the pinned Supabase CLI version), then
+**#47** (type-aware lint for `apps/web`). Both are local.
 
 **#128 is part done.** `docs/deploy/backup-restore.md` covers backup, restore
 and upgrade, and every command in it was run against a throwaway stack loaded
@@ -59,7 +56,7 @@ with the 628-person demo tree. It stays open for one thing: every command ran
 with `--local`, and the Cloud variants differ by `--linked` against a different
 Postgres build, storage backend and permission set. Josh has offered a
 production `pg_dump` — restore it locally and compare. That writes nothing to
-the live tree. Filed #134 (the `imports` bucket is never reclaimed).
+the live tree.
 
 **#129 is parked.** Its deploy is live and verified, but the issue's acceptance
 test — import the 628-person demo tree, then wipe — cannot run there.
@@ -70,6 +67,10 @@ comment on the issue has the detail.
 
 Then **#130** (blocked on Josh provisioning a Linux server), and **#131** last.
 
+Filed this session: **#134** (the `imports` bucket is never reclaimed),
+**#135** (four sites open-code SQLSTATE `23505`), **#136** (a throw in the e2e
+teardown's first step abandons the fixture sweeps).
+
 **Standing rule: no test writes genealogy data to a deploy that holds a real
 tree.** Tests run against the local stack. A live journey test needs a
 throwaway Supabase project. That decision is what #129 is blocked on.
@@ -78,6 +79,12 @@ throwaway Supabase project. That decision is what #129 is blocked on.
 `trillian-resource supabase acquire --fresh` for a clean stack on its own port
 block, and release it with `--stop`. Applying a new migration to the shared
 stack with `supabase migration up --local` is additive and fine.
+
+**Verify a migration the way the CLI applies it.** `supabase start` replays
+migrations in autocommit, one statement per transaction. Replaying a file
+inside `begin; ... rollback;` to protect a shared stack changes what is legal —
+that is how a `LOCK TABLE` shipped and broke every stack and CI on 2026-09-22.
+Replay against a throwaway stack instead.
 
 ## Conventions this phase
 
@@ -129,8 +136,7 @@ Josh's call. `docs/SPEC.md` §10 listed #47 and #103 as out of 1.0 until this
 date — that line is now reversed there.
 
 - **#49** — done, see above.
-- **#127** — the destructive e2e teardown restores a `tree_settings` root
-  person the wipe deleted.
+- **#127** — done, see above.
 - **#103** — no single source of truth for the pinned Supabase CLI version.
   #128, #129, and #130 each record a CLI version, so this pays for itself.
 - **#47** — tooling parity: type-aware lint and strict flags for `apps/web`.
