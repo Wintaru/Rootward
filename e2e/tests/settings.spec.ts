@@ -1,5 +1,9 @@
 import { alerts, expect, test } from "../support/test";
-import { fixtureNames } from "../support/fixture-data";
+import {
+  fixtureIds,
+  fixtureNames,
+  MISSING_PERSON_ID,
+} from "../support/fixture-data";
 import {
   deleteTestUser,
   ensureTestUser,
@@ -373,5 +377,64 @@ test.describe("role management", () => {
 
     await row.getByRole("button", { name: "Reactivate" }).click();
     await expect(row.getByRole("button", { name: "Suspend" })).toBeVisible();
+  });
+});
+
+/**
+ * `restoreTreeSettings` is what `globalTeardown` runs, so a throw there fails
+ * the whole run after every test has already passed. Issue #127: the
+ * destructive project wipes every person including the snapshot's default
+ * root, and writing that id back is refused by the FK (23503).
+ *
+ * No browser — this is the teardown helper on its own.
+ */
+test.describe("restoreTreeSettings", () => {
+  // Same reason as the block above: `tree_settings` is a singleton, and a
+  // test that fails between a change and its inline restore would leave the
+  // row wrong for everything after it. An inline restore at the end of each
+  // test is not enough — it never runs when an assertion above it fails, and
+  // `E2E_KEEP_FIXTURES=1`, the flag a developer sets to inspect that very
+  // failure, skips the global teardown that would otherwise repair it.
+  let snapshot: Awaited<ReturnType<typeof readTreeSettings>> | null = null;
+
+  test.beforeAll(async () => {
+    snapshot = await readTreeSettings();
+  });
+
+  test.afterEach(async () => {
+    if (snapshot !== null) {
+      await restoreTreeSettings(snapshot);
+    }
+  });
+
+  test("drops a default root person the run deleted (#127)", async () => {
+    const before = await readTreeSettings();
+
+    // A changed `tree_name` alongside the dangling root id. Spreading `before`
+    // unchanged would make the "everything else still lands" assertion below
+    // pass even if the restore wrote nothing at all.
+    const probeName = "E2E #127 probe";
+    await restoreTreeSettings({
+      ...before,
+      tree_name: probeName,
+      default_root_person_id: MISSING_PERSON_ID,
+    });
+
+    const after = await readTreeSettings();
+    expect(after.default_root_person_id).toBeNull();
+    // The guard drops one column; it does not abandon the whole restore.
+    expect(after.tree_name).toBe(probeName);
+  });
+
+  test("still restores a root person that does exist", async () => {
+    const before = await readTreeSettings();
+
+    await restoreTreeSettings({
+      ...before,
+      default_root_person_id: fixtureIds.grandfather,
+    });
+    expect((await readTreeSettings()).default_root_person_id).toBe(
+      fixtureIds.grandfather,
+    );
   });
 });

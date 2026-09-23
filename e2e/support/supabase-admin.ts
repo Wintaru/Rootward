@@ -334,14 +334,68 @@ export function readSettingsSnapshot(): TreeSettingsSnapshot | null {
   ) as TreeSettingsSnapshot;
 }
 
+/**
+ * Put a snapshot back, dropping a `default_root_person_id` whose person no
+ * longer exists (issue #127).
+ *
+ * The destructive project wipes every person, including whichever one the
+ * pre-run snapshot named as the default root. `tree_settings` survives the
+ * wipe, and its FK is `ON DELETE SET NULL`, so the database has already
+ * cleared the column correctly by the time teardown runs. Writing the old id
+ * back is what the FK then refuses, and `globalTeardown` throws.
+ *
+ * It bites on the first destructive run after each re-seed, not once ever:
+ * `seed.sql` sets `default_root_person_id` to a seed person, so
+ * `pnpm dev:fresh` or `pnpm dev:reset` re-arms it. In between, the snapshot
+ * itself holds null and that one column changes nothing, which is why the
+ * failure looks like it went away on its own.
+ *
+ * The guard writes `null` rather than leaving the column out of the patch.
+ * `readTreeSettings` exists so a caller can put the WHOLE row back instead of
+ * restoring fields piecemeal, so dropping a column would reintroduce exactly
+ * the partial restore it guards against. `null` is also the true state: the
+ * FK is `on delete set null`, so the database already cleared the column when
+ * the person went, and the app handles a missing default root (issue #82).
+ */
 export async function restoreTreeSettings(
   snapshot: TreeSettingsSnapshot,
 ): Promise<void> {
-  const { error } = await admin
-    .from("tree_settings")
-    .update(snapshot)
-    .eq("id", 1);
+  let patch = snapshot;
+  if (!(await rootPersonIdIsWritable(snapshot.default_root_person_id))) {
+    // Say so. A teardown that silently rewrites a column leaves the next
+    // person wondering where their default root went.
+    console.warn(
+      `restoreTreeSettings: dropping default_root_person_id ` +
+        `${snapshot.default_root_person_id} — that person no longer exists.`,
+    );
+    patch = { ...snapshot, default_root_person_id: null };
+  }
+
+  const { error } = await admin.from("tree_settings").update(patch).eq("id", 1);
   if (error !== null) {
     throw new Error(`restoreTreeSettings failed: ${error.message}`);
   }
+}
+
+/**
+ * Whether this id can go back into `default_root_person_id` without the FK
+ * refusing it. Named for what it decides rather than for the person: a null
+ * id is writable precisely because there is no person to find.
+ */
+async function rootPersonIdIsWritable(
+  personId: string | null,
+): Promise<boolean> {
+  if (personId === null) {
+    return true;
+  }
+  const { count, error } = await admin
+    .from("person")
+    .select("id", { count: "exact", head: true })
+    .eq("id", personId);
+  if (error !== null) {
+    throw new Error(
+      `restoreTreeSettings person lookup failed: ${error.message}`,
+    );
+  }
+  return (count ?? 0) > 0;
 }

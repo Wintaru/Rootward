@@ -11,13 +11,21 @@ type EventInsert = TableInsert<"event">;
  * depend on what happens to be in the database. Every test that needs a
  * person uses one of these instead. The ids are fixed, in an `e0…` range
  * that neither the seed (`d…`) nor the pgTAP fixtures (`a…`/`b…`/`c…`) use,
- * so a re-run replaces the same rows rather than piling up new ones.
+ * so a re-run replaces the same rows rather than piling up new ones. The
+ * `00…` range is reserved for {@link MISSING_PERSON_ID} and must stay unused.
  *
  * The surname is deliberately odd ("Qatestsson"): `/people`'s filter and the
  * header search box can match it without colliding with real data.
  */
 
 const id = (suffix: string): string => `e0000000-0000-4000-8000-0000${suffix}`;
+
+/**
+ * An id no person has, and none may ever take. Tests that need a dangling
+ * person reference use this rather than inventing a literal, so a later
+ * range allocation above cannot quietly make one of them vacuous.
+ */
+export const MISSING_PERSON_ID = "00000000-0000-4000-8000-0000000000ff";
 
 export const FIXTURE_SURNAME = "Qatestsson";
 
