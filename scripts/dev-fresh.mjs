@@ -20,6 +20,8 @@ import { spawn } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 import { parseArgs } from "node:util";
 
+import { SUPABASE_CLI_VERSION } from "./supabase-cli-version.mjs";
+
 const { values: flags } = parseArgs({
   options: { "keep-data": { type: "boolean", default: false } },
 });
@@ -95,18 +97,19 @@ if (flags["keep-data"]) {
 // an empty file behind the way `supabase gen types > file` would.
 
 console.log("\n→ regenerating database types");
-// Pinned to the same Supabase CLI version as package.json's `gen:types`
-// script and .github/workflows/ci.yml's drift check (the CI step carries a
-// matching comment; package.json is JSON and can't). The CLI on PATH here is
-// whatever's locally installed and drifts independently, and different CLI
-// versions emit slightly different generic-type boilerplate for the same
-// schema, which otherwise churns this file on every `dev:up`/`dev:fresh` for
-// no reason -- commit dea7b43 fixed `gen:types` and CI but missed this call.
+// Pinned, and imported rather than spelled out: `supabase-cli-version.mjs` is
+// the source, and `pnpm check:cli-version` holds the two sites that cannot
+// import it to the same value (issue #103). The CLI on PATH here is whatever
+// is locally installed and drifts independently, and different CLI versions
+// emit slightly different generic-type boilerplate for the same schema, which
+// otherwise churns this file on every `dev:up`/`dev:fresh` for no reason --
+// commit dea7b43 fixed `gen:types` and CI but missed this call, which is
+// exactly the drift a literal here invites.
 const gen = await run(
   "npx",
   [
     "-y",
-    "supabase@2.116.0",
+    `supabase@${SUPABASE_CLI_VERSION}`,
     "gen",
     "types",
     "typescript",

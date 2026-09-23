@@ -33,6 +33,13 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
 
+      # Before the install: this reads two files and imports only node
+      # builtins. It proves the pinned CLI versions agree with each other --
+      # not that they agree with the committed types, which the migrations
+      # job checks separately and in parallel (issue #103).
+      - name: Check the pinned Supabase CLI versions agree
+        run: node scripts/check-supabase-cli-version.mjs
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -85,11 +92,11 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      # Keep this in sync with the version pinned in package.json's `gen:types`
-      # script and scripts/dev-fresh.mjs's own regeneration step -- a mismatch
-      # reproduces the type-drift failure this same job checks for below,
-      # since different CLI versions emit slightly different generic-type
-      # boilerplate for the same schema.
+      # `scripts/supabase-cli-version.mjs` is the source for this version, and
+      # `pnpm check:cli-version` fails when this copy drifts from it (issue
+      # #103). A mismatch reproduces the type-drift failure this same job
+      # checks for below, since different CLI versions emit slightly different
+      # generic-type boilerplate for the same schema.
       - name: Install Supabase CLI
         uses: supabase/setup-cli@v1
         with:

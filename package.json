@@ -19,6 +19,7 @@
     "dev:reset": "supabase db reset",
     "demo:gen": "node scripts/demo-tree/generate.mjs",
     "demo:build": "node scripts/demo-tree/generate.mjs && node scripts/demo-tree/build-gedzip.mjs",
+    "check:cli-version": "node scripts/check-supabase-cli-version.mjs",
     "gen:types": "npx -y supabase@2.116.0 gen types typescript --local --schema public > apps/web/lib/db/database.types.ts",
     "build": "pnpm -r --if-present build",
     "typecheck": "pnpm -r --if-present typecheck",
