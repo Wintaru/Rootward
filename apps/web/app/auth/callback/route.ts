@@ -3,6 +3,13 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { maybeAcceptInvitation } from "@/lib/auth/accept-invitation";
 import { maybeBootstrapAdmin } from "@/lib/auth/bootstrap-admin";
+import {
+  type CallbackFailure,
+  describeShape,
+  describeType,
+  messageOf,
+  sanitizeDetail,
+} from "@/lib/auth/callback-log";
 import { parseEmailOtpType } from "@/lib/auth/email-otp-type";
 import { resolveRequestOrigin } from "@/lib/auth/request-origin";
 import { getAppearance } from "@/lib/db";
@@ -54,7 +61,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }) ?? requestUrl.origin;
   const code = searchParams.get("code");
   const tokenHash = searchParams.get("token_hash");
-  const otpType = parseEmailOtpType(searchParams.get("type"));
+  const rawType = searchParams.get("type");
+  const otpType = parseEmailOtpType(rawType);
 
   // Only ever redirect within the app. Keep the redirect below as string
   // concatenation: `new URL(next, origin)` would resolve `//evil.example` to
@@ -62,18 +70,30 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const nextParam = searchParams.get("next");
   const next = nextParam && nextParam.startsWith("/") ? nextParam : "/";
 
+  // Several distinct failures put the visitor on the same page, and until now
+  // the server recorded none of them, so a live report was unfalsifiable
+  // without reproducing it. `fail` writes one line and redirects.
+  //
   // A factory, not one shared response object: the success path below sets
   // cookies on its own response, and a single shared error response would
   // quietly carry anything a later branch set on it into the other returns.
-  const errorRedirect = () =>
-    NextResponse.redirect(`${origin}/auth/auth-code-error`);
+  //
+  // It logs neither the token nor the address. The arriving shape and the
+  // reason separate a spent link from a wrong `type` from a template that was
+  // never updated, which is all the diagnosis this route needs.
+  const fail = (reason: CallbackFailure, detail?: string): NextResponse => {
+    const context = `shape=${describeShape(code, tokenHash)} type=${describeType(rawType, otpType)}`;
+    const tail = detail === undefined ? "" : ` ${sanitizeDetail(detail)}`;
+    console.error(`auth/callback: ${reason} [${context}]${tail}`);
+    return NextResponse.redirect(`${origin}/auth/auth-code-error`);
+  };
 
   const supabase = await createSupabaseServerClient();
   let redeemed: { user: User | null; session: Session | null } | null = null;
   if (code !== null) {
     const { data, error } = await supabase.auth.exchangeCodeForSession(code);
     if (error !== null) {
-      return errorRedirect();
+      return fail("code exchange failed", error.message);
     }
     redeemed = data;
   } else if (tokenHash !== null && otpType !== null) {
@@ -82,26 +102,34 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       token_hash: tokenHash,
     });
     if (error !== null) {
-      return errorRedirect();
+      return fail("token verification failed", error.message);
     }
     redeemed = data;
+  } else if (tokenHash !== null) {
+    // A link carrying a token this deployment does not accept. The usual cause
+    // is an email template whose `type=` does not match `ACCEPTED_TYPES`.
+    return fail("unsupported link type");
+  } else {
+    // Nothing to redeem. The usual cause is a default GoTrue template, which
+    // returns the session in the fragment the browser never sends.
+    return fail("no credentials in the callback URL");
   }
 
   // A user *and* a session. Everything below needs the session: the appearance
   // read runs under RLS, and the final redirect is pointless without the
   // cookie. A user with no session would bounce back to `/login` with the
   // one-time token already spent.
-  const user = redeemed?.user ?? null;
-  if (user === null || redeemed?.session == null) {
-    return errorRedirect();
+  const user = redeemed.user;
+  if (user === null || redeemed.session === null) {
+    return fail("redeemed but no session");
   }
 
   try {
     await maybeBootstrapAdmin({ id: user.id, email: user.email });
-  } catch {
+  } catch (error: unknown) {
     // The session is valid but the admin promotion failed. Send them to the
     // error page; the next full sign-in retries (the promote is idempotent).
-    return errorRedirect();
+    return fail("admin bootstrap failed", messageOf(error));
   }
 
   try {
@@ -130,9 +158,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       }
     }
   } catch (error: unknown) {
-    console.error(
-      `auth/callback: appearance cookies: ${error instanceof Error ? error.message : String(error)}`,
-    );
+    console.error(`auth/callback: appearance cookies: ${messageOf(error)}`);
   }
   return response;
 }
