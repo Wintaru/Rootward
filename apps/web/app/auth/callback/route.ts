@@ -12,6 +12,7 @@ import {
   isSpeculativeRequest,
   messageOf,
   sanitizeDetail,
+  shouldRedeem,
 } from "@/lib/auth/callback-log";
 import { continueSignInHtml } from "@/lib/auth/continue-page";
 import { parseEmailOtpType } from "@/lib/auth/email-otp-type";
@@ -56,7 +57,10 @@ import {
  * pre-paint script match the member who just signed in. A failed read is
  * not fatal: the cookies simply keep whatever they held.
  */
-export async function GET(request: NextRequest): Promise<NextResponse> {
+async function completeCallback(
+  request: NextRequest,
+  { guardAgainstFetchers }: { readonly guardAgainstFetchers: boolean },
+): Promise<NextResponse> {
   const requestUrl = new URL(request.url);
   const { searchParams } = requestUrl;
   const origin =
@@ -93,24 +97,33 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return NextResponse.redirect(`${origin}/auth/auth-code-error`);
   };
 
-  // A sign-in link is a one-time credential, so whatever fetches it spends it.
-  // A browser prefetch, a prerender, or a link-preview fetcher redeems the
-  // token and throws the session away, and the person who then clicks is told
-  // their link is invalid.
+  // A sign-in link is a one-time credential, so whatever fetches it spends it,
+  // and the person who clicks afterwards is told their link is invalid. This
+  // is not hypothetical: a link-preview crawler took a production invite 2.6
+  // seconds ahead of the visitor. So redeem only for a request that proves it
+  // is a browser navigating — see `isBrowserNavigation` for why that is the
+  // test rather than a list of crawler names.
   //
-  // Answer with a page rather than a redirect or a 204. A prefetched redirect
-  // can be adopted by the navigation that follows, stranding the visitor on
-  // the error page for a link nothing spent. A 204 is worse: the clients that
-  // reuse a preload as the navigation would do nothing at all, with no error
-  // and no way to tell what happened. A page with one ordinary link is safe
-  // whether it is discarded, activated, or reused.
+  // Answer with the continue page rather than a redirect or a 204. A
+  // prefetched redirect can be adopted by the navigation that follows,
+  // stranding the visitor on the error page for a link nothing spent. A 204 is
+  // worse: a client that reuses a preload as the navigation would do nothing
+  // at all. The page's form POSTs back here, and `POST` skips this guard, so
+  // a client that never sends Fetch Metadata still gets in on one press.
   if (
-    isSpeculativeRequest(request.headers) &&
-    (code !== null || tokenHash !== null)
+    guardAgainstFetchers &&
+    (code !== null || tokenHash !== null) &&
+    !shouldRedeem(request.headers)
   ) {
     // Not an error: this is the guard doing its job, and error-rate alerts
-    // should not fire because somebody's browser preloads links.
-    console.warn(line("speculative fetch, not redeemed"));
+    // should not fire because a crawler previewed somebody's email.
+    console.warn(
+      line(
+        isSpeculativeRequest(request.headers)
+          ? "speculative fetch, not redeemed"
+          : "not a browser navigation, not redeemed",
+      ),
+    );
     return new NextResponse(
       continueSignInHtml(`${requestUrl.pathname}${requestUrl.search}`),
       {
@@ -216,4 +229,44 @@ export function HEAD(): NextResponse {
     status: 204,
     headers: { "cache-control": "no-store" },
   });
+}
+
+/**
+ * A link arriving from an email, or Google's OAuth redirect. Redeems only for
+ * a request that proves it is a person's browser navigating; everything else
+ * gets the continue page, whose form posts back to `POST` below.
+ */
+export async function GET(request: NextRequest): Promise<NextResponse> {
+  return completeCallback(request, { guardAgainstFetchers: true });
+}
+
+/**
+ * The continue page's form. This is the way in for any client that does not
+ * send Fetch Metadata — an iPhone below iOS 16.4, an in-app webview, a proxy
+ * that strips `Sec-*` — so it cannot apply the navigation guard, or those
+ * clients would loop on the continue page with no error and no way through.
+ *
+ * Safe without it, because no crawler, prefetcher or link checker POSTs to a
+ * URL it found in an email, and a link cannot be turned into a POST.
+ *
+ * `Origin` is checked when the browser sends one. A cross-site form could
+ * otherwise sign somebody into an account that is not theirs — a nuisance
+ * rather than a breach, since the attacker must spend their own invite, but
+ * it costs one comparison to refuse. A browser old enough to omit `Origin` is
+ * allowed through: locking it out is the failure this route exists to avoid.
+ */
+export async function POST(request: NextRequest): Promise<NextResponse> {
+  const requestUrl = new URL(request.url);
+  const origin =
+    resolveRequestOrigin(request.headers, {
+      defaultProtocol: requestUrl.protocol === "https:" ? "https" : "http",
+    }) ?? requestUrl.origin;
+  const sentOrigin = request.headers.get("origin");
+  if (sentOrigin !== null && sentOrigin !== origin) {
+    console.warn(
+      `auth/callback: cross-origin continue POST refused [${describeCaller(request.headers)}]`,
+    );
+    return NextResponse.redirect(`${origin}/auth/auth-code-error`);
+  }
+  return completeCallback(request, { guardAgainstFetchers: false });
 }

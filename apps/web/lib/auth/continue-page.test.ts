@@ -3,16 +3,23 @@ import { describe, expect, it } from "vitest";
 import { continueSignInHtml } from "./continue-page";
 
 describe("continueSignInHtml", () => {
-  it("links back to the address it was given", () => {
+  it("posts back to the address it was given", () => {
     const html = continueSignInHtml(
       "/auth/callback?token_hash=abc&type=invite",
     );
     expect(html).toContain(
-      'href="/auth/callback?token_hash=abc&amp;type=invite"',
+      '<form method="post" action="/auth/callback?token_hash=abc&amp;type=invite">',
     );
+    expect(html).toContain('<button type="submit">');
   });
 
-  it("escapes the href, which carries a live token off the URL", () => {
+  it("uses a form, not a link — a link cannot escape a client that omits Fetch Metadata", () => {
+    const html = continueSignInHtml("/auth/callback?token_hash=abc");
+    expect(html).not.toContain("<a href");
+    expect(html).toContain('method="post"');
+  });
+
+  it("escapes the action, which carries a live token off the URL", () => {
     const html = continueSignInHtml(
       '/auth/callback?type=invite"><script>alert(1)</script>',
     );

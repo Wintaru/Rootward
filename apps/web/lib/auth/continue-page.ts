@@ -1,17 +1,26 @@
 /**
- * The page a speculative fetch of `/auth/callback` gets instead of a session.
+ * The page a request gets when `/auth/callback` will not redeem the link for
+ * it — see `shouldRedeem`. It carries a form, and the form's POST redeems.
  *
- * A sign-in link is a one-time credential, so whatever fetches it spends it.
- * Declining with 204 keeps the token safe but is not enough: Safari's Top Hit
- * preload, Chrome's omnibox and speculation-rules prefetch, and Custom Tabs
- * pre-warm all hand their speculative response to the navigation the person
- * then makes. A 204 navigation is defined as "do nothing", so the person
- * presses enter and nothing happens at all — and because the URL is now in
- * history it is more likely to be preloaded again next time.
+ * A sign-in link works once, so whatever opens it spends it. A crawler took a
+ * production invite 2.6 seconds ahead of the visitor on 2026-09-26, and the
+ * visitor was then told the link was invalid. So the GET does not redeem
+ * unless the request proves it is a person's browser navigating.
  *
- * A 200 with one ordinary link is safe in every case. Never activated, nothing
- * is spent. Activated, or reused as the navigation, the person sees a page
- * with a button that redeems the link on a click nobody can make by accident.
+ * The form is what keeps that from locking anybody out. Not sending Fetch
+ * Metadata is a property of the client, not of one request: a browser that
+ * omits the headers on arrival omits them on the next click too, so a page
+ * offering a plain link would loop forever with no error and no way through —
+ * and Google sign-in returns to this same route, so there would be no other
+ * door either. That is not a long tail. Safari shipped Fetch Metadata in 16.4,
+ * every browser and in-app webview on iOS is WebKit, and an iPad stuck on
+ * iPadOS 15 is exactly the device a family tree gets opened on.
+ *
+ * A POST is orthogonal to header support, which is why it is the escape. No
+ * crawler, prefetcher, preview fetcher or link checker POSTs to a URL it found
+ * in an email, and a link cannot be turned into one. So a modern browser
+ * redeems on the GET with no extra click, and everything else redeems on one
+ * button press.
  */
 
 const ESCAPES: Readonly<Record<string, string>> = {
@@ -22,18 +31,17 @@ const ESCAPES: Readonly<Record<string, string>> = {
   "'": "&#39;",
 };
 
-/** Escape for an HTML attribute. The href carries a live token from the URL. */
+/** Escape for an HTML attribute. The action carries a live token from the URL. */
 function escapeHtml(value: string): string {
   return value.replaceAll(/[&<>"']/gu, (char) => ESCAPES[char] ?? char);
 }
 
 /**
- * `href` must be the same-origin path and query the request arrived with, so
- * the click re-requests the identical link. The second request carries no
- * prefetch header, so it redeems normally.
+ * `action` must be the same-origin path and query the request arrived with, so
+ * the submission redeems the identical link.
  */
-export function continueSignInHtml(href: string): string {
-  const safe = escapeHtml(href);
+export function continueSignInHtml(action: string): string {
+  const safe = escapeHtml(action);
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -47,20 +55,22 @@ body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify
 main { max-width: 26rem; background: #fffcf0; border: 1px solid #e6e4d9; border-radius: 10px; padding: 32px; }
 h1 { margin: 0 0 12px; font-family: Georgia, "Times New Roman", serif; font-size: 22px; font-weight: 600; }
 p { margin: 0 0 20px; font-size: 15px; line-height: 1.6; color: #575653; }
-a { display: inline-block; padding: 12px 24px; border-radius: 6px; background: #b54c09; color: #fffcf0; font-size: 15px; font-weight: 600; text-decoration: none; }
+button { font: inherit; border: 0; cursor: pointer; padding: 12px 24px; border-radius: 6px; background: #b54c09; color: #fffcf0; font-size: 15px; font-weight: 600; }
 @media (prefers-color-scheme: dark) {
   body { background: #100f0f; color: #cecdc3; }
   main { background: #1c1b1a; border-color: #282726; }
   p { color: #878580; }
-  a { background: #da702c; color: #100f0f; }
+  button { background: #da702c; color: #100f0f; }
 }
 </style>
 </head>
 <body>
 <main>
 <h1>Continue signing in</h1>
-<p>Your sign-in link works once, so we did not open it automatically. Select the button below to finish signing in.</p>
-<a href="${safe}">Continue signing in</a>
+<p>Your sign-in link works only once, so we did not open it automatically. Select the button below to finish signing in.</p>
+<form method="post" action="${safe}">
+<button type="submit">Continue signing in</button>
+</form>
 </main>
 </body>
 </html>

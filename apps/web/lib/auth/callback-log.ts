@@ -34,7 +34,10 @@ export type CallbackFailure =
  * never exist as a hand-written string that drifts from the union.
  */
 export type CallbackOutcome =
-  CallbackFailure | "speculative fetch, not redeemed" | "signed in";
+  | CallbackFailure
+  | "speculative fetch, not redeemed"
+  | "not a browser navigation, not redeemed"
+  | "signed in";
 
 /** Which credential the link arrived with. Never the credential itself. */
 export function describeShape(
@@ -136,7 +139,62 @@ export function describeCaller(headers: Headers): string {
   })
     .filter((entry): entry is string => entry !== null)
     .join(" ");
+  // An empty header is as good as absent, and a quote inside the value would
+  // break the `ua="…"` framing for anything parsing these lines.
   const agentPart =
-    agent === null ? "ua=none" : `ua="${sanitizeDetail(agent)}"`;
+    agent === null || agent.trim() === ""
+      ? "ua=none"
+      : `ua="${sanitizeDetail(agent).replaceAll('"', "'")}"`;
   return purpose === "" ? agentPart : `${agentPart} ${sanitizeDetail(purpose)}`;
+}
+
+/**
+ * Whether this request looks like a person's browser opening the page: a
+ * top-level document navigation, not a fetch of any other kind.
+ *
+ * On 2026-09-26 a production invite was redeemed by
+ * `facebookexternalhit/1.1 Facebot Twitterbot/1.0`, a link-preview crawler,
+ * 2.6 seconds before the person's own browser arrived. It announces nothing —
+ * no `Sec-Purpose`, no `Purpose` — so the prefetch headers could not see it.
+ * Matching crawlers by name is an arms race that one unknown fetcher wins, and
+ * every win costs somebody their sign-in. Fetch Metadata inverts the question
+ * to "prove you are a navigation", so an unknown fetcher fails by default.
+ *
+ * It is a heuristic, not a boundary. `Sec-Fetch-Mode` is a forbidden header
+ * for in-page `fetch` and XHR, but that rule binds only browsers: any
+ * server-side client can set it, and `curl -H 'Sec-Fetch-Mode: navigate'` is
+ * how this path was verified. What it buys is that today's crawlers and mail
+ * scanners do not send it, at no cost to a person signing in. Whoever holds
+ * the URL can still redeem it, which is inherent to a link sent by email. If a
+ * crawler ever starts sending these headers, the `signed in` log line records
+ * the user agent that succeeded, which is how we would find out.
+ *
+ * Absence is a property of the CLIENT, not of one request. A browser that does
+ * not send these headers will not send them on the next click either, so this
+ * can never be the only way in — see the POST route the continue page submits
+ * to. Fetch Metadata reached Safari only in 16.4 (March 2023), and every
+ * browser and in-app webview on iOS is WebKit, so "old browser" here means a
+ * current iPad that cannot update, not a rarity.
+ */
+export function isBrowserNavigation(headers: Headers): boolean {
+  const mode = headers.get("sec-fetch-mode")?.toLowerCase();
+  const dest = headers.get("sec-fetch-dest")?.toLowerCase();
+  // `navigate` alone also covers an iframe load; a top-level document says so.
+  return mode === "navigate" && dest === "document";
+}
+
+/**
+ * Whether to redeem the one-time token on this request.
+ *
+ * Two checks covering DISJOINT classes — neither is redundant:
+ *   - `isSpeculativeRequest` catches a browser prefetch or prerender, which
+ *     IS a navigation and sends `Sec-Fetch-Mode: navigate` alongside
+ *     `Sec-Purpose: prefetch`. Only this check stops it.
+ *   - `isBrowserNavigation` catches the server-side fetchers that announce
+ *     nothing at all: crawlers, scanners, link checkers.
+ *
+ * Deleting either one reopens a bug that has already happened in production.
+ */
+export function shouldRedeem(headers: Headers): boolean {
+  return isBrowserNavigation(headers) && !isSpeculativeRequest(headers);
 }

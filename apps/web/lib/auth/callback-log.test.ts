@@ -4,7 +4,9 @@ import {
   describeCaller,
   describeShape,
   describeType,
+  isBrowserNavigation,
   isSpeculativeRequest,
+  shouldRedeem,
   messageOf,
   sanitizeDetail,
 } from "./callback-log";
@@ -131,6 +133,15 @@ describe("describeCaller", () => {
 
   it("says so when there is no agent at all", () => {
     expect(describeCaller(new Headers({}))).toBe("ua=none");
+    expect(describeCaller(new Headers({ "User-Agent": "   " }))).toBe(
+      "ua=none",
+    );
+  });
+
+  it('keeps the ua="…" framing intact when the agent contains a quote', () => {
+    expect(describeCaller(new Headers({ "User-Agent": 'we"ird/1.0' }))).toBe(
+      'ua="we\'ird/1.0"',
+    );
   });
 
   it("truncates an agent too long for one line", () => {
@@ -146,5 +157,101 @@ describe("describeCaller", () => {
     // The platform refuses it, which is why `describeCaller` only has to
     // truncate. Asserted here so the guarantee does not rest on memory.
     expect(() => new Headers({ "User-Agent": "x\nforged" })).toThrow();
+  });
+});
+
+describe("isBrowserNavigation", () => {
+  it("accepts a top-level document load", () => {
+    expect(
+      isBrowserNavigation(
+        new Headers({
+          "Sec-Fetch-Mode": "navigate",
+          "Sec-Fetch-Dest": "document",
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it("refuses an iframe load, which is also mode=navigate", () => {
+    expect(
+      isBrowserNavigation(
+        new Headers({
+          "Sec-Fetch-Mode": "navigate",
+          "Sec-Fetch-Dest": "iframe",
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  it("refuses a fetcher that sends no Sec-Fetch-Mode at all", () => {
+    // The crawler that spent a production invite on 2026-09-26. It announces
+    // nothing, which is exactly why the test is "prove you are a navigation".
+    expect(
+      isBrowserNavigation(
+        new Headers({
+          "User-Agent":
+            "Mozilla/5.0 facebookexternalhit/1.1 Facebot Twitterbot/1.0",
+        }),
+      ),
+    ).toBe(false);
+    expect(isBrowserNavigation(new Headers({}))).toBe(false);
+  });
+
+  it("refuses a script-initiated fetch from a page", () => {
+    expect(isBrowserNavigation(new Headers({ "Sec-Fetch-Mode": "cors" }))).toBe(
+      false,
+    );
+    expect(
+      isBrowserNavigation(new Headers({ "Sec-Fetch-Mode": "no-cors" })),
+    ).toBe(false);
+  });
+
+  it("ignores case", () => {
+    expect(
+      isBrowserNavigation(
+        new Headers({
+          "Sec-Fetch-Mode": "Navigate",
+          "Sec-Fetch-Dest": "Document",
+        }),
+      ),
+    ).toBe(true);
+  });
+});
+
+describe("shouldRedeem", () => {
+  const navigation = {
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Dest": "document",
+  };
+
+  it("redeems for a person's browser opening the link", () => {
+    expect(shouldRedeem(new Headers(navigation))).toBe(true);
+  });
+
+  it("refuses a browser PREFETCH, which is itself a navigation", () => {
+    // The case neither check catches alone: Chrome's speculation-rules and
+    // omnibox prefetch send `Sec-Fetch-Mode: navigate` AND `Sec-Purpose`.
+    // Delete `isSpeculativeRequest` and this is the test that fails.
+    expect(
+      shouldRedeem(new Headers({ ...navigation, "Sec-Purpose": "prefetch" })),
+    ).toBe(false);
+    expect(
+      shouldRedeem(
+        new Headers({ ...navigation, "Sec-Purpose": "prefetch;prerender" }),
+      ),
+    ).toBe(false);
+  });
+
+  it("refuses a crawler that announces nothing", () => {
+    // The one that spent a production invite on 2026-09-26. Delete
+    // `isBrowserNavigation` and this is the test that fails.
+    expect(
+      shouldRedeem(
+        new Headers({
+          "User-Agent":
+            "Mozilla/5.0 facebookexternalhit/1.1 Facebot Twitterbot/1.0",
+        }),
+      ),
+    ).toBe(false);
   });
 });

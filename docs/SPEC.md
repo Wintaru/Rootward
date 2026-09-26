@@ -980,12 +980,21 @@ with a PKCE `code`, and the browser client's stored verifier redeems it. An
 emailed link arrives with `token_hash` and `type`, and the route redeems it
 with `verifyOtp`.
 
-Two kinds of request are answered without redeeming anything, because a
-sign-in link works once and whatever opens it spends it. A request that
-announces itself as speculative (a browser prefetch or prerender, a link
-preview) gets a page with a "Continue signing in" link instead of a session,
-so the token survives until a person clicks. A `HEAD` request gets 204, since
-nothing legitimate signs in over `HEAD` and Next derives `HEAD` from `GET`.
+A sign-in link works once, so whatever opens it spends it. A link-preview
+crawler took a production invite 2.6 seconds before the visitor's own browser
+arrived, and the visitor was told the link was invalid. So a `GET` redeems only
+when the request proves it is a person's browser navigating: `Sec-Fetch-Mode:
+navigate` with `Sec-Fetch-Dest: document`, and no prefetch header. A browser
+prefetch is itself a navigation, which is why both tests are needed.
+
+Anything else gets a "Continue signing in" page whose form posts back to the
+same route, and `POST` redeems without that guard. A client that omits Fetch
+Metadata omits it on every request, so a page offering a plain link would trap
+it forever — Safari only added these headers in 16.4, and every browser on iOS
+is WebKit. No crawler posts to a URL it found in an email. A cross-origin
+`POST` is refused. A `HEAD` gets 204, since nothing legitimate signs in over
+`HEAD` and Next derives `HEAD` from `GET`.
+
 Every outcome, including a successful sign-in, writes one log line naming the
 caller — a spent-token report cannot be answered unless the log says who spent
 it.
