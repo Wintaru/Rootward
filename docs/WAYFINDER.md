@@ -633,7 +633,8 @@ The spec (`docs/SPEC.md`) is derived from this list plus the decisions.
 
 **Viewer** (any approved member)
 
-- Lands on the default root person's tree (built, 23). On a fresh deploy with
+- Lands on their own record's tree (built, 23). A member whose account is
+  linked to no person lands on the default root instead. On a fresh deploy with
   no root set, lands on a fallback person or an empty state, not a 404 (#51).
 - Re-centers, expands a collapsed branch, walks back (built, 23 / 24).
 - Opens a profile from a tree card by icon or double-click (#52).

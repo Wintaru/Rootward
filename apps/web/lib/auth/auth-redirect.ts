@@ -74,20 +74,61 @@ export function decideProxyRedirect(input: ProxyRedirectInput): string | null {
   return null;
 }
 
+/** Reads one candidate focus person, for {@link resolveTreeFocusPersonId}. */
+export type PersonIdLoader = () => Promise<string | null>;
+
+/**
+ * The person the tree centres on for this member: their own record first, then
+ * whatever the caller offers — the deployment's default root, and for `/tree`
+ * the deterministic fallback behind it.
+ *
+ * A linked member's own record wins over the root, so the tree opens where they
+ * belong in it. The root is one global setting for the whole deployment, so an
+ * invited member landing on it sees a stranger in the middle of the tree and
+ * has to find themselves. That is what happened to the first real invitee.
+ *
+ * The self rung of `person_is_visible` (SPEC §5) means a member can always read
+ * their own person, so this destination cannot 404 the way an unchecked root
+ * could (#82).
+ *
+ * `/` and `/tree` both resolve their focus here rather than each spelling the
+ * order out, so the two cannot drift into sending one member to two different
+ * people. Every loader is lazy and runs only when everything before it came
+ * back null: a linked member costs no `tree_settings` read at all.
+ */
+export async function resolveTreeFocusPersonId(
+  ownPersonId: string | null,
+  ...fallbacks: readonly PersonIdLoader[]
+): Promise<string | null> {
+  if (ownPersonId !== null) {
+    return ownPersonId;
+  }
+  for (const load of fallbacks) {
+    const candidate = await load();
+    if (candidate !== null) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
 export interface HomeDestinationInput {
   /** `false` when there is no session. */
   readonly signedIn: boolean;
   /** `true` when the account row exists and `status = 'active'`. */
   readonly approved: boolean;
-  /** `tree_settings.default_root_person_id`, or `null` on a fresh deployment. */
-  readonly rootPersonId: string | null;
+  /** Who the tree should open on, from {@link resolveTreeFocusPersonId}.
+   * `null` when the caller found nobody — a fresh deployment, or a member who
+   * can see no one. */
+  readonly focusPersonId: string | null;
 }
 
 /**
  * Where `/` sends a visitor (SPEC §8.1). An approved member lands on the tree;
  * anyone signed-in-but-not-approved goes to onboarding; no session goes to
- * login. With no default root set the destination is the `/tree` index (#51),
- * which falls back to a deterministic person or shows the empty state.
+ * login. With nobody to centre the tree on the destination is the `/tree`
+ * index (#51), which falls back to a deterministic person or shows the empty
+ * state.
  */
 export function resolveHomeDestination(input: HomeDestinationInput): string {
   if (!input.signedIn) {
@@ -96,5 +137,7 @@ export function resolveHomeDestination(input: HomeDestinationInput): string {
   if (!input.approved) {
     return "/onboarding";
   }
-  return input.rootPersonId === null ? "/tree" : `/tree/${input.rootPersonId}`;
+  return input.focusPersonId === null
+    ? "/tree"
+    : `/tree/${input.focusPersonId}`;
 }

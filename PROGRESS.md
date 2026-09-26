@@ -41,23 +41,31 @@ with the `vercel` and `supabase` CLIs before trusting it.
 
 ## Next action
 
-**Two follow-ups to the invite fix are staged on
-`fix/invite-rollback-and-callback-logging`.** A failed re-send used to delete
-every pending invitation for that address and person, so it revoked the one
-already open — the rollback now removes only the row that attempt wrote, with
-an e2e test that fails against the old delete. And `/auth/callback` now writes
-one line per failure with a reason, because five different failures showed the
-same page and recorded nothing.
+**The tree now opens on the member's own record**, staged on
+`fix/open-the-tree-on-your-own-record`. The first real invitee signed in and
+landed on the deployment's default root person with the focus ring on somebody
+else, because `tree_settings.default_root_person_id` is one global value.
+`/` and `/tree` now share `resolveTreeFocusPersonId`: own record, then the
+root, then the deterministic fallback, then the empty state.
 
-**One e2e test cannot pass on this machine yet.** "An invitee can follow the
-emailed link" fails because the local GoTrue still mails the default template.
-It reads `supabase/config.toml` templates only at start, and the stack running
-here predates that change. Josh must run `pnpm dev:fresh`, then that test.
-The new logging named the cause on its own:
-`no credentials in the callback URL [shape=none type=none]`.
+**The invite chain is merged and live.** An emailed `token_hash` is redeemed
+only on a form POST (`835b8b0`), after a link-preview crawler
+(`facebookexternalhit`) spent a production invite seconds ahead of the
+visitor while sending the same headers a real browser sends. `/auth/callback`
+also writes one line per outcome with the caller, which is what named that
+crawler. A failed invite re-send no longer deletes the invitation already
+open.
 
-**The hosted dashboard templates are set** (Josh, 2026-09-26), and the app
-side is verified live in production.
+**The e2e suite has not run since any of this.** The local GoTrue still mails
+the default template, so no link carries a `token_hash` at all — it reads
+`supabase/config.toml` templates only at start, and the stack here predates
+that change. Josh must run `pnpm dev:fresh`, then the suite. The Playwright
+helper every project depends on (`signInWithMagicLink`) now presses the
+continue button, so this is the whole suite, not one test.
+
+**Josh's open manual steps:** enable Custom SMTP (Resend) in the Supabase
+dashboard and raise the 2-per-hour email rate limit — both in
+`EMAIL-SETUP-CHECKLIST.md` (local, gitignored).
 
 **Earlier this week, on branch `fix/email-link-token-hash` (merged).** Josh's invitation link landed on
 `/auth/auth-code-error`. A moderator's invite is sent with the service role,

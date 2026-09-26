@@ -79,10 +79,17 @@ test.describe("header links", () => {
     ).toHaveCount(0);
   });
 
-  test("Home routes an approved member to the tree", async ({ viewerPage }) => {
+  test("Home opens the tree on the member's own record", async ({
+    viewerPage,
+  }) => {
+    // The first real invitee landed on whoever the admin had set as the
+    // deployment root, with their own card somewhere off screen. A bare
+    // `/tree/` assertion passed throughout, so it has to name the person.
     await viewerPage.goto("/people");
     await nav(viewerPage).getByRole("link", { name: "Home" }).click();
-    await expect(viewerPage).toHaveURL(/\/tree\//);
+    await expect(viewerPage).toHaveURL(
+      new RegExp(`/tree/${fixtureIds.viewerPerson}$`),
+    );
   });
 });
 

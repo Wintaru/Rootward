@@ -757,10 +757,10 @@ rejected file (size, MIME) stays reference-only and is reported in
 
 | Route | Purpose | Access |
 | --- | --- | --- |
-| `/` | Redirect: `/tree/<root>` when approved, `/onboarding` when authed-not-approved, else `/login` | — |
+| `/` | Redirect: `/tree/<self>` when approved and the account is linked to a person, `/tree/<root>` when approved but unlinked, `/onboarding` when authed-not-approved, else `/login` | — |
 | `/login` | Magic link + Google | public |
 | `/onboarding` | Claim flow (name/birth → challenge) or request access | authed, not yet approved |
-| `/tree` | Index: redirect to the default root; fallback to a deterministic person when no root is set; empty state ("Import a GEDCOM" / "Add the first person") when the tree is empty (#51) | approved |
+| `/tree` | Index: redirect to the caller's own record; then the default root; then a deterministic person when no root is set; empty state ("Import a GEDCOM" / "Add the first person") when the tree is empty (#51) | approved |
 | `/tree/[personId]` | `family-chart` hourglass view | approved |
 | `/people` | Everyone, sorted by surname then given name, surname filter, paginated at the source (#62) | approved |
 | `/person/[personId]` | Read-only profile. Moderators also see **Invite to claim** when the person has no linked account (#63). A linked viewer sees **Ask a moderator to hide this record** (#61) | approved |
@@ -1027,7 +1027,8 @@ the callback).
 Session gating is a Next.js proxy (`proxy.ts`, the Next 16 rename of
 middleware): it refreshes the session on every request and redirects an
 unauthenticated visitor to `/login` for every route except `/login` and
-`/auth/*` (decision 35). `/` is a pure router — approved → `/tree/<root>`,
+`/auth/*` (decision 35). `/` is a pure router — approved → `/tree/<self>`, or
+`/tree/<root>` when the account is linked to no person,
 signed-in-not-approved → `/onboarding`, no session → `/login` (§8.1).
 
 ### 9.2 Invite path (decision 12)

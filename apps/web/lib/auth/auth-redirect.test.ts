@@ -4,6 +4,7 @@ import {
   decideProxyRedirect,
   needsEmailOtpForwarding,
   resolveHomeDestination,
+  resolveTreeFocusPersonId,
 } from "./auth-redirect";
 
 describe("decideProxyRedirect", () => {
@@ -48,13 +49,75 @@ describe("decideProxyRedirect", () => {
   });
 });
 
+describe("resolveTreeFocusPersonId", () => {
+  const SELF = "22222222-2222-2222-2222-222222222222";
+  const ROOT = "11111111-1111-1111-1111-111111111111";
+  const FALLBACK = "33333333-3333-3333-3333-333333333333";
+
+  it("opens the tree on the member's own record", async () => {
+    // The whole point: an invited member used to land on whoever the admin
+    // had set as the root, with themselves somewhere off screen.
+    await expect(
+      resolveTreeFocusPersonId(SELF, async () => ROOT),
+    ).resolves.toBe(SELF);
+  });
+
+  it("never asks for a fallback the member does not need", async () => {
+    // The read that is skipped is a `tree_settings` round trip on every visit
+    // to `/`, so the laziness is the point, not an implementation detail.
+    let calls = 0;
+    await resolveTreeFocusPersonId(SELF, async () => {
+      calls += 1;
+      return ROOT;
+    });
+    expect(calls).toBe(0);
+  });
+
+  it("falls back in order, and stops at the first answer", async () => {
+    const asked: string[] = [];
+    await expect(
+      resolveTreeFocusPersonId(
+        null,
+        async () => {
+          asked.push("root");
+          return ROOT;
+        },
+        async () => {
+          asked.push("fallback");
+          return FALLBACK;
+        },
+      ),
+    ).resolves.toBe(ROOT);
+    expect(asked).toEqual(["root"]);
+  });
+
+  it("walks past a fallback that comes back empty", async () => {
+    await expect(
+      resolveTreeFocusPersonId(
+        null,
+        async () => null,
+        async () => FALLBACK,
+      ),
+    ).resolves.toBe(FALLBACK);
+  });
+
+  it("finds nobody when nothing is offered", async () => {
+    await expect(resolveTreeFocusPersonId(null)).resolves.toBeNull();
+    await expect(
+      resolveTreeFocusPersonId(null, async () => null),
+    ).resolves.toBeNull();
+  });
+});
+
 describe("resolveHomeDestination", () => {
+  const FOCUS = "22222222-2222-2222-2222-222222222222";
+
   it("sends a visitor with no session to /login", () => {
     expect(
       resolveHomeDestination({
         signedIn: false,
         approved: false,
-        rootPersonId: null,
+        focusPersonId: null,
       }),
     ).toBe("/login");
   });
@@ -64,19 +127,19 @@ describe("resolveHomeDestination", () => {
       resolveHomeDestination({
         signedIn: true,
         approved: false,
-        rootPersonId: "p1",
+        focusPersonId: FOCUS,
       }),
     ).toBe("/onboarding");
   });
 
-  it("sends an approved account to the configured root person's tree", () => {
+  it("sends an approved account to the tree it is centred on", () => {
     expect(
       resolveHomeDestination({
         signedIn: true,
         approved: true,
-        rootPersonId: "11111111-1111-1111-1111-111111111111",
+        focusPersonId: FOCUS,
       }),
-    ).toBe("/tree/11111111-1111-1111-1111-111111111111");
+    ).toBe(`/tree/${FOCUS}`);
   });
 
   it("falls back to /tree for an approved account before any tree exists", () => {
@@ -84,7 +147,7 @@ describe("resolveHomeDestination", () => {
       resolveHomeDestination({
         signedIn: true,
         approved: true,
-        rootPersonId: null,
+        focusPersonId: null,
       }),
     ).toBe("/tree");
   });
