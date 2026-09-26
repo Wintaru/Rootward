@@ -8,7 +8,7 @@ import { resolveModerationAccess } from "@/lib/auth/require-moderator";
 import {
   approveAccessRequest,
   createInvitation,
-  deletePendingInvitation,
+  deleteInvitationById,
   type PersonSearchOption,
   personExists,
   reassignAccount,
@@ -58,7 +58,7 @@ export async function inviteToClaim(
   // re-checks the admin-only role rule. Doing this before the email send means a
   // failed send never leaves an `auth.users` row with no invitation to match on
   // sign-in.
-  await createInvitation(server, {
+  const invitationId = await createInvitation(server, {
     email,
     personId,
     role,
@@ -73,10 +73,25 @@ export async function inviteToClaim(
     { redirectTo: await callbackUrl() },
   );
   if (inviteError !== null) {
-    // Roll back the row so the moderator can retry cleanly. The usual cause is
+    // Roll back the row this call wrote, and only that row. The usual cause is
     // an email that already has an account — re-inviting or relinking an
-    // existing account is the moderation queue (issue #36).
-    await deletePendingInvitation(server, { email, personId });
+    // existing account is the moderation queue (issue #36) — and that is
+    // exactly when an earlier invitation for the same pair is still open and
+    // must survive.
+    try {
+      await deleteInvitationById(server, invitationId);
+    } catch (rollbackError: unknown) {
+      // The send failure is the one the moderator needs to read. A rollback
+      // that also fails must not replace it with a server-action exception, so
+      // name the row that was left behind and fall through to the real error.
+      console.error(
+        `inviteToClaim: rollback of invitation ${invitationId} failed: ${
+          rollbackError instanceof Error
+            ? rollbackError.message
+            : String(rollbackError)
+        }`,
+      );
+    }
     return {
       ok: false,
       error: inviteError.message || "Could not send the invitation.",

@@ -8,6 +8,7 @@ import {
 import {
   admin,
   deleteTestUser,
+  ensureTestUser,
   findUserIdByEmail,
 } from "../support/supabase-admin";
 import { alerts, expect, test } from "../support/test";
@@ -191,6 +192,57 @@ test.describe("invite to claim", () => {
       role: "viewer",
       status: "active",
     });
+  });
+
+  test("a refused re-send leaves the earlier invitation in place", async ({
+    moderatorPage,
+  }) => {
+    // Josh's exact state on 2026-09-26: the first link was clicked, so GoTrue
+    // holds a registered account for the address, and the original invitation
+    // is still open because the app never managed to accept it.
+    const address = addressFor("resend");
+    await ensureTestUser({
+      email: address,
+      role: "viewer",
+      status: "pending",
+      displayName: "E2E Resend",
+    });
+    const { data: original, error: seedError } = await admin
+      .from("invitation")
+      .insert({ email: address, person_id: fixtureIds.loner, role: "viewer" })
+      .select("id")
+      .single();
+    expect(seedError).toBeNull();
+    expect(original).not.toBeNull();
+    const originalId = original?.id ?? "";
+
+    // The moderator re-sends. GoTrue refuses an address it already holds.
+    await moderatorPage.goto("/moderation");
+    await moderatorPage.getByLabel("Email address").fill(address);
+    await moderatorPage.getByLabel("Person ID").fill(fixtureIds.loner);
+    await moderatorPage
+      .getByRole("button", { name: "Send invitation" })
+      .click();
+    await expect(alerts(moderatorPage).first()).toBeVisible();
+
+    // The rollback must remove only the row this attempt wrote. Deleting by
+    // (email, person) took the still-good original down with it, so an
+    // ordinary mistake silently revoked a working invitation.
+    const { data: survivor, error: survivorError } = await admin
+      .from("invitation")
+      .select("id, status")
+      .eq("id", originalId)
+      .maybeSingle();
+    expect(survivorError).toBeNull();
+    expect(survivor).toMatchObject({ id: originalId, status: "pending" });
+
+    // And exactly one row is left — the rollback did its own job too.
+    const { data: remaining, error: remainingError } = await admin
+      .from("invitation")
+      .select("id")
+      .eq("email", address);
+    expect(remainingError).toBeNull();
+    expect(remaining).toHaveLength(1);
   });
 
   test("clears the form after a successful send", async ({ moderatorPage }) => {

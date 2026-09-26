@@ -97,35 +97,51 @@ export async function createInvitation(
     readonly role: AccountRole;
     readonly invitedBy: string;
   },
-): Promise<void> {
+): Promise<string> {
   const row: InvitationInsert = {
     email: input.email,
     person_id: input.personId,
     role: input.role,
     invited_by: input.invitedBy,
   };
-  const { error } = await client.from("invitation").insert(row);
+  // Return the new id so a failed email send can roll back exactly this row
+  // and nothing else — see `deleteInvitationById`.
+  const { data, error } = await client
+    .from("invitation")
+    .insert(row)
+    .select("id")
+    .single();
   if (error !== null) {
     throw new Error(`createInvitation: ${error.message}`);
   }
+  return data.id;
 }
 
 /**
- * Remove a pending invitation for this exact `(email, personId)` — the rollback
- * when the Supabase Auth invite email fails to send after the row was written.
+ * Remove one invitation by id — the rollback when the Supabase Auth invite
+ * email fails to send after the row was written.
+ *
+ * By id, not by `(email, personId)`. That matched every pending row for the
+ * pair, so a re-send that failed deleted the invitation already sitting there
+ * as well as the one it had just written. Re-sending to an address whose first
+ * link was already clicked fails every time (GoTrue answers "already
+ * registered"), which made revoking a good invitation the normal outcome of an
+ * ordinary mistake.
+ *
+ * Still scoped to `pending`, so a rollback can never withdraw an invitation
+ * somebody accepted in the moment between the insert and the failed send.
  */
-export async function deletePendingInvitation(
+export async function deleteInvitationById(
   client: Db,
-  args: { readonly email: string; readonly personId: string },
+  invitationId: string,
 ): Promise<void> {
   const { error } = await client
     .from("invitation")
     .delete()
-    .eq("email", args.email.trim().toLowerCase())
-    .eq("person_id", args.personId)
+    .eq("id", invitationId)
     .eq("status", "pending");
   if (error !== null) {
-    throw new Error(`deletePendingInvitation: ${error.message}`);
+    throw new Error(`deleteInvitationById: ${error.message}`);
   }
 }
 
