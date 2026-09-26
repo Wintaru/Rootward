@@ -980,20 +980,23 @@ with a PKCE `code`, and the browser client's stored verifier redeems it. An
 emailed link arrives with `token_hash` and `type`, and the route redeems it
 with `verifyOtp`.
 
-A sign-in link works once, so whatever opens it spends it. A link-preview
-crawler took a production invite 2.6 seconds before the visitor's own browser
-arrived, and the visitor was told the link was invalid. So a `GET` redeems only
-when the request proves it is a person's browser navigating: `Sec-Fetch-Mode:
-navigate` with `Sec-Fetch-Dest: document`, and no prefetch header. A browser
-prefetch is itself a navigation, which is why both tests are needed.
+A sign-in link works once, so whatever opens it spends it. Three attempts to
+tell a fetcher from a person all failed, the last in production: a link-preview
+crawler redeemed an invite seconds ahead of the visitor while sending
+`Sec-Fetch-Mode: navigate` and `Sec-Fetch-Dest: document`, because it renders
+with a real browser engine. Nothing in a request separates a headless browser
+from a person's.
 
-Anything else gets a "Continue signing in" page whose form posts back to the
-same route, and `POST` redeems without that guard. A client that omits Fetch
-Metadata omits it on every request, so a page offering a plain link would trap
-it forever — Safari only added these headers in 16.4, and every browser on iOS
-is WebKit. No crawler posts to a URL it found in an email. A cross-origin
-`POST` is refused. A `HEAD` gets 204, since nothing legitimate signs in over
-`HEAD` and Next derives `HEAD` from `GET`.
+So a `GET` carrying `token_hash` never redeems. It returns a "Continue signing
+in" page whose form posts back to the same route, and only `POST` redeems. A
+crawler renders that page and does not submit it, because nothing follows a
+form — no preview crawler or mail scanner we know of submits one. This costs
+a member one button press and does not depend on recognising anyone. A cross-origin `POST` is refused. A `HEAD` gets 204, since Next derives
+`HEAD` from `GET`.
+
+Google's `code` still redeems on `GET`, guarded only against prefetch and
+non-navigation fetches. It arrives on Google's redirect and never appears in an
+email, so no crawler can hold one, and Google sign-in stays a single click.
 
 Every outcome, including a successful sign-in, writes one log line naming the
 caller — a spent-token report cannot be answered unless the log says who spent

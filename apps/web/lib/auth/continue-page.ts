@@ -1,26 +1,27 @@
 /**
- * The page a request gets when `/auth/callback` will not redeem the link for
- * it — see `shouldRedeem`. It carries a form, and the form's POST redeems.
+ * The page an emailed sign-in link lands on, and the form that redeems it.
  *
- * A sign-in link works once, so whatever opens it spends it. A crawler took a
- * production invite 2.6 seconds ahead of the visitor on 2026-09-26, and the
- * visitor was then told the link was invalid. So the GET does not redeem
- * unless the request proves it is a person's browser navigating.
+ * A link works once, so whatever opens it spends it. Three attempts to tell a
+ * fetcher from a person failed, the last in production: a link-preview crawler
+ * took an invite seconds ahead of the visitor while sending exactly the
+ * navigation headers a real browser sends, because it renders with a browser
+ * engine. Nothing in a request separates the two, so a `GET` carrying a
+ * `token_hash` no longer redeems at all. This page does, on its POST.
  *
- * The form is what keeps that from locking anybody out. Not sending Fetch
- * Metadata is a property of the client, not of one request: a browser that
- * omits the headers on arrival omits them on the next click too, so a page
- * offering a plain link would loop forever with no error and no way through —
- * and Google sign-in returns to this same route, so there would be no other
- * door either. That is not a long tail. Safari shipped Fetch Metadata in 16.4,
- * every browser and in-app webview on iOS is WebKit, and an iPad stuck on
- * iPadOS 15 is exactly the device a family tree gets opened on.
+ * It is a form and not a link on purpose, for two separate reasons.
  *
- * A POST is orthogonal to header support, which is why it is the escape. No
- * crawler, prefetcher, preview fetcher or link checker POSTs to a URL it found
- * in an email, and a link cannot be turned into one. So a modern browser
- * redeems on the GET with no extra click, and everything else redeems on one
- * button press.
+ * The POST is what no fetcher does. A crawler renders this page and stops:
+ * nothing it does follows a form, and a link cannot be turned into one. That
+ * is the whole mitigation, and it needs to recognise nobody.
+ *
+ * A link would also trap the clients that send no Fetch Metadata, back when
+ * that was the test. Not sending those headers is a property of the client,
+ * not of one request, so such a browser would loop here forever with no error
+ * and no other door. Safari only added them in 16.4 and every browser on iOS
+ * is WebKit, so that is an iPad a family tree gets opened on.
+ *
+ * Supabase documents this interstitial as one of its two sanctioned answers to
+ * email prefetching; the other is mailing a code to type instead of a link.
  */
 
 const ESCAPES: Readonly<Record<string, string>> = {

@@ -36,7 +36,7 @@ export type CallbackFailure =
 export type CallbackOutcome =
   | CallbackFailure
   | "speculative fetch, not redeemed"
-  | "not a browser navigation, not redeemed"
+  | "confirmation required before redeeming"
   | "signed in";
 
 /** Which credential the link arrived with. Never the credential itself. */
@@ -133,10 +133,11 @@ export function isSpeculativeRequest(headers: Headers): boolean {
  */
 export function describeCaller(headers: Headers): string {
   const agent = headers.get("user-agent");
-  const purpose = SPECULATIVE_HEADERS.map((name) => {
-    const value = headers.get(name);
-    return value === null ? null : `${name}=${value}`;
-  })
+  const purpose = [...SPECULATIVE_HEADERS, "sec-fetch-mode", "sec-fetch-dest"]
+    .map((name) => {
+      const value = headers.get(name);
+      return value === null ? null : `${name}=${value}`;
+    })
     .filter((entry): entry is string => entry !== null)
     .join(" ");
   // An empty header is as good as absent, and a quote inside the value would
@@ -149,32 +150,21 @@ export function describeCaller(headers: Headers): string {
 }
 
 /**
- * Whether this request looks like a person's browser opening the page: a
- * top-level document navigation, not a fetch of any other kind.
+ * Whether this request looks like a browser opening a page: a top-level
+ * document navigation, not a fetch of any other kind.
  *
- * On 2026-09-26 a production invite was redeemed by
- * `facebookexternalhit/1.1 Facebot Twitterbot/1.0`, a link-preview crawler,
- * 2.6 seconds before the person's own browser arrived. It announces nothing —
- * no `Sec-Purpose`, no `Purpose` — so the prefetch headers could not see it.
- * Matching crawlers by name is an arms race that one unknown fetcher wins, and
- * every win costs somebody their sign-in. Fetch Metadata inverts the question
- * to "prove you are a navigation", so an unknown fetcher fails by default.
+ * A weak signal, and it is named here as weak because believing otherwise cost
+ * three attempts. It is worth something — today's simple crawlers and mail
+ * scanners send no Fetch Metadata, so it stops them at no cost to a person.
+ * It proves nothing — `Sec-Fetch-Mode` is forbidden only to in-page scripts,
+ * any server-side client can set it (`curl -H` is how this path is tested),
+ * and a crawler that renders with a browser engine sends it for free. On
+ * 2026-09-26 `facebookexternalhit` redeemed a production invite through this
+ * exact check.
  *
- * It is a heuristic, not a boundary. `Sec-Fetch-Mode` is a forbidden header
- * for in-page `fetch` and XHR, but that rule binds only browsers: any
- * server-side client can set it, and `curl -H 'Sec-Fetch-Mode: navigate'` is
- * how this path was verified. What it buys is that today's crawlers and mail
- * scanners do not send it, at no cost to a person signing in. Whoever holds
- * the URL can still redeem it, which is inherent to a link sent by email. If a
- * crawler ever starts sending these headers, the `signed in` log line records
- * the user agent that succeeded, which is how we would find out.
- *
- * Absence is a property of the CLIENT, not of one request. A browser that does
- * not send these headers will not send them on the next click either, so this
- * can never be the only way in — see the POST route the continue page submits
- * to. Fetch Metadata reached Safari only in 16.4 (March 2023), and every
- * browser and in-app webview on iOS is WebKit, so "old browser" here means a
- * current iPad that cannot update, not a rarity.
+ * So it no longer governs an emailed `token_hash`, which is redeemed on a POST
+ * instead. It is used only for Google's OAuth `code`, which never travels in
+ * an email and so is never in a crawler's hands to begin with.
  */
 export function isBrowserNavigation(headers: Headers): boolean {
   const mode = headers.get("sec-fetch-mode")?.toLowerCase();
@@ -184,17 +174,24 @@ export function isBrowserNavigation(headers: Headers): boolean {
 }
 
 /**
- * Whether to redeem the one-time token on this request.
+ * Whether an OAuth `code` may be redeemed on this GET.
+ *
+ * Only for a `code`. An OAuth code arrives on Google's redirect and never
+ * appears in an email, so no crawler can hold one, and the pair of checks
+ * below is enough for it. An emailed `token_hash` is not redeemed on GET at
+ * all any more — see the route.
  *
  * Two checks covering DISJOINT classes — neither is redundant:
  *   - `isSpeculativeRequest` catches a browser prefetch or prerender, which
  *     IS a navigation and sends `Sec-Fetch-Mode: navigate` alongside
  *     `Sec-Purpose: prefetch`. Only this check stops it.
- *   - `isBrowserNavigation` catches the server-side fetchers that announce
- *     nothing at all: crawlers, scanners, link checkers.
+ *   - `isBrowserNavigation` catches fetchers that announce nothing at all.
  *
- * Deleting either one reopens a bug that has already happened in production.
+ * Neither is sufficient against a crawler that renders with a real browser
+ * engine. On 2026-09-26 `facebookexternalhit` redeemed an invite through both
+ * of them, because a headless browser sends exactly the headers a person's
+ * browser sends. That is why emailed links moved to POST instead.
  */
-export function shouldRedeem(headers: Headers): boolean {
+export function mayRedeemOauthCode(headers: Headers): boolean {
   return isBrowserNavigation(headers) && !isSpeculativeRequest(headers);
 }

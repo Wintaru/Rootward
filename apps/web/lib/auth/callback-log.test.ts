@@ -6,7 +6,7 @@ import {
   describeType,
   isBrowserNavigation,
   isSpeculativeRequest,
-  shouldRedeem,
+  mayRedeemOauthCode,
   messageOf,
   sanitizeDetail,
 } from "./callback-log";
@@ -131,6 +131,18 @@ describe("describeCaller", () => {
     ).toBe('ua="Mozilla/5.0" sec-purpose=prefetch');
   });
 
+  it("records the Fetch Metadata, which is what a headless browser fakes", () => {
+    expect(
+      describeCaller(
+        new Headers({
+          "User-Agent": "crawler/1.0",
+          "Sec-Fetch-Mode": "navigate",
+          "Sec-Fetch-Dest": "document",
+        }),
+      ),
+    ).toBe('ua="crawler/1.0" sec-fetch-mode=navigate sec-fetch-dest=document');
+  });
+
   it("says so when there is no agent at all", () => {
     expect(describeCaller(new Headers({}))).toBe("ua=none");
     expect(describeCaller(new Headers({ "User-Agent": "   " }))).toBe(
@@ -218,14 +230,14 @@ describe("isBrowserNavigation", () => {
   });
 });
 
-describe("shouldRedeem", () => {
+describe("mayRedeemOauthCode", () => {
   const navigation = {
     "Sec-Fetch-Mode": "navigate",
     "Sec-Fetch-Dest": "document",
   };
 
-  it("redeems for a person's browser opening the link", () => {
-    expect(shouldRedeem(new Headers(navigation))).toBe(true);
+  it("allows Google's redirect, which is a real navigation", () => {
+    expect(mayRedeemOauthCode(new Headers(navigation))).toBe(true);
   });
 
   it("refuses a browser PREFETCH, which is itself a navigation", () => {
@@ -233,25 +245,40 @@ describe("shouldRedeem", () => {
     // omnibox prefetch send `Sec-Fetch-Mode: navigate` AND `Sec-Purpose`.
     // Delete `isSpeculativeRequest` and this is the test that fails.
     expect(
-      shouldRedeem(new Headers({ ...navigation, "Sec-Purpose": "prefetch" })),
+      mayRedeemOauthCode(
+        new Headers({ ...navigation, "Sec-Purpose": "prefetch" }),
+      ),
     ).toBe(false);
     expect(
-      shouldRedeem(
+      mayRedeemOauthCode(
         new Headers({ ...navigation, "Sec-Purpose": "prefetch;prerender" }),
       ),
     ).toBe(false);
   });
 
-  it("refuses a crawler that announces nothing", () => {
-    // The one that spent a production invite on 2026-09-26. Delete
-    // `isBrowserNavigation` and this is the test that fails.
+  it("refuses a fetcher that announces nothing", () => {
     expect(
-      shouldRedeem(
+      mayRedeemOauthCode(
         new Headers({
           "User-Agent":
             "Mozilla/5.0 facebookexternalhit/1.1 Facebot Twitterbot/1.0",
         }),
       ),
     ).toBe(false);
+  });
+
+  it("cannot stop a crawler that renders with a browser engine", () => {
+    // The 2026-09-26 incident, and the reason emailed links moved to POST.
+    // `facebookexternalhit` sends exactly these headers, so this returns true
+    // for it — which is correct and is why it no longer governs a token_hash.
+    expect(
+      mayRedeemOauthCode(
+        new Headers({
+          ...navigation,
+          "User-Agent":
+            "Mozilla/5.0 (Macintosh) AppleWebKit/601.2.4 facebookexternalhit/1.1 Facebot Twitterbot/1.0",
+        }),
+      ),
+    ).toBe(true);
   });
 });

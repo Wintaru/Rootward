@@ -12,7 +12,7 @@ import {
   isSpeculativeRequest,
   messageOf,
   sanitizeDetail,
-  shouldRedeem,
+  mayRedeemOauthCode,
 } from "@/lib/auth/callback-log";
 import { continueSignInHtml } from "@/lib/auth/continue-page";
 import { parseEmailOtpType } from "@/lib/auth/email-otp-type";
@@ -61,6 +61,11 @@ async function completeCallback(
   request: NextRequest,
   { guardAgainstFetchers }: { readonly guardAgainstFetchers: boolean },
 ): Promise<NextResponse> {
+  // 303 out of the POST, 307 out of the GET. A 307 preserves the method, so
+  // redirecting a form submission with one makes the browser POST the landing
+  // page too — and a reload there asks "Confirm Form Resubmission", which is
+  // the first thing a new member would hit. 303 is the POST/Redirect/GET turn.
+  const redirectStatus = guardAgainstFetchers ? 307 : 303;
   const requestUrl = new URL(request.url);
   const { searchParams } = requestUrl;
   const origin =
@@ -94,34 +99,43 @@ async function completeCallback(
   // quietly carry anything a later branch set on it into the other returns.
   const fail = (reason: CallbackFailure, detail?: string): NextResponse => {
     console.error(line(reason, detail));
-    return NextResponse.redirect(`${origin}/auth/auth-code-error`);
+    return NextResponse.redirect(
+      `${origin}/auth/auth-code-error`,
+      redirectStatus,
+    );
   };
 
-  // A sign-in link is a one-time credential, so whatever fetches it spends it,
-  // and the person who clicks afterwards is told their link is invalid. This
-  // is not hypothetical: a link-preview crawler took a production invite 2.6
-  // seconds ahead of the visitor. So redeem only for a request that proves it
-  // is a browser navigating — see `isBrowserNavigation` for why that is the
-  // test rather than a list of crawler names.
+  // An emailed link is a one-time credential, so whatever fetches it spends
+  // it, and the person who clicks afterwards is told the link is invalid.
   //
-  // Answer with the continue page rather than a redirect or a 204. A
-  // prefetched redirect can be adopted by the navigation that follows,
-  // stranding the visitor on the error page for a link nothing spent. A 204 is
-  // worse: a client that reuses a preload as the navigation would do nothing
-  // at all. The page's form POSTs back here, and `POST` skips this guard, so
-  // a client that never sends Fetch Metadata still gets in on one press.
-  if (
+  // Three attempts to identify the fetcher all failed, and the third failed in
+  // production: `facebookexternalhit` redeemed an invite 2.9 seconds ahead of
+  // the visitor while sending `Sec-Fetch-Mode: navigate` and
+  // `Sec-Fetch-Dest: document`, because it renders with a real browser engine.
+  // Nothing in a request distinguishes a headless browser from a person's, so
+  // stop trying: a GET carrying a `token_hash` never redeems. It returns a
+  // page whose form POSTs back, and only the POST redeems. A crawler renders
+  // that page and does not submit the form: no preview crawler or mail scanner
+  // we know of does. Three absolutes about fetcher behaviour have already been
+  // falsified here, so this one is stated as what we know, not as a law.
+  //
+  // An OAuth `code` is different and keeps redeeming on GET. It arrives on
+  // Google's redirect, and none of the templates in `supabase/templates/` puts
+  // one in an email, so no crawler can hold one and Google sign-in stays a
+  // single click. That is a property of those templates, not of OAuth: a
+  // deployment running GoTrue's default templates has no such guarantee.
+  const mustConfirm =
     guardAgainstFetchers &&
-    (code !== null || tokenHash !== null) &&
-    !shouldRedeem(request.headers)
-  ) {
-    // Not an error: this is the guard doing its job, and error-rate alerts
-    // should not fire because a crawler previewed somebody's email.
-    console.warn(
+    (tokenHash !== null ||
+      (code !== null && !mayRedeemOauthCode(request.headers)));
+  if (mustConfirm) {
+    // Not a warning either: this is now the first half of every email sign-in,
+    // so it is the normal path and should not colour a dashboard.
+    console.log(
       line(
         isSpeculativeRequest(request.headers)
           ? "speculative fetch, not redeemed"
-          : "not a browser navigation, not redeemed",
+          : "confirmation required before redeeming",
       ),
     );
     return new NextResponse(
@@ -197,7 +211,7 @@ async function completeCallback(
   // answerable if the log also says who spent it, and that request succeeded.
   console.log(line("signed in"));
 
-  const response = NextResponse.redirect(`${origin}${next}`);
+  const response = NextResponse.redirect(`${origin}${next}`, redirectStatus);
   try {
     const stored = await getAppearance(supabase, user.id);
     if (stored !== null) {
@@ -232,22 +246,23 @@ export function HEAD(): NextResponse {
 }
 
 /**
- * A link arriving from an email, or Google's OAuth redirect. Redeems only for
- * a request that proves it is a person's browser navigating; everything else
- * gets the continue page, whose form posts back to `POST` below.
+ * A link arriving from an email, or Google's OAuth redirect. An emailed
+ * `token_hash` always gets the continue page, whose form posts back to `POST`
+ * below. Google's `code` still redeems here, since no crawler can hold one.
  */
 export async function GET(request: NextRequest): Promise<NextResponse> {
   return completeCallback(request, { guardAgainstFetchers: true });
 }
 
 /**
- * The continue page's form. This is the way in for any client that does not
- * send Fetch Metadata — an iPhone below iOS 16.4, an in-app webview, a proxy
- * that strips `Sec-*` — so it cannot apply the navigation guard, or those
- * clients would loop on the continue page with no error and no way through.
+ * The continue page's form, and the only way an emailed link is redeemed.
  *
- * Safe without it, because no crawler, prefetcher or link checker POSTs to a
- * URL it found in an email, and a link cannot be turned into a POST.
+ * This is the part that does not depend on recognising the caller. A crawler,
+ * a scanner, a prefetch and a person's browser are indistinguishable on a GET
+ * — proven three times over — but none of the first three POSTs to a URL it
+ * found in an email, and a link cannot be turned into a POST. It is also the
+ * way in for a client that sends no Fetch Metadata at all, such as an iPhone
+ * below iOS 16.4, which a link-only page would have trapped forever.
  *
  * `Origin` is checked when the browser sends one. A cross-site form could
  * otherwise sign somebody into an account that is not theirs — a nuisance
@@ -266,7 +281,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     console.warn(
       `auth/callback: cross-origin continue POST refused [${describeCaller(request.headers)}]`,
     );
-    return NextResponse.redirect(`${origin}/auth/auth-code-error`);
+    return NextResponse.redirect(`${origin}/auth/auth-code-error`, 303);
   }
   return completeCallback(request, { guardAgainstFetchers: false });
 }

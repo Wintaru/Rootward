@@ -11,6 +11,12 @@ import { mailboxMark, waitForAuthLink } from "./mailpit";
  * real person does. It no longer has to be: the magic-link template mails a
  * `token_hash` the server redeems (SPEC §9.1), so the link works in any
  * browser. `auth.spec.ts` owns that guarantee.
+ *
+ * Opening the link does not sign anyone in. A `GET` never redeems a
+ * `token_hash` — a link-preview crawler kept spending them before the person
+ * arrived — so the link serves a page whose form posts back, and the button
+ * press is what redeems. Every caller goes through here, so pressing it lives
+ * here rather than in thirteen tests.
  */
 export async function signInWithMagicLink(
   page: Page,
@@ -28,15 +34,25 @@ export async function signInWithMagicLink(
   await expect(page.getByText("Check your email")).toBeVisible();
 
   await page.goto(await waitForAuthLink(email, since));
+  await pressContinue(page);
 
-  // `/auth/callback` exchanges the code and redirects to `/`, which routes on
-  // to the tree or onboarding. Waiting for "not on /login or the error page"
-  // keeps this helper agnostic about which.
+  // The form posts to `/auth/callback`, which redeems and redirects to `/`,
+  // which routes on to the tree or onboarding. Waiting for "not on /login or
+  // the error page" keeps this helper agnostic about which.
   await page.waitForURL(
     (url) =>
       !url.pathname.startsWith("/login") && !url.pathname.startsWith("/auth/"),
     { timeout: 30_000 },
   );
+}
+
+/**
+ * Press "Continue signing in" on the page an emailed link lands on. Redeeming
+ * happens on that POST and nowhere else, so any test that follows a sign-in
+ * link has to do this, exactly as a person does.
+ */
+export async function pressContinue(page: Page): Promise<void> {
+  await page.getByRole("button", { name: /continue signing in/i }).click();
 }
 
 /** The header's account chip (#79): its menu holds "My record" and "Sign out". */

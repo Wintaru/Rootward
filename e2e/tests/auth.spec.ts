@@ -1,6 +1,7 @@
 import { mailboxMark, waitForAuthLink } from "../support/mailpit";
 import {
   accountMenuTrigger,
+  pressContinue,
   signInWithMagicLink,
   signOut,
 } from "../support/auth";
@@ -115,13 +116,77 @@ test.describe("the sign-in round trip", () => {
 
     const link = await waitForAuthLink(email, since);
     await anonPage.goto(link);
-    await expect(anonPage).not.toHaveURL(/\/login/);
+    await pressContinue(anonPage);
+    await expect(anonPage).not.toHaveURL(/\/auth\//);
+    await expect(accountMenuTrigger(anonPage)).toBeVisible();
     await signOut(anonPage);
 
-    // Second use of a one-time token must not produce a session.
+    // Second use of a one-time token must not produce a session. The token is
+    // spent on the form post, so the replay has to press the button too —
+    // without that, this assertion passes on the continue page and proves
+    // nothing.
     await anonPage.goto(link);
+    await pressContinue(anonPage);
+    await expect(anonPage).toHaveURL(/\/auth\/auth-code-error/);
     await anonPage.goto("/tree");
     await expect(anonPage).toHaveURL(/\/login(\?|$)/);
+  });
+});
+
+/**
+ * The defect this route has now been fixed for four times: something that is
+ * not the member opens the emailed link and spends the one-time token, and the
+ * member is then told the link is invalid. A link-preview crawler did it in
+ * production on 2026-09-26 while sending the same navigation headers a real
+ * browser sends, which is why no check on the request can separate them.
+ *
+ * So the guarantee is about the METHOD, not the caller: a `GET` never redeems.
+ * Simplify the route back to trusting a header and every unit test still
+ * passes — this is the one that fails.
+ */
+test.describe("opening a sign-in link does not sign you in", () => {
+  const email = "e2e-get-only@rootward.test";
+
+  test.beforeEach(async () => {
+    await ensureTestUser({
+      email,
+      role: "viewer",
+      status: "active",
+      displayName: "E2E Get Only",
+    });
+  });
+
+  test.afterAll(async () => {
+    await deleteTestUser(email);
+  });
+
+  test("the GET alone leaves the token unspent and the visitor signed out", async ({
+    anonPage,
+  }) => {
+    const since = mailboxMark();
+    await anonPage.goto("/login");
+    await anonPage.getByLabel("Email").fill(email);
+    await anonPage
+      .getByRole("button", { name: "Email me a sign-in link" })
+      .click();
+    await expect(anonPage.getByText("Check your email")).toBeVisible();
+    const link = await waitForAuthLink(email, since);
+
+    // What a crawler does: fetch the URL, render whatever comes back.
+    await anonPage.goto(link);
+    await expect(
+      anonPage.getByRole("button", { name: /continue signing in/i }),
+    ).toBeVisible();
+
+    // No session came of it.
+    await anonPage.goto("/tree");
+    await expect(anonPage).toHaveURL(/\/login(\?|$)/);
+
+    // And the token survived, so the member can still use it.
+    await anonPage.goto(link);
+    await pressContinue(anonPage);
+    await expect(anonPage).not.toHaveURL(/\/auth\//);
+    await expect(accountMenuTrigger(anonPage)).toBeVisible();
   });
 });
 
@@ -200,7 +265,11 @@ test.describe("sign-in at the documented 127.0.0.1 address", () => {
       await expect(page.getByText("Check your email")).toBeVisible();
 
       await page.goto(await waitForAuthLink(email, since));
+      // The redirect this test exists to check happens on the form post. Land
+      // on the continue page and every assertion below passes trivially.
+      await pressContinue(page);
       await page.waitForLoadState("load");
+      await expect(page).not.toHaveURL(/\/auth\//);
 
       expect(
         new URL(page.url()).hostname,
