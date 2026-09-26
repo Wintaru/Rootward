@@ -980,6 +980,16 @@ with a PKCE `code`, and the browser client's stored verifier redeems it. An
 emailed link arrives with `token_hash` and `type`, and the route redeems it
 with `verifyOtp`.
 
+Two kinds of request are answered without redeeming anything, because a
+sign-in link works once and whatever opens it spends it. A request that
+announces itself as speculative (a browser prefetch or prerender, a link
+preview) gets a page with a "Continue signing in" link instead of a session,
+so the token survives until a person clicks. A `HEAD` request gets 204, since
+nothing legitimate signs in over `HEAD` and Next derives `HEAD` from `GET`.
+Every outcome, including a successful sign-in, writes one log line naming the
+caller — a spent-token report cannot be answered unless the log says who spent
+it.
+
 The email shape needs Rootward's own templates in `supabase/templates/`. A
 moderator sends an invitation with the service role, so no browser holds a
 code verifier for it. GoTrue's default template answers that with the implicit

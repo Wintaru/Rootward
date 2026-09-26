@@ -5,11 +5,15 @@ import { maybeAcceptInvitation } from "@/lib/auth/accept-invitation";
 import { maybeBootstrapAdmin } from "@/lib/auth/bootstrap-admin";
 import {
   type CallbackFailure,
+  type CallbackOutcome,
+  describeCaller,
   describeShape,
   describeType,
+  isSpeculativeRequest,
   messageOf,
   sanitizeDetail,
 } from "@/lib/auth/callback-log";
+import { continueSignInHtml } from "@/lib/auth/continue-page";
 import { parseEmailOtpType } from "@/lib/auth/email-otp-type";
 import { resolveRequestOrigin } from "@/lib/auth/request-origin";
 import { getAppearance } from "@/lib/db";
@@ -74,19 +78,51 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   // the server recorded none of them, so a live report was unfalsifiable
   // without reproducing it. `fail` writes one line and redirects.
   //
+  // One shape for every log line, so a fourth outcome cannot invent its own.
+  // It carries neither the token nor the address: the arriving shape, the
+  // reason and the caller separate a spent link from a wrong `type` from a
+  // template that was never updated, which is all the diagnosis this needs.
+  const line = (reason: CallbackOutcome, detail?: string): string =>
+    `auth/callback: ${reason} [shape=${describeShape(code, tokenHash)} type=${describeType(rawType, otpType)}] ${describeCaller(request.headers)}${detail === undefined ? "" : ` ${sanitizeDetail(detail)}`}`;
+
   // A factory, not one shared response object: the success path below sets
   // cookies on its own response, and a single shared error response would
   // quietly carry anything a later branch set on it into the other returns.
-  //
-  // It logs neither the token nor the address. The arriving shape and the
-  // reason separate a spent link from a wrong `type` from a template that was
-  // never updated, which is all the diagnosis this route needs.
   const fail = (reason: CallbackFailure, detail?: string): NextResponse => {
-    const context = `shape=${describeShape(code, tokenHash)} type=${describeType(rawType, otpType)}`;
-    const tail = detail === undefined ? "" : ` ${sanitizeDetail(detail)}`;
-    console.error(`auth/callback: ${reason} [${context}]${tail}`);
+    console.error(line(reason, detail));
     return NextResponse.redirect(`${origin}/auth/auth-code-error`);
   };
+
+  // A sign-in link is a one-time credential, so whatever fetches it spends it.
+  // A browser prefetch, a prerender, or a link-preview fetcher redeems the
+  // token and throws the session away, and the person who then clicks is told
+  // their link is invalid.
+  //
+  // Answer with a page rather than a redirect or a 204. A prefetched redirect
+  // can be adopted by the navigation that follows, stranding the visitor on
+  // the error page for a link nothing spent. A 204 is worse: the clients that
+  // reuse a preload as the navigation would do nothing at all, with no error
+  // and no way to tell what happened. A page with one ordinary link is safe
+  // whether it is discarded, activated, or reused.
+  if (
+    isSpeculativeRequest(request.headers) &&
+    (code !== null || tokenHash !== null)
+  ) {
+    // Not an error: this is the guard doing its job, and error-rate alerts
+    // should not fire because somebody's browser preloads links.
+    console.warn(line("speculative fetch, not redeemed"));
+    return new NextResponse(
+      continueSignInHtml(`${requestUrl.pathname}${requestUrl.search}`),
+      {
+        status: 200,
+        headers: {
+          "content-type": "text/html; charset=utf-8",
+          "cache-control": "no-store",
+          "x-robots-tag": "noindex",
+        },
+      },
+    );
+  }
 
   const supabase = await createSupabaseServerClient();
   let redeemed: { user: User | null; session: Session | null } | null = null;
@@ -144,6 +180,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     // Fall through to the redirect below.
   }
 
+  // One line per successful sign-in as well. A spent-token report is only
+  // answerable if the log also says who spent it, and that request succeeded.
+  console.log(line("signed in"));
+
   const response = NextResponse.redirect(`${origin}${next}`);
   try {
     const stored = await getAppearance(supabase, user.id);
@@ -161,4 +201,19 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     console.error(`auth/callback: appearance cookies: ${messageOf(error)}`);
   }
   return response;
+}
+
+/**
+ * Next derives `HEAD` from an exported `GET`, which would run the whole
+ * redemption for a request that can never carry a session back — a mail
+ * scanner, a security appliance, or a link checker. Verified before this
+ * existed: one `HEAD` spent the token and the person's own click then failed.
+ *
+ * Answer without touching Supabase. Nothing legitimate signs in over `HEAD`.
+ */
+export function HEAD(): NextResponse {
+  return new NextResponse(null, {
+    status: 204,
+    headers: { "cache-control": "no-store" },
+  });
 }

@@ -28,6 +28,14 @@ export type CallbackFailure =
   | "redeemed but no session"
   | "admin bootstrap failed";
 
+/**
+ * Everything `/auth/callback` may log, failures and the two outcomes that are
+ * not failures. The log line is built from this in one place, so a reason can
+ * never exist as a hand-written string that drifts from the union.
+ */
+export type CallbackOutcome =
+  CallbackFailure | "speculative fetch, not redeemed" | "signed in";
+
 /** Which credential the link arrived with. Never the credential itself. */
 export function describeShape(
   code: string | null,
@@ -74,4 +82,61 @@ export function sanitizeDetail(raw: string): string {
   return flattened.length > MAX_DETAIL_LENGTH
     ? `${flattened.slice(0, MAX_DETAIL_LENGTH)}…`
     : flattened;
+}
+
+/**
+ * The headers a client sets when it fetches a URL speculatively rather than
+ * because a person asked for it: browser prefetch and prerender, and the
+ * preview fetchers in mail clients and chat apps.
+ *
+ * `Sec-Purpose` is the current standard (`prefetch`, `prefetch;prerender`).
+ * The rest are the older spellings still sent by Chrome, Safari and Firefox,
+ * and they cost nothing to keep.
+ */
+const SPECULATIVE_HEADERS = [
+  "sec-purpose",
+  "purpose",
+  "x-purpose",
+  "x-moz",
+] as const;
+
+/** Values in those headers that mean "nobody is waiting for this response". */
+const SPECULATIVE_VALUES = ["prefetch", "prerender", "preview"] as const;
+
+/**
+ * Whether this request announced itself as speculative.
+ *
+ * A sign-in link is a one-time credential, so anything that fetches it spends
+ * it — and a speculative fetch discards the session it gets. The person then
+ * clicks the same link and is told it is invalid, which is exactly the report
+ * this guards against. A fetcher that announces nothing still gets through;
+ * this closes the polite half of the problem.
+ */
+export function isSpeculativeRequest(headers: Headers): boolean {
+  return SPECULATIVE_HEADERS.some((name) => {
+    const value = headers.get(name);
+    if (value === null) {
+      return false;
+    }
+    const lowered = value.toLowerCase();
+    return SPECULATIVE_VALUES.some((marker) => lowered.includes(marker));
+  });
+}
+
+/**
+ * What the caller says it is, for the log line. Truncated and flattened like
+ * any other outside string, and it is the one field that identifies a fetcher
+ * a person never saw.
+ */
+export function describeCaller(headers: Headers): string {
+  const agent = headers.get("user-agent");
+  const purpose = SPECULATIVE_HEADERS.map((name) => {
+    const value = headers.get(name);
+    return value === null ? null : `${name}=${value}`;
+  })
+    .filter((entry): entry is string => entry !== null)
+    .join(" ");
+  const agentPart =
+    agent === null ? "ua=none" : `ua="${sanitizeDetail(agent)}"`;
+  return purpose === "" ? agentPart : `${agentPart} ${sanitizeDetail(purpose)}`;
 }
